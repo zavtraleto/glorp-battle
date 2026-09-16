@@ -85,7 +85,10 @@ export const DEFAULT_TUNING = {
     INTRO_TIME: 0.8,
     BANNER_BATTLE_START: 1.0,
     RESUME_DELAY: 0.2,
-    RESULT_BANNER_DELAY: 0.6,
+    /** "ENEMY DELETED!" banner before the result screen. */
+    RESULT_DELAY_WIN: 1.2,
+    /** Player deletion before the GAME OVER screen. */
+    RESULT_DELAY_LOSE: 1.0,
   },
   input: {
     SWIPE_MIN_PX: 24,

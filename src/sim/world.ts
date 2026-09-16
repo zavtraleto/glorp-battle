@@ -81,6 +81,8 @@ export class World implements EnemyContext, AttackContext {
   private resumeTicks = 0;
   /** True while the current BATTLE_START phase should show the banner. */
   firstStart = false;
+  /** State to return to when the pause ends. */
+  private pausedFrom: GameState | null = null;
   readonly seed: number;
   readonly battleIndex: number;
   readonly rngFolder: Rng;
@@ -195,6 +197,28 @@ export class World implements EnemyContext, AttackContext {
     this.resumeTicks = secondsToTicks(first ? tuning.fx.BANNER_BATTLE_START : tuning.fx.RESUME_DELAY);
     this.firstStart = first;
     this.setState('BATTLE_START');
+  }
+
+  /**
+   * Pauses the battle (GDD §11). Only the running battle can be paused; the
+   * Custom Screen and the intro are already frozen. Held inputs are dropped.
+   */
+  pause(): boolean {
+    if (this.state !== 'ACTION' && this.state !== 'BATTLE_START') return false;
+    const p = this.player;
+    p.buster.cancel();
+    p.buster.held = false;
+    p.bufferedDir = null;
+    this.pausedFrom = this.state;
+    this.setState('PAUSED');
+    return true;
+  }
+
+  resume(): void {
+    if (this.state !== 'PAUSED' || !this.pausedFrom) return;
+    // BATTLE_START restarts its (short) timer; ACTION simply continues.
+    this.setState(this.pausedFrom);
+    this.pausedFrom = null;
   }
 
   /** Debug: fill the gauge instantly. */

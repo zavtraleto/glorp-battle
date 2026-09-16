@@ -1,6 +1,5 @@
 import { CHIPS } from '../data/chips';
-import { ENEMY_LOOKS } from '../data/enemies';
-import { t } from '../i18n';
+import { chipDesc, chipName, enemyName, t } from '../i18n';
 import type { World } from '../sim/world';
 import { chipIconHtml } from './chipIcon';
 
@@ -199,7 +198,7 @@ export class CustomScreen {
     const counts = new Map<string, number>();
     for (const e of world.enemies) {
       if (!e.alive) continue;
-      const name = ENEMY_LOOKS[e.kind].name;
+      const name = enemyName(e.kind);
       counts.set(name, (counts.get(name) ?? 0) + 1);
     }
     this.enemiesEl.textContent = [...counts].map(([name, n]) => (n > 1 ? `${name} ×${n}` : name)).join('  ·  ');
@@ -211,9 +210,9 @@ export class CustomScreen {
       this.previewEl.innerHTML =
         `<div class="cs-preview-icon">${chipIconHtml(preview.defId, preview.code, { showPower: false })}</div>` +
         `<div class="cs-preview-text">` +
-        `<div class="cs-preview-name">${def.name} <span class="cs-preview-code">${preview.code}</span></div>` +
+        `<div class="cs-preview-name">${chipName(def.id)} <span class="cs-preview-code">${preview.code}</span></div>` +
         `<div class="cs-preview-power">${def.power !== null ? def.power : '—'}</div>` +
-        `<div class="cs-preview-desc">${def.description}</div>` +
+        `<div class="cs-preview-desc">${chipDesc(def.id)}</div>` +
         `</div>`;
     } else {
       this.previewEl.innerHTML = '<div class="cs-preview-empty"></div>';

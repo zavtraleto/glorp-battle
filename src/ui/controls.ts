@@ -1,7 +1,7 @@
 import { secondsToTicks, tuning } from '../config/tuning';
 import type { InputState } from '../core/input/commands';
 import { CHIPS } from '../data/chips';
-import { t } from '../i18n';
+import { chipName, t } from '../i18n';
 import { chipIconHtml } from './chipIcon';
 import type { World } from '../sim/world';
 
@@ -132,7 +132,7 @@ export class Controls {
     this.chip.classList.toggle('empty', !next);
     this.chip.classList.toggle('busy', world.player.actionTicks > 0 || world.player.flinched);
     const head = queue[0];
-    const text = head ? `${CHIPS[head.defId].name}${CHIPS[head.defId].power !== null ? ' ' + CHIPS[head.defId].power : ''}` : '';
+    const text = head ? `${chipName(head.defId)}${CHIPS[head.defId].power !== null ? ' ' + CHIPS[head.defId].power : ''}` : '';
     const plate = head ? `${text}${queue.length > 1 ? ` <span class="qp-count">+${queue.length - 1}</span>` : ''}` : '';
     if (this.queuePlate.innerHTML !== plate) this.queuePlate.innerHTML = plate;
     this.queuePlate.classList.toggle('empty', !head);

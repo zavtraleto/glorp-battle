@@ -5,7 +5,9 @@ import { FixedStepClock } from '../src/core/loop';
 import { Rng, deriveSeed } from '../src/core/rng';
 import { parseDebugParams } from '../src/debug/params';
 import { inTerritory, sideOfRow } from '../src/sim/grid';
-import { t } from '../src/i18n';
+import { CHIPS } from '../src/data/chips';
+import { ENEMY_LOOKS } from '../src/data/enemies';
+import { chipDesc, chipName, enemyName, t } from '../src/i18n';
 
 describe('FixedStepClock', () => {
   const make = () => new FixedStepClock({ hz: 60, maxFrameTime: 0.25 });
@@ -141,7 +143,16 @@ describe('grid', () => {
 });
 
 describe('i18n', () => {
-  it('returns English strings', () => {
+  it('returns English strings and fills placeholders', () => {
     expect(t('banner.battleStart')).toBe('BATTLE START!');
+    expect(t('banner.battle', { n: 2, total: 4 })).toBe('BATTLE 2/4');
+  });
+
+  it('has a name and description for every chip and a name for every enemy', () => {
+    for (const id of Object.keys(CHIPS)) {
+      expect(chipName(id)).not.toContain('chip.');
+      expect(chipDesc(id)).not.toContain('chip.');
+    }
+    for (const kind of Object.keys(ENEMY_LOOKS)) expect(enemyName(kind)).not.toContain('enemy.');
   });
 });

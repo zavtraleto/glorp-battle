@@ -689,6 +689,145 @@ body {
   }
 }
 
+/* ---------- Menus (title, pause, result, defeat, complete) ---------- */
+
+.screen {
+  position: absolute;
+  inset: 0;
+  z-index: 45;
+  display: grid;
+  place-items: center;
+  padding: calc(var(--safe-top) + 16px) calc(var(--safe-right) + 16px) calc(var(--safe-bottom) + 16px)
+    calc(var(--safe-left) + 16px);
+  background: rgba(5, 8, 14, 0.72);
+  pointer-events: auto;
+  animation: screen-in 0.2s ease-out;
+}
+
+.screen.hidden {
+  display: none;
+}
+
+.screen[data-variant='title'] {
+  background: radial-gradient(circle at 50% 35%, rgba(40, 70, 140, 0.55), rgba(5, 8, 14, 0.92) 70%);
+}
+
+.scr-card {
+  width: min(100%, 360px);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+  padding: 22px 20px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(20, 30, 52, 0.96), rgba(10, 14, 24, 0.97));
+  border: 2px solid var(--accent);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+  text-align: center;
+}
+
+.screen[data-variant='title'] .scr-card {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.screen[data-variant='win'] .scr-card {
+  border-color: #7dff9e;
+}
+
+.screen[data-variant='lose'] .scr-card {
+  border-color: var(--danger);
+}
+
+.scr-title {
+  font: 900 32px/1.1 var(--font);
+  letter-spacing: 0.05em;
+}
+
+.screen[data-variant='title'] .scr-title {
+  font-size: 46px;
+  color: var(--accent);
+  text-shadow: 0 0 24px rgba(111, 211, 255, 0.6);
+}
+
+.screen[data-variant='win'] .scr-title {
+  color: #7dff9e;
+}
+
+.screen[data-variant='lose'] .scr-title {
+  color: var(--danger);
+}
+
+.scr-subtitle {
+  font: 700 14px/1.2 var(--font);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-top: -8px;
+}
+
+.scr-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.scr-row {
+  display: flex;
+  justify-content: space-between;
+  font: 600 16px/1.3 var(--font);
+  color: var(--text-dim);
+}
+
+.scr-row b {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.scr-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scr-btn {
+  min-height: 52px;
+  border-radius: 12px;
+  border: 2px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font: 900 18px/1 var(--font);
+  letter-spacing: 0.08em;
+}
+
+.scr-btn.primary {
+  border-color: var(--accent);
+  background: rgba(111, 211, 255, 0.2);
+}
+
+.scr-btn:active {
+  transform: scale(0.97);
+}
+
+.scr-hint {
+  font: 500 12px/1.45 var(--font);
+  color: var(--text-dim);
+}
+
+.scr-hint p {
+  margin: 4px 0;
+}
+
+@keyframes screen-in {
+  from {
+    opacity: 0;
+  }
+}
+
 /* ---------- Debug ---------- */
 
 .debug-overlay {
