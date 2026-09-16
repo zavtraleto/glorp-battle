@@ -9,7 +9,6 @@ import { World, type Cheats } from '../src/sim/world';
 const DT = 1 / 60;
 const T = (s: number) => secondsToTicks(s);
 
-let attackIds = 1000;
 
 function makeWorld(opts: { ai?: boolean; god?: boolean; battle?: number } = {}): World {
   const cheats: Cheats = { god: opts.god ?? false, aiEnabled: opts.ai ?? true };
@@ -17,7 +16,7 @@ function makeWorld(opts: { ai?: boolean; god?: boolean; battle?: number } = {}):
 }
 
 function addMettik(w: World, x: number, y: number, id: number): Mettik {
-  const m = new Mettik(id, x, y, w.tick, () => attackIds++);
+  const m = new Mettik(id, x, y, w.tick);
   w.occupancy.place(id, x, y);
   w.enemies.push(m);
   return m;

@@ -15,7 +15,7 @@ import type { Enemy, EnemyContext } from './enemies/enemyBase';
 import { createEnemy } from './enemies/factory';
 import type { SimEvent } from './events';
 import { Gauge } from './gauge';
-import type { Cell } from './grid';
+import { ROWS, type Cell } from './grid';
 import { Occupancy } from './occupancy';
 import { Player } from './player';
 
@@ -59,6 +59,9 @@ export interface TickInput {
 }
 
 const NO_INPUT: TickInput = { commands: [], held: null };
+
+/** Throwaway attack record for instant shots (each shot is a separate hit). */
+const ONE_SHOT: Attack = { id: -1, kind: 'instant', hitIds: new Set<number>(), done: true, update: () => undefined };
 
 export class World implements EnemyContext, AttackContext {
   /** Simulation tick: advances only while the battle runs (ACTION and end-of-battle animations). */
@@ -122,11 +125,7 @@ export class World implements EnemyContext, AttackContext {
 
   private spawnBattle(): void {
     for (const spawn of getBattle(this.battleIndex).enemies) {
-      const enemy = createEnemy(spawn, this.nextEnemyId++, this.tick, () => this.attackIdCounter++);
-      if (!enemy) {
-        console.warn(`[world] enemy kind "${spawn.kind}" is not implemented yet; skipped`);
-        continue;
-      }
+      const enemy = createEnemy(spawn, this.nextEnemyId++, this.tick);
       this.occupancy.place(enemy.id, enemy.x, enemy.y);
       this.enemies.push(enemy);
     }
@@ -217,6 +216,30 @@ export class World implements EnemyContext, AttackContext {
   }
 
   // ---------- EnemyContext ----------
+
+  nextAttackId(): number {
+    return this.attackIdCounter++;
+  }
+
+  emit(event: SimEvent): void {
+    this.events.push(event);
+  }
+
+  shootLane(x: number, fromY: number, damage: number): number {
+    const p = this.player;
+    for (let y = Math.max(0, fromY); y < ROWS; y++) {
+      if (p.x === x && p.y === y && p.alive) {
+        // An invulnerable player lets the shot pass (GDD §9).
+        if (p.invulnerable) continue;
+        this.hitPlayerAt(ONE_SHOT, x, y, damage);
+        ONE_SHOT.hitIds.clear();
+        this.events.push({ type: 'enemyShot', x, fromY, toY: y });
+        return y;
+      }
+    }
+    this.events.push({ type: 'enemyShot', x, fromY, toY: ROWS });
+    return ROWS;
+  }
 
   spawnAttack(attack: Attack): void {
     this.attacks.push(attack);

@@ -1,3 +1,4 @@
+import type { SimEvent } from '../events';
 import type { Player } from '../player';
 
 /** What an attack entity may read or do during its update. */
@@ -6,6 +7,7 @@ export interface AttackContext {
   readonly player: Player;
   /** Damages the player if standing on (x, y), not invulnerable and not yet hit by this attack. */
   hitPlayerAt(attack: Attack, x: number, y: number, damage: number): boolean;
+  emit(event: SimEvent): void;
 }
 
 /** An enemy attack that lives on the field: visible, dodgeable, hits each target once (GDD §8.5, §9). */

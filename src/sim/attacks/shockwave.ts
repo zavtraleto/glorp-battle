@@ -5,7 +5,15 @@ import type { Attack, AttackContext } from './attack';
 // Mettik ground wave (GDD §8.2, §8.5): starts in front of the Mettik and
 // travels down its lane one cell per MET_WAVE_STEP, piercing through.
 
-export class Shockwave implements Attack {
+/** An attack that walks down a lane one panel per `stepTicks` (render interpolation uses this). */
+export interface LaneMover extends Attack {
+  readonly x: number;
+  y: number;
+  lastStepTick: number;
+  readonly stepTicks: number;
+}
+
+export class Shockwave implements LaneMover {
   readonly kind = 'shockwave';
   readonly hitIds = new Set<number>();
   done = false;

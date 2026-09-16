@@ -10,7 +10,6 @@ import { DebugPanel } from './debug/debugPanel';
 import { parseDebugParams } from './debug/params';
 import { t } from './i18n';
 import { SceneRenderer } from './render/scene';
-import { Mettik } from './sim/enemies/mettik';
 import { World, type Cheats } from './sim/world';
 import { Banner } from './ui/banner';
 import { Controls } from './ui/controls';
@@ -159,7 +158,7 @@ const panel = new DebugPanel(loop.clock, {
     world.giveChip({ uid: debugChipUid++, defId, code: '*', state: 'queued' });
   },
   forceAttack: () => {
-    for (const e of world.enemies) if (e instanceof Mettik) e.forceAttack(world.tick);
+    for (const e of world.enemies) e.forceAttack(world.tick);
   },
 });
 panel.syncSeed(world.seed, world.battleIndex);

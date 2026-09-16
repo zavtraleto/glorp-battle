@@ -34,7 +34,7 @@ function makeWorld(): World {
 }
 
 function addEnemy(w: World, x: number, y: number, hp = 200): Mettik {
-  const m = new Mettik(enemyId++, x, y, w.tick, () => 0);
+  const m = new Mettik(enemyId++, x, y, w.tick);
   m.hp = hp;
   w.occupancy.place(m.id, x, y);
   w.enemies.push(m);

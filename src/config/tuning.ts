@@ -56,6 +56,7 @@ export const DEFAULT_TUNING = {
     CANO_DMG: 10,
     CANO_CURSOR_STEP: 0.15,
     CANO_FIRE_DELAY: 0.3,
+    CANO_ATTACK_TIME: 0.2,
     CANO_COOLDOWN: 2.0,
   },
   spiker: {
@@ -66,6 +67,7 @@ export const DEFAULT_TUNING = {
     SPK_WARPS_MAX: 4,
     SPK_TELEGRAPH: 0.5,
     SPK_SHOT_STEP: 0.12,
+    SPK_ATTACK_TIME: 0.2,
     SPK_RECOVERY: 1.5,
   },
   fx: {
@@ -76,6 +78,7 @@ export const DEFAULT_TUNING = {
     SLASH_TIME: 0.15,
     EXPLOSION_TIME: 0.3,
     HEAL_FX_TIME: 0.5,
+    WARP_FX_TIME: 0.15,
     CHARGE_RING_DELAY: 0.15,
     DAMAGE_NUMBER_TIME: 0.6,
     DELETE_ANIM_TIME: 0.4,

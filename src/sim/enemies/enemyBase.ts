@@ -2,7 +2,9 @@ import { secondsToTicks, tuning } from '../../config/tuning';
 import type { Cell } from '../grid';
 import type { EntityId, Occupancy } from '../occupancy';
 import type { Player } from '../player';
+import type { Rng } from '../../core/rng';
 import type { Attack } from '../attacks/attack';
+import type { SimEvent } from '../events';
 
 // Common enemy state machine (GDD §8.1):
 // IDLE → MOVE → TELEGRAPH → ATTACK → RECOVERY → IDLE; DEAD is terminal.
@@ -16,7 +18,14 @@ export interface EnemyContext {
   readonly tick: number;
   readonly player: Player;
   readonly occupancy: Occupancy;
+  /** Deterministic AI randomness (GDD §15.4). */
+  readonly rngAi: Rng;
   spawnAttack(attack: Attack): void;
+  /** Allocates an id for an attack entity. */
+  nextAttackId(): number;
+  emit(event: SimEvent): void;
+  /** Instant hit on the first target in lane x from row `fromY` downward; returns the stop row. */
+  shootLane(x: number, fromY: number, damage: number): number;
   /** Mettik turn-taking (GDD §8.2). */
   hasTurn(enemy: Enemy): boolean;
   passTurn(enemy: Enemy): void;
@@ -64,6 +73,14 @@ export abstract class Enemy {
     this.stateTick = tick;
   }
 
+  /** Debug "force enemy attack": start the attack sequence as soon as possible. */
+  forceAttack(_tick: number): void {}
+
+  /** Targeting cursor to draw (Canodron), or null. */
+  cursorCell(): { x: number; y: number; locked: boolean } | null {
+    return null;
+  }
+
   /** Cells to highlight as dangerous right now (telegraph). */
   dangerCells(): Cell[] {
     return [];
@@ -85,6 +102,18 @@ export abstract class Enemy {
   /** Deletion animation finished; the world removes the enemy. */
   isRemovable(tick: number): boolean {
     return !this.alive && tick - this.deathTick >= secondsToTicks(tuning.fx.DELETE_ANIM_TIME);
+  }
+
+  /** Instant relocation (Spiker warp): no slide animation. */
+  protected warpTo(ctx: EnemyContext, nx: number, ny: number): boolean {
+    if (ny > 2 || !ctx.occupancy.isFree(nx, ny)) return false;
+    const fromX = this.x;
+    const fromY = this.y;
+    ctx.occupancy.move(this.id, this.x, this.y, nx, ny);
+    this.x = this.prevX = nx;
+    this.y = this.prevY = ny;
+    ctx.emit({ type: 'enemyWarped', id: this.id, fromX, fromY, x: nx, y: ny });
+    return true;
   }
 
   protected tryStep(ctx: EnemyContext, nx: number, ny: number): boolean {

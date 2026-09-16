@@ -3,7 +3,8 @@ import { secondsToTicks, tuning } from '../config/tuning';
 import { CHIPS } from '../data/chips';
 import type { Attack } from '../sim/attacks/attack';
 import type { PlayerBomb } from '../sim/attacks/bomb';
-import { Shockwave } from '../sim/attacks/shockwave';
+import type { LaneMover } from '../sim/attacks/shockwave';
+import { ROWS } from '../sim/grid';
 import type { SimEvent } from '../sim/events';
 import type { World } from '../sim/world';
 import { CELL_DEPTH, CELL_WIDTH, cellToWorld } from './field';
@@ -37,6 +38,11 @@ export class FxView {
   private readonly bombGeo = new THREE.SphereGeometry(0.16, 16, 12);
   // Drawn over characters: sprites write depth and would hide the arc.
   private readonly bombMat = new THREE.MeshBasicMaterial({ color: 0x6a6a82, depthTest: false });
+  private readonly fireGeo = new THREE.SphereGeometry(0.2, 16, 12);
+  private readonly fireMat = new THREE.MeshBasicMaterial({ color: 0xff6a1a, depthTest: false });
+  /** Canodron targeting cursors, one mesh per enemy id. */
+  private readonly cursors = new Map<number, THREE.Mesh>();
+  private readonly cursorGeo = new THREE.RingGeometry(0.2, 0.3, 4, 1, Math.PI / 4);
   private timed: Timed[] = [];
   private readonly chargeRing: THREE.Mesh;
   private readonly chargeMat = new THREE.MeshBasicMaterial({
@@ -88,6 +94,18 @@ export class FxView {
       case 'bombLanded':
         this.addCellFlash(e.x, e.y, 0xffa040, tuning.fx.EXPLOSION_TIME, tick, true);
         break;
+      case 'explosion':
+        for (const c of e.cells) this.addCellFlash(c.x, c.y, 0xff5a1a, tuning.fx.EXPLOSION_TIME, tick, true);
+        break;
+      case 'enemyShot':
+        // Tracer from the Canodron toward the player side.
+        this.addEnemyTracer(e.x, e.fromY, e.toY, tick);
+        if (e.toY < ROWS) this.addCellFlash(e.x, e.toY, 0xff4040, tuning.fx.CANNON_TRACER_TIME, tick);
+        break;
+      case 'enemyWarped':
+        this.addCellFlash(e.fromX, e.fromY, 0xffd0a0, tuning.fx.WARP_FX_TIME, tick);
+        this.addCellFlash(e.x, e.y, 0xffffff, tuning.fx.WARP_FX_TIME, tick, true);
+        break;
     }
   }
 
@@ -114,6 +132,28 @@ export class FxView {
       animate: (k) => {
         material.opacity = 1 - k;
         mesh.scale.x = width * (1 - 0.5 * k);
+      },
+    });
+  }
+
+  private addEnemyTracer(x: number, fromY: number, toY: number, tick: number): void {
+    const material = new THREE.MeshBasicMaterial({ color: 0xff4040, transparent: true, depthTest: false });
+    const mesh = new THREE.Mesh(this.boxGeo, material);
+    cellToWorld(x, fromY, tmp);
+    const zFrom = tmp.z - CELL_DEPTH * 0.5;
+    cellToWorld(x, Math.min(toY, ROWS), tmp);
+    const zTo = toY < ROWS ? tmp.z : tmp.z + CELL_DEPTH;
+    mesh.scale.set(0.22, 0.06, Math.abs(zTo - zFrom));
+    mesh.position.set(tmp.x, 0.35, (zFrom + zTo) / 2);
+    mesh.renderOrder = 30;
+    const life = Math.max(1, secondsToTicks(tuning.fx.CANNON_TRACER_TIME));
+    this.push({
+      object: mesh,
+      material,
+      startTick: tick,
+      life,
+      animate: (k) => {
+        material.opacity = 1 - k;
       },
     });
   }
@@ -199,6 +239,7 @@ export class FxView {
   update(world: World, alpha: number): void {
     const tick = world.tick;
     this.updateAttacks(world.attacks, tick, alpha);
+    this.updateCursors(world);
     this.updateBombs(world.bombs, tick, alpha);
     this.updateTimed(tick, alpha);
     this.updateCharge(world);
@@ -209,18 +250,25 @@ export class FxView {
     for (const a of attacks) {
       live.add(a.id);
       let mesh = this.attackMeshes.get(a.id);
+      const fire = a.kind === 'heatshot';
       if (!mesh) {
-        mesh = new THREE.Mesh(this.waveGeo, this.waveMat);
-        mesh.renderOrder = 20;
+        mesh = fire ? new THREE.Mesh(this.fireGeo, this.fireMat) : new THREE.Mesh(this.waveGeo, this.waveMat);
+        mesh.renderOrder = fire ? 42 : 20;
         this.attackMeshes.set(a.id, mesh);
         this.group.add(mesh);
       }
-      if (a instanceof Shockwave) {
-        // The wave is inside cell `y` for the whole step; slide it across that cell.
-        const progress = Math.min(1, Math.max(0, (tick - a.lastStepTick + alpha) / a.stepTicks));
-        cellToWorld(a.x, a.y, mesh.position);
+      if (a.kind === 'shockwave' || fire) {
+        const m = a as LaneMover;
+        // The attack is inside cell `y` for the whole step; slide it across that cell.
+        const progress = Math.min(1, Math.max(0, (tick - m.lastStepTick + alpha) / m.stepTicks));
+        cellToWorld(m.x, m.y, mesh.position);
         mesh.position.z += (progress - 0.5) * CELL_DEPTH;
-        mesh.scale.set(1, 1 + 0.25 * Math.sin((tick + alpha) * 0.9), 1);
+        if (fire) {
+          mesh.position.y = 0.4;
+          mesh.scale.setScalar(1 + 0.15 * Math.sin((tick + alpha) * 1.3));
+        } else {
+          mesh.scale.set(1, 1 + 0.25 * Math.sin((tick + alpha) * 0.9), 1);
+        }
       }
     }
     for (const [id, mesh] of this.attackMeshes) {
@@ -258,6 +306,42 @@ export class FxView {
     }
   }
 
+  private updateCursors(world: World): void {
+    const live = new Set<number>();
+    for (const e of world.enemies) {
+      const c = e.alive && world.state === 'ACTION' ? e.cursorCell() : null;
+      if (!c) continue;
+      live.add(e.id);
+      let mesh = this.cursors.get(e.id);
+      if (!mesh) {
+        mesh = new THREE.Mesh(
+          this.cursorGeo,
+          new THREE.MeshBasicMaterial({ transparent: true, depthTest: false, side: THREE.DoubleSide }),
+        );
+        mesh.rotation.x = -Math.PI / 2;
+        mesh.renderOrder = 6;
+        this.cursors.set(e.id, mesh);
+        this.group.add(mesh);
+      }
+      cellToWorld(c.x, c.y, mesh.position);
+      mesh.position.y = 0.03;
+      const mat = mesh.material as THREE.MeshBasicMaterial;
+      mat.color.setHex(c.locked ? 0xff2d2d : 0xffe066);
+      // A locked reticle sits on the player, so it must draw over the sprite.
+      mesh.renderOrder = c.locked ? 50 : 6;
+      mesh.position.y = c.locked ? 0.45 : 0.03;
+      mat.opacity = c.locked ? 0.95 : 0.8;
+      const s = c.locked ? 1.9 + 0.2 * Math.sin(world.tick * 1.2) : 1.6;
+      mesh.scale.set(s, s, 1);
+    }
+    for (const [id, mesh] of this.cursors) {
+      if (live.has(id)) continue;
+      this.group.remove(mesh);
+      (mesh.material as THREE.Material).dispose();
+      this.cursors.delete(id);
+    }
+  }
+
   private updateTimed(tick: number, alpha: number): void {
     this.timed = this.timed.filter((t) => {
       const age = tick - t.startTick + alpha;
@@ -289,6 +373,11 @@ export class FxView {
     this.attackMeshes.clear();
     for (const mesh of this.bombMeshes.values()) this.group.remove(mesh);
     this.bombMeshes.clear();
+    for (const mesh of this.cursors.values()) {
+      this.group.remove(mesh);
+      (mesh.material as THREE.Material).dispose();
+    }
+    this.cursors.clear();
     for (const t of this.timed) {
       this.group.remove(t.object);
       t.material.dispose();

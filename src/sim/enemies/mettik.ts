@@ -1,6 +1,6 @@
 import { secondsToTicks, tuning } from '../../config/tuning';
 import { Shockwave } from '../attacks/shockwave';
-import { ROWS, type Cell } from '../grid';
+import { laneCellsBelow, type Cell } from '../grid';
 import { Enemy, type EnemyContext } from './enemyBase';
 
 // Mettik (Mettaur, MMBN1) — GDD §8.2.
@@ -9,22 +9,17 @@ import { Enemy, type EnemyContext } from './enemyBase';
 
 export class Mettik extends Enemy {
   readonly kind = 'mettik';
-  private nextAttackId: () => number;
-
-  constructor(id: number, x: number, y: number, spawnTick: number, nextAttackId: () => number) {
+  constructor(id: number, x: number, y: number, spawnTick: number) {
     super(id, x, y, tuning.mettik.MET_HP, spawnTick);
-    this.nextAttackId = nextAttackId;
   }
 
   override dangerCells(): Cell[] {
     if (this.state !== 'TELEGRAPH') return [];
-    const cells: Cell[] = [];
-    for (let y = this.y + 1; y < ROWS; y++) cells.push({ x: this.x, y });
-    return cells;
+    return laneCellsBelow(this.x, this.y + 1);
   }
 
   /** Starts the attack now if possible (debug "force attack"). */
-  forceAttack(tick: number): void {
+  override forceAttack(tick: number): void {
     if (this.alive && (this.state === 'IDLE' || this.state === 'MOVE')) this.setState('TELEGRAPH', tick);
   }
 
@@ -47,7 +42,7 @@ export class Mettik extends Enemy {
       }
       case 'TELEGRAPH':
         if (this.elapsed(t) < secondsToTicks(m.MET_TELEGRAPH)) return;
-        ctx.spawnAttack(new Shockwave(this.nextAttackId(), this.x, this.y + 1, t));
+        ctx.spawnAttack(new Shockwave(ctx.nextAttackId(), this.x, this.y + 1, t));
         this.setState('ATTACK', t);
         return;
       case 'ATTACK':

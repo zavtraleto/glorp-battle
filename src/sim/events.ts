@@ -27,4 +27,9 @@ export type SimEvent =
   | { type: 'chipEffect'; defId: ChipId; pattern: PatternId; x: number; fromY: number; cells: Cell[]; toY: number }
   | { type: 'healed'; amount: number; x: number; y: number }
   | { type: 'bombThrown'; id: number }
-  | { type: 'bombLanded'; id: number; x: number; y: number };
+  | { type: 'bombLanded'; id: number; x: number; y: number }
+  /** Instant enemy shot along a lane (Canodron); toY = row where it stopped, or ROWS if it left the field. */
+  | { type: 'enemyShot'; x: number; fromY: number; toY: number }
+  | { type: 'enemyWarped'; id: EntityId; fromX: number; fromY: number; x: number; y: number }
+  /** HeatShot burst: the hit panel plus the panel behind it. */
+  | { type: 'explosion'; cells: Cell[] };

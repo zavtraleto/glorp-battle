@@ -20,6 +20,13 @@ export function sideOfRow(y: number): Side {
   return y <= ENEMY_ROWS.max ? 'enemy' : 'player';
 }
 
+/** Cells of lane `x` from row `fromY` down to the last row (toward the player). */
+export function laneCellsBelow(x: number, fromY: number): Cell[] {
+  const cells: Cell[] = [];
+  for (let y = Math.max(0, fromY); y < ROWS; y++) cells.push({ x, y });
+  return cells;
+}
+
 export function inTerritory(side: Side, x: number, y: number): boolean {
   return inField(x, y) && sideOfRow(y) === side;
 }
