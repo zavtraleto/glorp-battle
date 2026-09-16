@@ -126,7 +126,8 @@ const loop = new GameLoop(
           `buster cd ${b.cooldownRemaining(world.tick)} chg ${b.chargeLevel(world.tick)} shots ${b.shots}\n` +
           `gauge ${(world.gauge.value * 100).toFixed(0)}%  turn ${world.chips.turns}  add ${world.chips.addStreak}\n` +
           `folder ${world.chips.folderRemaining} hand ${world.chips.hand.filter(Boolean).length}/${world.chips.hand.length}` +
-          ` queue ${world.chips.queue.length} used ${world.chips.count('used')}\n` +
+          ` queue ${world.chips.queue.length} used ${world.chips.count('used')}` +
+          ` chip ${world.activeChip ? world.activeChip.def.id : '-'}\n` +
           world.enemies.map((e) => `${e.kind}#${e.id} ${e.x},${e.y} hp ${e.hp} ${e.state}`).join('\n') +
           `\nattacks ${world.attacks.length}${cheats.god ? '  GOD' : ''}${cheats.aiEnabled ? '' : '  AI OFF'}`,
       });
@@ -137,6 +138,7 @@ loop.clock.timeScale = tuning.sim.TIME_SCALE;
 
 // ---------- Debug tools ----------
 const overlay = new DebugOverlay(ui);
+let debugChipUid = 10_000;
 const panel = new DebugPanel(loop.clock, {
   getSeed: () => world.seed,
   restart: startBattle,
@@ -151,6 +153,10 @@ const panel = new DebugPanel(loop.clock, {
   openCustom: () => {
     world.fillGauge();
     input.push({ type: 'openCustom' });
+  },
+  giveChip: (defId) => {
+    // Debug chips get uids outside the folder range and a wildcard code.
+    world.giveChip({ uid: debugChipUid++, defId, code: '*', state: 'queued' });
   },
   forceAttack: () => {
     for (const e of world.enemies) if (e instanceof Mettik) e.forceAttack(world.tick);

@@ -100,7 +100,7 @@ export class SceneRenderer {
   }
 
   handleEvent(e: SimEvent, world: World): void {
-    this.fx.handleEvent(e, world.tick);
+    this.fx.handleEvent(e, world);
   }
 
   /** Drops all per-battle views (called when a new World is created). */
@@ -135,7 +135,7 @@ export class SceneRenderer {
 
   render(world: World, alpha: number, dt: number): void {
     this.updateCamera(false);
-    this.playerView.update(world.player, world.tick, alpha, dt);
+    this.playerView.update(world.player, world.tick, alpha, dt, world.activeChip !== null);
     this.syncEnemies(world, alpha, dt);
     this.fx.update(world, alpha);
     const pulse = 0.5 + 0.5 * Math.sin((world.tick + alpha) * 0.5);

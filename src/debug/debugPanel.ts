@@ -8,6 +8,7 @@ import {
 } from '../config/tuning';
 import { events } from '../core/events';
 import type { FixedStepClock } from '../core/loop';
+import { CHIPS, type ChipId } from '../data/chips';
 import type { Cheats } from '../sim/world';
 
 export interface DebugActions {
@@ -22,6 +23,7 @@ export interface DebugActions {
   forceAttack(): void;
   fillGauge(): void;
   openCustom(): void;
+  giveChip(id: ChipId): void;
 }
 
 // Slider ranges for numeric tunables; anything not listed gets an auto range.
@@ -111,6 +113,9 @@ export class DebugPanel {
     cf.add({ force: () => a.forceAttack() }, 'force').name('force enemy attack');
     cf.add({ fill: () => a.fillGauge() }, 'fill').name('fill custom gauge');
     cf.add({ open: () => a.openCustom() }, 'open').name('open custom now');
+    const give = { chip: 'cannon' as ChipId };
+    cf.add(give, 'chip', Object.keys(CHIPS)).name('chip to give');
+    cf.add({ give: () => a.giveChip(give.chip) }, 'give').name('add chip to queue');
     cf.add(hp, 'value', 0, 100, 1).name('player HP');
     cf.add({ set: () => a.setPlayerHp(hp.value) }, 'set').name('set player HP');
     cf.add({ retry: () => a.restart({}) }, 'retry').name('restart battle');

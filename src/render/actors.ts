@@ -44,15 +44,17 @@ function flashing(lastHitTick: number, tick: number): boolean {
 export class PlayerView {
   readonly sprite = makeCharacterSprite('G', '#6fd3ff', 0.9);
 
-  update(player: Player, tick: number, alpha: number, dt: number): void {
+  update(player: Player, tick: number, alpha: number, dt: number, usingChip = false): void {
     slide(this.sprite, player.prevX, player.prevY, player.x, player.y, player.lastMoveTick, tick, alpha, dt);
     const mat = this.sprite.material;
-    mat.color.setScalar(flashing(player.lastHitTick, tick) ? FLASH : 1);
+    if (flashing(player.lastHitTick, tick)) mat.color.setScalar(FLASH);
+    else if (usingChip) mat.color.setRGB(1.25, 1.25, 0.9);
+    else mat.color.setScalar(1);
     // Blink while invulnerable.
     const blinkTicks = Math.max(1, Math.round(tuning.sim.SIM_HZ / Math.max(1, tuning.fx.IFRAME_BLINK_HZ) / 2));
     this.sprite.visible = !player.invulnerable || Math.floor(tick / blinkTicks) % 2 === 0;
     const deadScale = player.alive ? 1 : 0.6;
-    this.sprite.scale.setScalar(0.9 * deadScale);
+    this.sprite.scale.setScalar(0.9 * deadScale * (usingChip ? 1.08 : 1));
     mat.opacity = player.alive ? 1 : 0.4;
   }
 }

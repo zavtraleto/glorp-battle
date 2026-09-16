@@ -278,6 +278,74 @@ body {
   font-size: 13px;
 }
 
+.ctl-right {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.ctl-chip {
+  width: 84px;
+  height: 84px;
+  border-radius: 18px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  border-color: #fff27a;
+}
+
+.ctl-chip.empty {
+  visibility: hidden;
+}
+
+.ctl-chip.busy {
+  opacity: 0.55;
+}
+
+.ctl-chip:active {
+  transform: scale(0.94);
+}
+
+.ctl-chip-icon {
+  width: 52px;
+  height: 52px;
+  pointer-events: none;
+}
+
+.ctl-chip-label {
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.queue-stack {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 34px;
+  height: 34px;
+  will-change: transform;
+}
+
+.qs-item {
+  position: absolute;
+  left: 0;
+  bottom: calc(var(--i) * 7px);
+  width: 34px;
+  height: 34px;
+  filter: brightness(calc(1 - var(--i) * 0.12));
+}
+
+.qs-item .ci-abbr {
+  font-size: 12px;
+}
+
+.qs-item .ci-code {
+  display: none;
+}
+
 /* ---------- Chip icons (placeholder) ---------- */
 
 .chip-icon {
@@ -553,6 +621,10 @@ body {
 
 .dmg-number.player {
   color: var(--danger);
+}
+
+.dmg-number.heal {
+  color: #7dff9e;
 }
 
 /* ---------- Banner ---------- */

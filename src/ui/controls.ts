@@ -2,6 +2,7 @@ import { secondsToTicks, tuning } from '../config/tuning';
 import type { InputState } from '../core/input/commands';
 import { CHIPS } from '../data/chips';
 import { t } from '../i18n';
+import { chipIconHtml } from './chipIcon';
 import type { World } from '../sim/world';
 
 // On-screen battle buttons (GDD §12.1). Each button owns its pointer (multi-touch).
@@ -10,6 +11,8 @@ export class Controls {
   readonly root: HTMLElement;
   private readonly buster: HTMLButtonElement;
   private readonly custom: HTMLButtonElement;
+  private readonly chip: HTMLButtonElement;
+  private chipKey = '';
   private readonly queuePlate: HTMLElement;
   private busterPointer: number | null = null;
   private keyHeld = false;
@@ -31,7 +34,19 @@ export class Controls {
     this.custom.textContent = t('btn.custom');
     left.append(this.queuePlate, this.custom);
 
-    this.root.append(left, this.buster);
+    const right = document.createElement('div');
+    right.className = 'ctl-right';
+    this.chip = document.createElement('button');
+    this.chip.className = 'ctl-btn ctl-chip interactive';
+    right.append(this.chip, this.buster);
+
+    this.root.append(left, right);
+
+    this.chip.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      this.input.push({ type: 'useChip' });
+    });
+    this.chip.addEventListener('contextmenu', (e) => e.preventDefault());
     parent.appendChild(this.root);
 
     this.custom.addEventListener('pointerdown', (e) => {
@@ -76,6 +91,8 @@ export class Controls {
     window.addEventListener('keydown', (e) => {
       // Q / E open the Custom Screen (MMBN1: L / R).
       if ((e.code === 'KeyQ' || e.code === 'KeyE') && !e.repeat) this.input.push({ type: 'openCustom' });
+      // F uses the next chip (GDD §12.2).
+      if (e.code === 'KeyF' && !e.repeat) this.input.push({ type: 'useChip' });
     });
     window.addEventListener('blur', () => {
       if (this.keyHeld) this.input.push({ type: 'busterUp' });
@@ -104,6 +121,16 @@ export class Controls {
     this.custom.disabled = !world.gauge.full;
 
     const queue = world.chips.queue;
+    const next = queue[0];
+    const chipKey = next ? `${next.uid}` : '';
+    if (chipKey !== this.chipKey) {
+      this.chipKey = chipKey;
+      this.chip.innerHTML = next
+        ? `<span class="ctl-chip-icon">${chipIconHtml(next.defId, next.code)}</span><span class="ctl-chip-label">${t('btn.chip')}</span>`
+        : '';
+    }
+    this.chip.classList.toggle('empty', !next);
+    this.chip.classList.toggle('busy', world.player.actionTicks > 0 || world.player.flinched);
     const head = queue[0];
     const text = head ? `${CHIPS[head.defId].name}${CHIPS[head.defId].power !== null ? ' ' + CHIPS[head.defId].power : ''}` : '';
     const plate = head ? `${text}${queue.length > 1 ? ` <span class="qp-count">+${queue.length - 1}</span>` : ''}` : '';

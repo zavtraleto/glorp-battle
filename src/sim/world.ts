@@ -6,8 +6,11 @@ import { Rng } from '../core/rng';
 import { getBattle } from '../data/battles';
 import type { FolderId } from '../data/folders';
 import type { Attack, AttackContext } from './attacks/attack';
+import { PlayerBomb } from './attacks/bomb';
 import { Buster, type ChargeLevel } from './buster';
-import { ChipSystem } from './chips/chipSystem';
+import { ChipSystem, type ChipInstance } from './chips/chipSystem';
+import { startChip, type ActiveChip } from './chips/executor';
+import { hitscanCells, lobTarget, meleeCells } from './chips/patterns';
 import type { Enemy, EnemyContext } from './enemies/enemyBase';
 import { createEnemy } from './enemies/factory';
 import type { SimEvent } from './events';
@@ -84,6 +87,11 @@ export class World implements EnemyContext, AttackContext {
   readonly cheats: Cheats;
   enemies: Enemy[] = [];
   attacks: Attack[] = [];
+  /** Player bombs in flight. */
+  bombs: PlayerBomb[] = [];
+  /** Chip currently being used by the player (GDD §6.5). */
+  activeChip: ActiveChip | null = null;
+  chipsUsed = 0;
   /** Events emitted since the last drain. */
   events: SimEvent[] = [];
   /** Id of the Mettik allowed to attack; null = first alive Mettik. */
@@ -248,6 +256,11 @@ export class World implements EnemyContext, AttackContext {
     const amount = this.cheats.god ? 0 : damage;
     p.takeHit(amount, this.tick);
     this.events.push({ type: 'damaged', targetId: p.id, amount, x, y, hpLeft: p.hp });
+    // A hit interrupts the chip; if it had not resolved yet, it is lost (GDD §6.5).
+    if (this.activeChip) {
+      if (!this.activeChip.resolved) this.events.push({ type: 'chipInterrupted', defId: this.activeChip.def.id });
+      this.activeChip = null;
+    }
     return true;
   }
 
@@ -285,6 +298,112 @@ export class World implements EnemyContext, AttackContext {
       hitId: target ? target.id : null,
     });
     if (target) this.damageEnemy(target, damage);
+  }
+
+  /** First living enemy in lane `x` in front of row `py`; -1 if none. */
+  private firstEnemyRow = (x: number, py: number): number => {
+    for (let y = py - 1; y >= 0; y--) {
+      const e = this.enemyAt(x, y);
+      if (e && e.alive) return y;
+    }
+    return -1;
+  };
+
+  private damageCells(cells: readonly { x: number; y: number }[], damage: number): void {
+    const hit = new Set<number>();
+    for (const c of cells) {
+      const e = this.enemyAt(c.x, c.y);
+      if (!e || !e.alive || hit.has(e.id)) continue;
+      hit.add(e.id);
+      this.damageEnemy(e, damage);
+    }
+  }
+
+  /** Starts the next queued chip if the player is free (no buffering, GDD §6.5). */
+  private tryUseChip(): void {
+    const p = this.player;
+    if (p.flinched || p.actionTicks > 0 || this.activeChip) return;
+    const chip = this.chips.takeNext();
+    if (!chip) return;
+    this.beginChip(chip);
+  }
+
+  private beginChip(chip: ChipInstance): void {
+    const p = this.player;
+    const active = startChip(chip, this.tick);
+    this.activeChip = active;
+    p.actionTicks = active.endTick - active.startTick;
+    this.chipsUsed++;
+    this.events.push({ type: 'chipUsed', defId: chip.defId, x: p.x, y: p.y });
+  }
+
+  private updateActiveChip(): void {
+    const a = this.activeChip;
+    if (!a) return;
+    if (!a.resolved && this.tick >= a.hitTick) {
+      a.resolved = true;
+      this.resolveChip(a);
+    }
+    if (this.tick >= a.endTick) this.activeChip = null;
+  }
+
+  private resolveChip(a: ActiveChip): void {
+    const p = this.player;
+    const def = a.def;
+    const power = def.power ?? 0;
+    const effect = (cells: { x: number; y: number }[], toY = -1) =>
+      this.events.push({ type: 'chipEffect', defId: def.id, pattern: def.pattern, x: p.x, fromY: p.y, cells, toY });
+
+    switch (def.pattern) {
+      case 'lane_hitscan':
+      case 'lane_hitscan_pierce1': {
+        const cells = hitscanCells(def.pattern, p.x, p.y, this.firstEnemyRow);
+        effect(cells, cells[0]?.y ?? -1);
+        this.damageCells(cells, power);
+        return;
+      }
+      case 'melee_1':
+      case 'melee_wide':
+      case 'melee_long': {
+        const cells = meleeCells(def.pattern, p.x, p.y);
+        effect(cells);
+        this.damageCells(cells, power);
+        return;
+      }
+      case 'lob_3': {
+        const target = lobTarget(p.x, p.y);
+        if (!target) return;
+        const bomb = new PlayerBomb(this.attackIdCounter++, p.x, p.y, target.x, target.y, power, this.tick);
+        this.bombs.push(bomb);
+        effect([target], target.y);
+        this.events.push({ type: 'bombThrown', id: bomb.id });
+        return;
+      }
+      case 'self_heal': {
+        const before = p.hp;
+        p.hp = Math.min(p.maxHp, p.hp + tuning.chips.RECOVER_AMOUNT);
+        effect([]);
+        this.events.push({ type: 'healed', amount: p.hp - before, x: p.x, y: p.y });
+        return;
+      }
+    }
+  }
+
+  private updateBombs(): void {
+    if (this.bombs.length === 0) return;
+    for (const b of this.bombs) {
+      if (b.done || this.tick < b.landTick) continue;
+      b.done = true;
+      this.events.push({ type: 'bombLanded', id: b.id, x: b.x, y: b.y });
+      this.damageCells([{ x: b.x, y: b.y }], b.damage);
+    }
+    this.bombs = this.bombs.filter((b) => !b.done);
+  }
+
+  /** Debug: append a chip to the queue. */
+  giveChip(chip: ChipInstance): void {
+    chip.state = 'queued';
+    this.chips.queue.push(chip);
   }
 
   killAllEnemies(): void {
@@ -329,9 +448,12 @@ export class World implements EnemyContext, AttackContext {
       else if (c.type === 'busterDown') p.buster.press(this.tick, p.flinched);
       else if (c.type === 'busterUp') p.buster.release(this.tick);
       else if (c.type === 'openCustom' && this.gauge.full) this.pendingOpenCustom = true;
+      else if (c.type === 'useChip') this.tryUseChip();
     }
     p.updateMovement(this.tick, moves, input.held);
+    this.updateActiveChip();
     p.buster.update(this.tick, p.flinched, p.actionTicks > 0, (level) => this.fireBuster(level));
+    this.updateBombs();
 
     if (this.cheats.aiEnabled) {
       for (const e of this.enemies) if (e.alive) e.update(this);
@@ -345,6 +467,8 @@ export class World implements EnemyContext, AttackContext {
       this.setState('PLAYER_DEAD');
     } else if (this.enemies.every((e) => !e.alive)) {
       this.attacks = [];
+      this.bombs = [];
+      this.activeChip = null;
       this.setState('BATTLE_WON');
     } else if (this.pendingOpenCustom && this.canOpenCustom) {
       this.openCustom();
