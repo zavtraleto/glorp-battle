@@ -14,6 +14,7 @@ import { Mettik } from './sim/enemies/mettik';
 import { World, type Cheats } from './sim/world';
 import { Banner } from './ui/banner';
 import { Controls } from './ui/controls';
+import { CustomScreen } from './ui/customScreen';
 import { Hud } from './ui/hud';
 import { WorldLabels } from './ui/worldLabels';
 
@@ -31,14 +32,20 @@ const stage = byId('stage');
 const ui = byId('ui');
 
 const cheats: Cheats = { god: params.god, aiEnabled: true };
-let world = new World({ seed: params.seed ?? randomSeed(), battleIndex: params.battle, cheats });
+const folder = params.folder;
+let world = new World({ seed: params.seed ?? randomSeed(), battleIndex: params.battle, cheats, folder });
 
 const sceneRenderer = new SceneRenderer(stage);
 const hud = new Hud(ui);
 const labels = new WorldLabels(ui, sceneRenderer);
 const input = new InputState();
 const controls = new Controls(ui, input);
+const customScreen = new CustomScreen(ui, () => world);
 const banner = new Banner(ui);
+hud.gauge.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  input.push({ type: 'openCustom' });
+});
 attachKeyboard(input);
 attachSwipe(input);
 
@@ -48,6 +55,7 @@ function startBattle(opts: { seed?: number | 'random'; battle?: number } = {}): 
     seed: opts.seed === 'random' ? randomSeed() : (opts.seed ?? world.seed),
     battleIndex: opts.battle ?? world.battleIndex,
     cheats,
+    folder,
   });
   input.clear();
   controls.reset();
@@ -61,8 +69,10 @@ function startBattle(opts: { seed?: number | 'random'; battle?: number } = {}): 
 
 // TODO(M7): replace with the full RESULT / DEFEAT screens and the battle sequence.
 function updateBanner(): void {
-  const resultReady = world.tick - world.stateTick >= secondsToTicks(tuning.fx.RESULT_BANNER_DELAY);
-  if (world.state === 'BATTLE_WON') {
+  const resultReady = world.stateElapsed >= secondsToTicks(tuning.fx.RESULT_BANNER_DELAY);
+  if (world.state === 'BATTLE_START' && world.firstStart) {
+    banner.show('battle-start', t('banner.battleStart'), 'info');
+  } else if (world.state === 'BATTLE_WON') {
     const buttons = resultReady
       ? [
           { label: t('btn.retry'), onClick: () => startBattle() },
@@ -92,10 +102,14 @@ const loop = new GameLoop(
     },
     render: (alpha, frameSeconds) => {
       const dt = loop.clock.dt;
-      sceneRenderer.render(world, alpha, dt);
-      labels.update(world, alpha);
+      // A frozen simulation must not be extrapolated between ticks.
+      const simAlpha = world.simFrozen ? 0 : alpha;
+      sceneRenderer.render(world, simAlpha, dt);
+      labels.update(world, simAlpha);
       hud.setHp(world.player.hp, world.player.maxHp);
+      hud.setGauge(world.gauge.value, world.gauge.full);
       controls.update(world);
+      customScreen.update();
       updateBanner();
       const p = world.player;
       const b = p.buster;
@@ -110,6 +124,9 @@ const loop = new GameLoop(
         extra:
           `player ${p.x},${p.y} hp ${p.hp} hits ${p.hitsTaken} ${p.flinched ? 'FLINCH ' : ''}${p.invulnerable ? 'IFR' : ''}\n` +
           `buster cd ${b.cooldownRemaining(world.tick)} chg ${b.chargeLevel(world.tick)} shots ${b.shots}\n` +
+          `gauge ${(world.gauge.value * 100).toFixed(0)}%  turn ${world.chips.turns}  add ${world.chips.addStreak}\n` +
+          `folder ${world.chips.folderRemaining} hand ${world.chips.hand.filter(Boolean).length}/${world.chips.hand.length}` +
+          ` queue ${world.chips.queue.length} used ${world.chips.count('used')}\n` +
           world.enemies.map((e) => `${e.kind}#${e.id} ${e.x},${e.y} hp ${e.hp} ${e.state}`).join('\n') +
           `\nattacks ${world.attacks.length}${cheats.god ? '  GOD' : ''}${cheats.aiEnabled ? '' : '  AI OFF'}`,
       });
@@ -129,6 +146,11 @@ const panel = new DebugPanel(loop.clock, {
   killAll: () => world.killAllEnemies(),
   setPlayerHp: (hp) => {
     world.player.hp = Math.max(0, Math.min(world.player.maxHp, Math.round(hp)));
+  },
+  fillGauge: () => world.fillGauge(),
+  openCustom: () => {
+    world.fillGauge();
+    input.push({ type: 'openCustom' });
   },
   forceAttack: () => {
     for (const e of world.enemies) if (e instanceof Mettik) e.forceAttack(world.tick);

@@ -1,14 +1,17 @@
 // Simulation root. Pure TypeScript: no Three.js, no DOM (GDD §15.1).
 
-import { tuning } from '../config/tuning';
+import { secondsToTicks, tuning } from '../config/tuning';
 import type { Command, Dir } from '../core/input/commands';
 import { Rng } from '../core/rng';
 import { getBattle } from '../data/battles';
+import type { FolderId } from '../data/folders';
 import type { Attack, AttackContext } from './attacks/attack';
 import { Buster, type ChargeLevel } from './buster';
+import { ChipSystem } from './chips/chipSystem';
 import type { Enemy, EnemyContext } from './enemies/enemyBase';
 import { createEnemy } from './enemies/factory';
 import type { SimEvent } from './events';
+import { Gauge } from './gauge';
 import type { Cell } from './grid';
 import { Occupancy } from './occupancy';
 import { Player } from './player';
@@ -38,7 +41,13 @@ export interface WorldOptions {
   battleIndex: number;
   playerHp?: number;
   cheats?: Cheats;
+  folder?: FolderId;
+  /** Skip intro and the first Custom Screen (tests). */
+  skipIntro?: boolean;
 }
+
+/** States in which the battle simulation (enemies, attacks, gauge, timers) is frozen. */
+const FROZEN_STATES: ReadonlySet<GameState> = new Set(['BOOT', 'TITLE', 'BATTLE_INTRO', 'CUSTOM', 'BATTLE_START', 'PAUSED']);
 
 /** Input snapshot handed to the simulation each tick. */
 export interface TickInput {
@@ -49,11 +58,23 @@ export interface TickInput {
 const NO_INPUT: TickInput = { commands: [], held: null };
 
 export class World implements EnemyContext, AttackContext {
+  /** Simulation tick: advances only while the battle runs (ACTION and end-of-battle animations). */
   tick = 0;
+  /** Presentation tick: always advances; drives state timers and UI animation. */
+  uiTick = 0;
+  /** Simulated seconds (ACTION only). */
   time = 0;
-  // TODO(M3/M7): start in BATTLE_INTRO → CUSTOM once those states exist; ACTION for now.
-  state: GameState = 'ACTION';
+  state: GameState = 'BATTLE_INTRO';
+  /** uiTick when the current state was entered. */
   stateTick = 0;
+  readonly gauge = new Gauge();
+  readonly chips: ChipSystem;
+  /** OPEN CUSTOM was pressed while busy; opens as soon as the player is free. */
+  private pendingOpenCustom = false;
+  /** Duration of the current BATTLE_START phase in ui ticks. */
+  private resumeTicks = 0;
+  /** True while the current BATTLE_START phase should show the banner. */
+  firstStart = false;
   readonly seed: number;
   readonly battleIndex: number;
   readonly rngFolder: Rng;
@@ -78,7 +99,17 @@ export class World implements EnemyContext, AttackContext {
     this.rngFolder = root.fork('folder');
     this.rngAi = root.fork('ai');
     this.player = new Player(this.occupancy, options.playerHp);
+    this.chips = new ChipSystem(options.folder ?? 'mvp', this.rngFolder);
     this.spawnBattle();
+    if (options.skipIntro) {
+      this.chips.openTurn();
+      this.chips.confirm();
+      this.state = 'ACTION';
+    }
+  }
+
+  get simFrozen(): boolean {
+    return FROZEN_STATES.has(this.state);
   }
 
   private spawnBattle(): void {
@@ -103,7 +134,65 @@ export class World implements EnemyContext, AttackContext {
     if (state === this.state) return;
     this.events.push({ type: 'stateChanged', from: this.state, to: state });
     this.state = state;
-    this.stateTick = this.tick;
+    this.stateTick = this.uiTick;
+  }
+
+  /** Ui ticks spent in the current state. */
+  get stateElapsed(): number {
+    return this.uiTick - this.stateTick;
+  }
+
+  // ---------- Custom Screen (GDD §7) ----------
+
+  /** Whether the Custom Screen can be opened manually right now. */
+  get canOpenCustom(): boolean {
+    const p = this.player;
+    return this.state === 'ACTION' && this.gauge.full && !p.flinched && p.actionTicks === 0;
+  }
+
+  private openCustom(): void {
+    const p = this.player;
+    // Held inputs do not survive the pause: the charge is lost and the button must be pressed again.
+    p.buster.cancel();
+    p.buster.held = false;
+    p.bufferedDir = null;
+    this.pendingOpenCustom = false;
+    this.chips.openTurn();
+    this.setState('CUSTOM');
+  }
+
+  customSelect(slot: number): boolean {
+    return this.state === 'CUSTOM' && this.chips.select(slot);
+  }
+
+  customCancel(): boolean {
+    return this.state === 'CUSTOM' && this.chips.cancelLast();
+  }
+
+  customConfirm(): void {
+    if (this.state !== 'CUSTOM') return;
+    this.chips.confirm();
+    this.closeCustom();
+  }
+
+  customAdd(): void {
+    if (this.state !== 'CUSTOM') return;
+    this.chips.add();
+    this.closeCustom();
+  }
+
+  private closeCustom(): void {
+    const first = this.chips.turns === 1;
+    this.gauge.reset();
+    // "BATTLE START!" only after the first Custom Screen of a battle (GDD §11).
+    this.resumeTicks = secondsToTicks(first ? tuning.fx.BANNER_BATTLE_START : tuning.fx.RESUME_DELAY);
+    this.firstStart = first;
+    this.setState('BATTLE_START');
+  }
+
+  /** Debug: fill the gauge instantly. */
+  fillGauge(): void {
+    this.gauge.fill();
   }
 
   enemyAt(x: number, y: number): Enemy | null {
@@ -205,12 +294,31 @@ export class World implements EnemyContext, AttackContext {
   // ---------- Tick ----------
 
   step(dt: number, input: TickInput = NO_INPUT): void {
+    this.uiTick++;
+
+    switch (this.state) {
+      case 'BATTLE_INTRO':
+        if (this.stateElapsed >= secondsToTicks(tuning.fx.INTRO_TIME)) this.openCustom();
+        return;
+      case 'BATTLE_START':
+        if (this.stateElapsed >= this.resumeTicks) this.setState('ACTION');
+        return;
+      case 'BATTLE_WON':
+      case 'PLAYER_DEAD':
+        // Deletion animations keep playing after the battle ends.
+        this.tick++;
+        this.removeDeletedEnemies();
+        return;
+      case 'ACTION':
+        break;
+      default:
+        return;
+    }
+
     this.tick++;
     this.time += dt;
-
-    // Deletion animations keep playing after the battle ends.
     this.removeDeletedEnemies();
-    if (this.state !== 'ACTION') return;
+    this.gauge.tick();
 
     const p = this.player;
     p.updateTimers();
@@ -220,6 +328,7 @@ export class World implements EnemyContext, AttackContext {
       if (c.type === 'move') moves.push(c.dir);
       else if (c.type === 'busterDown') p.buster.press(this.tick, p.flinched);
       else if (c.type === 'busterUp') p.buster.release(this.tick);
+      else if (c.type === 'openCustom' && this.gauge.full) this.pendingOpenCustom = true;
     }
     p.updateMovement(this.tick, moves, input.held);
     p.buster.update(this.tick, p.flinched, p.actionTicks > 0, (level) => this.fireBuster(level));
@@ -237,6 +346,8 @@ export class World implements EnemyContext, AttackContext {
     } else if (this.enemies.every((e) => !e.alive)) {
       this.attacks = [];
       this.setState('BATTLE_WON');
+    } else if (this.pendingOpenCustom && this.canOpenCustom) {
+      this.openCustom();
     }
   }
 

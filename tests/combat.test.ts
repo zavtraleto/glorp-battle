@@ -13,7 +13,7 @@ let attackIds = 1000;
 
 function makeWorld(opts: { ai?: boolean; god?: boolean; battle?: number } = {}): World {
   const cheats: Cheats = { god: opts.god ?? false, aiEnabled: opts.ai ?? true };
-  return new World({ seed: 7, battleIndex: opts.battle ?? 1, cheats });
+  return new World({ seed: 7, battleIndex: opts.battle ?? 1, cheats, skipIntro: true });
 }
 
 function addMettik(w: World, x: number, y: number, id: number): Mettik {

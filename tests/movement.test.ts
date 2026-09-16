@@ -8,7 +8,7 @@ import { World } from '../src/sim/world';
 const DT = 1 / 60;
 
 function freshWorld(): World {
-  return new World({ seed: 1, battleIndex: 1, cheats: { god: false, aiEnabled: false } });
+  return new World({ seed: 1, battleIndex: 1, cheats: { god: false, aiEnabled: false }, skipIntro: true });
 }
 
 /** Runs one tick with the given presses. */

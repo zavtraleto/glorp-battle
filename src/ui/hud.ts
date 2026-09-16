@@ -13,11 +13,14 @@ export class Hud {
   private readonly hp: HTMLElement;
   private readonly gaugeFill: HTMLElement;
   readonly pauseButton: HTMLButtonElement;
+  /** Tapping the gauge opens the Custom Screen when it is full (GDD §12.1). */
+  readonly gauge: HTMLElement;
 
   constructor(parent: HTMLElement) {
     this.root = el('div', 'hud-top');
     this.hp = el('div', 'hud-hp');
-    const gauge = el('div', 'hud-gauge');
+    const gauge = el('div', 'hud-gauge interactive');
+    this.gauge = gauge;
     this.gaugeFill = el('div', 'hud-gauge-fill');
     gauge.append(this.gaugeFill, el('div', 'hud-gauge-label', t('btn.custom')));
     this.pauseButton = el('button', 'hud-pause interactive');
@@ -41,7 +44,9 @@ export class Hud {
     this.hp.classList.toggle('low', hp <= maxHp * 0.25);
   }
 
-  setGauge(fraction: number): void {
-    this.gaugeFill.style.width = `${Math.round(Math.min(1, Math.max(0, fraction)) * 100)}%`;
+  setGauge(fraction: number, full = false): void {
+    const width = `${(Math.min(1, Math.max(0, fraction)) * 100).toFixed(1)}%`;
+    if (this.gaugeFill.style.width !== width) this.gaugeFill.style.width = width;
+    this.gauge.classList.toggle('full', full);
   }
 }

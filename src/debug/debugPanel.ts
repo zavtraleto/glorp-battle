@@ -20,6 +20,8 @@ export interface DebugActions {
   killAll(): void;
   setPlayerHp(hp: number): void;
   forceAttack(): void;
+  fillGauge(): void;
+  openCustom(): void;
 }
 
 // Slider ranges for numeric tunables; anything not listed gets an auto range.
@@ -71,6 +73,13 @@ export class DebugPanel {
   private buildSession(): void {
     const s = this.state;
     const f = this.gui.addFolder('Session');
+    f.add({ folder: new URLSearchParams(location.search).get('folder') ?? 'mvp' }, 'folder', ['mvp', 'p1'])
+      .name('folder (reloads)')
+      .onChange((v: string) => {
+        const url = new URL(location.href);
+        url.searchParams.set('folder', v);
+        location.href = url.toString();
+      });
     f.add(s, 'battle', [1, 2, 3, 4]).name('battle').onChange((b: number) => this.actions.restart({ battle: b }));
     f.add(s, 'seed').name('seed').step(1);
     f.add({ apply: () => this.actions.restart({ seed: s.seed >>> 0 }) }, 'apply').name('restart with seed');
@@ -100,6 +109,8 @@ export class DebugPanel {
     cf.add(a.cheats, 'aiEnabled').name('enemy AI');
     cf.add({ kill: () => a.killAll() }, 'kill').name('kill all enemies');
     cf.add({ force: () => a.forceAttack() }, 'force').name('force enemy attack');
+    cf.add({ fill: () => a.fillGauge() }, 'fill').name('fill custom gauge');
+    cf.add({ open: () => a.openCustom() }, 'open').name('open custom now');
     cf.add(hp, 'value', 0, 100, 1).name('player HP');
     cf.add({ set: () => a.setPlayerHp(hp.value) }, 'set').name('set player HP');
     cf.add({ retry: () => a.restart({}) }, 'retry').name('restart battle');
