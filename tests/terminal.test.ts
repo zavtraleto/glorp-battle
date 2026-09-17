@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_TUNING, mergeTuning, tuning } from '../src/config/tuning';
+import type { Dir } from '../src/core/input/commands';
 import { parseDebugParams } from '../src/debug/params';
+import { PerfProbe, percentile } from '../src/debug/perfProbe';
+import { PointerRouter, type RouterHandlers } from '../src/terminal/interaction/pointerRouter';
+import { computeLayout, rectContains, rectToWorld, zoneAt, TERMINAL_WORLD_WIDTH } from '../src/terminal/layout';
 
 beforeEach(() => {
   mergeTuning(tuning, JSON.parse(JSON.stringify(DEFAULT_TUNING)));
@@ -43,8 +47,6 @@ describe('terminal URL params', () => {
     expect(parseDebugParams('?crtres=0x10').crtres).toBeNull();
   });
 });
-
-import { computeLayout, rectContains, rectToWorld, zoneAt, TERMINAL_WORLD_WIDTH } from '../src/terminal/layout';
 
 describe('terminal layout', () => {
   it('fills a typical phone viewport edge to edge', () => {
@@ -111,5 +113,124 @@ describe('terminal layout', () => {
     expect(w.h).toBeCloseTo(l.worldHeight, 5);
     const top = rectToWorld(l, l.top);
     expect(top.cy).toBeGreaterThan(0); // y up
+  });
+});
+
+function makeRouter() {
+  const layout = computeLayout(390, 844);
+  const log: string[] = [];
+  const rolls: [number, number][] = [];
+  const handlers: RouterHandlers = {
+    press: (z) => log.push(`press:${z}`),
+    release: (z) => log.push(`release:${z}`),
+    move: (d: Dir) => log.push(`move:${d}`),
+    roll: (dx, dy) => rolls.push([dx, dy]),
+    action: (z) => log.push(`action:${z}`),
+  };
+  const router = new PointerRouter(() => layout, handlers);
+  const center = (z: keyof typeof layout.zones) => {
+    const r = layout.zones[z];
+    return [r.x + r.w / 2, r.y + r.h / 2] as const;
+  };
+  return { layout, log, rolls, router, center };
+}
+
+describe('PointerRouter', () => {
+  it('fires execute on press and releases on up', () => {
+    const { router, log, center } = makeRouter();
+    const [x, y] = center('execute');
+    expect(router.down(1, x, y)).toBe(true);
+    router.up(1);
+    expect(log).toEqual(['press:execute', 'action:execute', 'release:execute']);
+  });
+
+  it('fires chip select and pause on press', () => {
+    const { router, log, center } = makeRouter();
+    router.down(1, ...center('chipSelect'));
+    router.down(2, ...center('pause'));
+    expect(log).toContain('action:chipSelect');
+    expect(log).toContain('action:pause');
+  });
+
+  it('turns one trackball gesture into exactly one step', () => {
+    const { router, log, rolls, center } = makeRouter();
+    const [x, y] = center('trackball');
+    router.down(1, x, y);
+    router.move(1, x + 10, y);
+    router.move(1, x + 30, y);
+    router.move(1, x + 90, y + 5);
+    router.up(1);
+    expect(log.filter((l) => l.startsWith('move:'))).toEqual(['move:right']);
+    expect(log).not.toContain('action:trackball');
+    expect(rolls.reduce((s, r) => s + r[0], 0)).toBe(90);
+  });
+
+  it('keeps the gesture alive outside the zone', () => {
+    const { router, log, center, layout } = makeRouter();
+    const [x, y] = center('trackball');
+    router.down(1, x, y);
+    router.move(1, x, layout.crt.y + 10); // far up, over the CRT
+    expect(log).toContain('move:up');
+  });
+
+  it('ignores presses outside any zone', () => {
+    const { router, log, layout } = makeRouter();
+    expect(router.down(1, layout.crt.x + 5, layout.crt.y + 100)).toBe(false);
+    router.move(1, layout.crt.x + 100, layout.crt.y + 100);
+    router.up(1);
+    expect(log).toEqual([]);
+  });
+
+  it('tracks two pointers independently (trackball + execute)', () => {
+    const { router, log, center } = makeRouter();
+    const [tx, ty] = center('trackball');
+    router.down(1, tx, ty);
+    router.down(2, ...center('execute'));
+    router.move(1, tx - 40, ty);
+    router.up(2);
+    router.up(1);
+    expect(log).toEqual([
+      'press:trackball',
+      'press:execute',
+      'action:execute',
+      'move:left',
+      'release:execute',
+      'release:trackball',
+    ]);
+  });
+
+  it('releases everything on cancelAll', () => {
+    const { router, log, center } = makeRouter();
+    router.down(1, ...center('execute'));
+    router.cancelAll();
+    router.up(1);
+    expect(log.filter((l) => l.startsWith('release:'))).toEqual(['release:execute']);
+  });
+});
+
+describe('PerfProbe', () => {
+  it('computes nearest-rank percentiles', () => {
+    const s = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    expect(percentile(s, 50)).toBe(5);
+    expect(percentile(s, 95)).toBe(10);
+    expect(percentile([], 50)).toBe(0);
+  });
+
+  it('keeps a rolling window of samples', () => {
+    const p = new PerfProbe(4);
+    for (const v of [100, 100, 1, 2, 3, 4]) p.record(v, v / 2);
+    const s = p.snapshot();
+    expect(s.frames).toBe(4);
+    expect(s.intervalP95).toBe(4);
+    expect(s.cpuP50).toBe(1);
+  });
+
+  it('reports gpu counters and resets', () => {
+    const p = new PerfProbe();
+    p.record(16, 3);
+    p.setGpu(42, 1234, 1_000_000, 400, 866);
+    expect(p.snapshot()).toMatchObject({ calls: 42, triangles: 1234, textureBytes: 1_000_000, renderW: 400, renderH: 866 });
+    p.reset();
+    expect(p.snapshot().frames).toBe(0);
   });
 });
