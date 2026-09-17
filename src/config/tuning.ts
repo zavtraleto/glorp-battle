@@ -22,6 +22,12 @@ export const DEFAULT_TUNING = {
     BUSTER_INTERVAL: 1.0,
     BUSTER_DAMAGE: 1,
   },
+  /** Panels (roguelite spec §3). */
+  field: {
+    PANEL_RESTORE_TIME: 10,
+    STEAL_RESTORE_TIME: 15,
+    ROCK_HP: 100,
+  },
   gauge: {
     GAUGE_FILL_TIME: 8.0,
   },
