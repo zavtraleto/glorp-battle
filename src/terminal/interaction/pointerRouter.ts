@@ -2,6 +2,7 @@ import { tuning } from '../../config/tuning';
 import type { Dir } from '../../core/input/commands';
 import { SwipeRecognizer } from '../../core/input/swipe';
 import { zoneAt, type TerminalLayout, type ZoneId } from '../layout';
+import { attachPointers } from './pointerEvents';
 
 // Pointer Events → terminal controls (TERMINAL.md §5). Each pointer captures
 // the zone it went down in until it is lifted; a trackball gesture continues
@@ -86,51 +87,19 @@ export class PointerRouter {
     for (const id of [...this.captures.keys()]) this.up(id);
   }
 
+  isCaptured(id: number): boolean {
+    return this.captures.has(id);
+  }
+
   /** Listens on `el` (coordinates relative to it); returns a detach function. */
   attach(el: HTMLElement): () => void {
-    const local = (e: PointerEvent) => {
-      const r = el.getBoundingClientRect();
-      return [e.clientX - r.left, e.clientY - r.top] as const;
-    };
-    const onDown = (e: PointerEvent) => {
-      const [x, y] = local(e);
-      if (!this.down(e.pointerId, x, y)) return;
-      e.preventDefault();
-      try {
-        el.setPointerCapture(e.pointerId);
-      } catch {
-        // synthetic pointers cannot be captured; routing still works
-      }
-    };
-    const onMove = (e: PointerEvent) => {
-      if (!this.captures.has(e.pointerId)) {
-        if (e.pointerType === 'mouse') this.hoverAt(...local(e));
-        return;
-      }
-      const events = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [];
-      for (const ce of events.length > 0 ? events : [e]) {
-        const [x, y] = local(ce);
-        this.move(e.pointerId, x, y);
-      }
-    };
-    const onUp = (e: PointerEvent) => this.up(e.pointerId);
-    const onBlur = () => this.cancelAll();
-    const onLeave = (e: PointerEvent) => {
-      if (e.pointerType === 'mouse' && !this.captures.has(e.pointerId)) this.handlers.hover?.(null, -1, -1);
-    };
-    el.addEventListener('pointerdown', onDown);
-    el.addEventListener('pointermove', onMove);
-    el.addEventListener('pointerup', onUp);
-    el.addEventListener('pointercancel', onUp);
-    el.addEventListener('pointerleave', onLeave);
-    window.addEventListener('blur', onBlur);
-    return () => {
-      el.removeEventListener('pointerleave', onLeave);
-      el.removeEventListener('pointerdown', onDown);
-      el.removeEventListener('pointermove', onMove);
-      el.removeEventListener('pointerup', onUp);
-      el.removeEventListener('pointercancel', onUp);
-      window.removeEventListener('blur', onBlur);
-    };
+    return attachPointers(el, {
+      down: (id, x, y) => this.down(id, x, y),
+      move: (id, x, y) => this.move(id, x, y),
+      up: (id) => this.up(id),
+      cancelAll: () => this.cancelAll(),
+      isCaptured: (id) => this.isCaptured(id),
+      hover: (x, y) => (x < 0 ? this.handlers.hover?.(null, -1, -1) : this.hoverAt(x, y)),
+    });
   }
 }
