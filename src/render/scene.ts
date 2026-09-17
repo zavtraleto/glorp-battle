@@ -84,7 +84,7 @@ export class SceneRenderer {
     this.fx.handleEvent(e, world);
     const tick = world.tick;
     if (e.type === 'chipEffect') this.field.markAttack(e.cells, tick, 'accent');
-    else if (e.type === 'explosion') this.field.markAttack(e.cells, tick, 'accent');
+    else if (e.type === 'explosion') this.field.markAttack(e.cells, tick, 'red');
     else if (e.type === 'enemyShot') this.field.markAttack([{ x: e.x, y: e.toY }], tick, 'red');
   }
 
