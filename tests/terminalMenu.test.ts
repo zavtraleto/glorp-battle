@@ -95,7 +95,8 @@ describe('pixel font coverage', () => {
   it('draws every character of the menu and HUD strings', () => {
     const fallback = glyphRows('?');
     for (const [key, value] of Object.entries(en)) {
-      for (const ch of value) {
+      // `{n}` placeholders are replaced before drawing.
+      for (const ch of value.replace(/\{\w+\}/g, '')) {
         if (ch === '?') continue;
         expect(glyphRows(ch) === fallback ? `${key}: "${ch}"` : 'ok').toBe('ok');
       }
