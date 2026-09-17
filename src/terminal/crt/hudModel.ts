@@ -36,6 +36,8 @@ export interface HudModel {
   /** Next chip, e.g. "CANNON A"; null when the queue is empty. */
   chip: string | null;
   banner: BannerInfo | null;
+  /** Short-lived message, e.g. NO CHIP after a dull EXECUTE press. */
+  notice: string | null;
 }
 
 /** HP at or below this share of max HP is shown as low. */
@@ -62,7 +64,7 @@ export function bannerFor(s: HudSession, w: Pick<HudWorld, 'state' | 'firstStart
   }
 }
 
-export function hudModel(s: HudSession, w: HudWorld): HudModel {
+export function hudModel(s: HudSession, w: HudWorld, notice: string | null = null): HudModel {
   const next = w.chips.queue[0];
   return {
     hp: w.player.hp,
@@ -71,6 +73,7 @@ export function hudModel(s: HudSession, w: HudWorld): HudModel {
     gaugeFull: w.gauge.full,
     chip: next ? `${chipName(next.defId).toUpperCase()} ${next.code}` : null,
     banner: bannerFor(s, w),
+    notice,
   };
 }
 
@@ -83,6 +86,7 @@ export function hudKey(m: HudModel, blinkOn: boolean): string {
     m.gaugeFull ? (blinkOn ? 'F1' : 'F0') : '',
     m.chip ?? '',
     m.banner?.key ?? '',
+    m.notice ?? '',
   ].join('|');
 }
 

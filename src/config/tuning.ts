@@ -128,6 +128,21 @@ export const DEFAULT_TUNING = {
     TRACKBALL_ROLL_GAIN: 0.02,
     /** Trackball spin decay, 1/s. */
     TRACKBALL_FRICTION: 6,
+    /** Key spring: stiffness (1/s²) and damping (1/s); low damping gives the release overshoot. */
+    SPRING_STIFFNESS: 900,
+    SPRING_DAMPING: 22,
+    /** Travel of a dull (refused) press as a share of the full travel. */
+    DULL_PRESS_SHARE: 0.35,
+    /** Lift of a hovered control (mouse), world units. */
+    HOVER_LIFT: 0.04,
+    ARROW_FLASH_TIME: 0.15,
+    /** Red blink of the CHIP SELECT ring / EXECUTE when refused. */
+    DENIED_BLINK_TIME: 0.4,
+    NO_CHIP_TIME: 0.5,
+    /** Camera tilt toward the mouse pointer (fine pointers only), degrees. */
+    PARALLAX_DEG: 1.5,
+    /** CHIP SELECT glow pulse when the gauge is full. */
+    GLOW_PULSE_HZ: 1.5,
   },
 };
 

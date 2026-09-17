@@ -31,6 +31,7 @@ export const en = {
   'result.battles': 'Battles',
   'hud.hp': 'HP',
   'hud.custom': 'CUSTOM',
+  'hud.noChip': 'NO CHIP',
   'term.model': 'NET-01',
   'term.subtitle': 'PERSONAL NET TERMINAL',
   'term.chipSelect': 'CHIP SELECT',

@@ -134,3 +134,13 @@ describe('plasticPattern', () => {
     expect(Math.max(...a)).toBeLessThanOrEqual(255);
   });
 });
+
+describe('hud notice', () => {
+  it('is part of the model and the redraw key', () => {
+    const a = hudModel(session(), world());
+    const b = hudModel(session(), world(), 'NO CHIP');
+    expect(a.notice).toBeNull();
+    expect(b.notice).toBe('NO CHIP');
+    expect(hudKey(a, true)).not.toBe(hudKey(b, true));
+  });
+});
