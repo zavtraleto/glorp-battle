@@ -113,6 +113,29 @@ export class SceneRenderer {
     return this.worldToScreen(tmp);
   }
 
+  /** Normalized point (0..1, top-left origin) in the last render target for a world point. */
+  projectToTarget(v: THREE.Vector3): ScreenPoint {
+    tmp.copy(v).project(this.fieldCamera.camera);
+    return { x: (tmp.x + 1) / 2, y: (1 - tmp.y) / 2 };
+  }
+
+  /** Actor sprite position (with interpolation) in the last render target, normalized. */
+  actorTargetPos(id: number, height = 0): ScreenPoint | null {
+    const sprite = id === 1 ? this.playerView.sprite : this.enemyViews.get(id)?.sprite;
+    if (!sprite) return null;
+    const v = new THREE.Vector3().copy(sprite.position);
+    v.y += height;
+    return this.projectToTarget(v);
+  }
+
+  /** Logical cell (plus height) in the last render target, normalized. */
+  cellTargetPos(x: number, y: number, height = 0): ScreenPoint {
+    const v = new THREE.Vector3();
+    cellToWorld(x, y, v);
+    v.y += height;
+    return this.projectToTarget(v);
+  }
+
   handleEvent(e: SimEvent, world: World): void {
     this.fx.handleEvent(e, world);
   }

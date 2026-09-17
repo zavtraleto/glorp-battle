@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Screen } from '../src/app/session';
 import { en } from '../src/i18n/en';
+import { FloaterList, floaterFromEvent } from '../src/terminal/crt/floaters';
+import { PLAYER_ID } from '../src/sim/player';
 import { formatTime, menuFor, menuItemAt, menuLayout, moveCursor, type MenuSession } from '../src/terminal/crt/menuModel';
 import { glyphRows, measureText, wrapText } from '../src/terminal/crt/pixelFont';
 
@@ -106,5 +108,29 @@ describe('pixel font coverage', () => {
   it('wraps words', () => {
     expect(wrapText('ONE TWO THREE', 7)).toEqual(['ONE TWO', 'THREE']);
     expect(wrapText('', 5)).toEqual([]);
+  });
+});
+
+describe('FloaterList', () => {
+  it('turns damage and heal events into numbers', () => {
+    expect(floaterFromEvent({ type: 'damaged', targetId: 100, amount: 40, x: 1, y: 1, hpLeft: 0 })).toEqual({
+      kind: 'damage',
+      text: '40',
+      x: 1,
+      y: 1,
+    });
+    expect(floaterFromEvent({ type: 'damaged', targetId: PLAYER_ID, amount: 10, x: 1, y: 4, hpLeft: 90 })?.kind).toBe('playerDamage');
+    expect(floaterFromEvent({ type: 'healed', amount: 50, x: 1, y: 4 })?.text).toBe('+50');
+    expect(floaterFromEvent({ type: 'damaged', targetId: 100, amount: 0, x: 1, y: 1, hpLeft: 5 })).toBeNull();
+    expect(floaterFromEvent({ type: 'bombThrown', id: 1 })).toBeNull();
+  });
+
+  it('ages and drops floaters', () => {
+    const list = new FloaterList();
+    list.add({ kind: 'damage', text: '40', x: 0, y: 0 }, 10);
+    expect(list.live(10, 0, 20)[0]!.k).toBe(0);
+    expect(list.live(20, 0.5, 20)[0]!.k).toBeCloseTo(10.5 / 20, 6);
+    expect(list.live(30, 0, 20)).toEqual([]);
+    expect(list.size).toBe(0);
   });
 });

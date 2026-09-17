@@ -23,6 +23,18 @@ export interface HudWorld {
 
 export type BannerTone = 'info' | 'win' | 'lose';
 
+export type LabelTone = 'enemyHp' | 'damage' | 'playerDamage' | 'heal';
+
+export interface HudLabel {
+  text: string;
+  /** Centre of the text, CRT pixels. */
+  x: number;
+  y: number;
+  tone: LabelTone;
+  /** 0..1 */
+  alpha: number;
+}
+
 export interface BannerInfo {
   key: string;
   text: string;
@@ -41,6 +53,8 @@ export interface HudModel {
   notice: string | null;
   /** Chip described on the Custom Screen (the focused tray chip). */
   info: { defId: ChipId; code: ChipCode } | null;
+  /** Text anchored to the field: enemy HP, damage numbers (CRT pixels). */
+  labels: HudLabel[];
   /** A session menu covers the whole CRT (TERMINAL.md §8). */
   menu: { spec: MenuSpec; cursor: number } | null;
 }
@@ -75,6 +89,7 @@ export function hudModel(
   notice: string | null = null,
   info: HudModel['info'] = null,
   menu: HudModel['menu'] = null,
+  labels: HudLabel[] = [],
 ): HudModel {
   const next = w.chips.queue[0];
   return {
@@ -86,6 +101,7 @@ export function hudModel(
     banner: bannerFor(s, w),
     notice,
     info,
+    labels,
     menu,
   };
 }
@@ -102,6 +118,7 @@ export function hudKey(m: HudModel, blinkOn: boolean): string {
     m.notice ?? '',
     m.info ? `${m.info.defId}${m.info.code}` : '',
     m.menu ? `${m.menu.spec.key}:${m.menu.cursor}:${blinkOn ? 1 : 0}` : '',
+    m.labels.map((l) => `${l.text}@${Math.round(l.x)},${Math.round(l.y)},${Math.round(l.alpha * 8)}`).join(';'),
   ].join('|');
 }
 

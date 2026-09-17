@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Session } from '../app/session';
-import { tuning } from '../config/tuning';
+import { secondsToTicks, tuning } from '../config/tuning';
 import type { Dir } from '../core/input/commands';
 import type { PerfProbe } from '../debug/perfProbe';
 import { t } from '../i18n';
@@ -11,7 +11,8 @@ import { acceptsPress, chipSelectAvailability, cursorKind, executeAvailability, 
 import { BattleTarget } from './crt/battleTarget';
 import { CrtCanvas } from './crt/crtCanvas';
 import { CrtMaterial } from './crt/crtMaterial';
-import { gaugeLedCount, hpLedCount, hudModel } from './crt/hudModel';
+import { FloaterList, floaterFromEvent } from './crt/floaters';
+import { gaugeLedCount, hpLedCount, hudModel, type HudLabel, type LabelTone } from './crt/hudModel';
 import { menuFor, menuItemAt, menuLayout, moveCursor, type MenuAction, type MenuSpec } from './crt/menuModel';
 import { trayLayout, trayTargetAt, type TrayLayout, type TrayTarget } from './chips/trayLayout';
 import { cursorCss } from './interaction/cursor';
@@ -39,6 +40,10 @@ const HP_LEDS = 10;
 const PARALLAX_RATE = 6;
 /** The tray takes input once it is this far open. */
 const TRAY_READY = 0.95;
+/** Label anchors above the panel (world units): enemy HP, damage numbers start and rise. */
+const ENEMY_HP_HEIGHT = -0.12;
+const FLOATER_HEIGHT = 0.9;
+const FLOATER_RISE = 0.5;
 
 export interface TerminalHandlers {
   move(dir: Dir): void;
@@ -77,6 +82,7 @@ export class Terminal {
   private menu: MenuSpec | null = null;
   private menuCursor = 0;
   private readonly menuPresses = new Map<number, number>();
+  private readonly floaters = new FloaterList();
   private readonly hitZones = new HitZones();
   private readonly deck = new DeckControls();
   private readonly trackball = new Trackball();
@@ -221,8 +227,10 @@ export class Terminal {
     this.shown = { gauge: -1, full: false, hp: -1, chips: -1, lamps: '' };
   }
 
-  onEvent(e: SimEvent): void {
+  onEvent(e: SimEvent, world: World): void {
     if (e.type === 'chipUsed') this.crt.flash();
+    const f = floaterFromEvent(e);
+    if (f) this.floaters.add(f, world.tick);
   }
 
   setHitZonesVisible(v: boolean): void {
@@ -232,6 +240,7 @@ export class Terminal {
   /** A new World started: cartridges of the old one vanish without animation. */
   resetWorld(): void {
     this.rail.reset();
+    this.floaters.clear();
   }
 
   render(world: World, alpha: number, dt: number): void {
@@ -249,7 +258,9 @@ export class Terminal {
     const info = focused ? { defId: focused.defId, code: focused.code } : null;
     this.syncMenu();
     const menu = this.menu ? { spec: this.menu, cursor: this.menuCursor } : null;
-    this.hud.draw(hudModel(session, world, this.noticeLeft > 0 ? t('hud.noChip') : null, info, menu), this.time);
+    const labels = world.state === 'CUSTOM' ? [] : this.fieldLabels(world, alpha);
+    const notice = this.noticeLeft > 0 ? t('hud.noChip') : null;
+    this.hud.draw(hudModel(session, world, notice, info, menu, labels), this.time);
 
     this.syncIndicators(world);
     this.rail.update(dt);
@@ -486,6 +497,26 @@ export class Terminal {
         else if (source.kind === 'rail') this.rail.setDrag(null, null);
       },
     });
+  }
+
+  /** Enemy HP under each enemy and rising damage numbers, in CRT pixels. */
+  private fieldLabels(world: World, alpha: number): HudLabel[] {
+    const { sceneRenderer } = this.opts;
+    const W = this.battle.width;
+    const H = this.battle.height;
+    const out: HudLabel[] = [];
+    for (const e of world.enemies) {
+      if (!e.alive) continue;
+      const p = sceneRenderer.actorTargetPos(e.id, ENEMY_HP_HEIGHT);
+      if (p) out.push({ text: String(e.hp), x: p.x * W, y: p.y * H, tone: 'enemyHp', alpha: 1 });
+    }
+    const life = secondsToTicks(tuning.fx.DAMAGE_NUMBER_TIME);
+    for (const { f, k } of this.floaters.live(world.tick, world.simFrozen ? 0 : alpha, life)) {
+      const p = sceneRenderer.cellTargetPos(f.x, f.y, FLOATER_HEIGHT + FLOATER_RISE * k);
+      const tone: LabelTone = f.kind;
+      out.push({ text: f.text, x: p.x * W, y: p.y * H, tone, alpha: 1 - k * k });
+    }
+    return out;
   }
 
   /** Session menu for the current screen; a new menu starts at its first item. */

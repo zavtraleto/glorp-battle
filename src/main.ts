@@ -201,7 +201,7 @@ const loop = new GameLoop(
       world.step(dt, { commands: input.drain(), held: input.heldDir });
       for (const e of world.drainEvents()) {
         sceneRenderer.handleEvent(e, world);
-        terminal?.onEvent(e);
+        terminal?.onEvent(e, world);
         labels.handleEvent(e, world);
         if (events.logEnabled) console.debug('[sim]', world.tick, e);
       }

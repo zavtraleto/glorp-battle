@@ -3,7 +3,7 @@ import { CHIPS } from '../../data/chips';
 import { chipDesc, chipName, t } from '../../i18n';
 import { CHIP_ICONS, ICON_PALETTE } from '../chips/chipIcons';
 import { blinkPhase } from '../terminalMode';
-import { hudKey, type BannerTone, type HudModel } from './hudModel';
+import { hudKey, type BannerTone, type HudLabel, type HudModel, type LabelTone } from './hudModel';
 import { menuLayout, type MenuSpec, type MenuTone } from './menuModel';
 import { drawText, measureText, wrapText, type PixelSink } from './pixelFont';
 
@@ -42,6 +42,14 @@ const MENU = {
   itemBand: 'rgba(111, 211, 255, 0.18)',
   hint: '#6f7a8f',
 };
+
+const LABEL_COLOR: Record<LabelTone, string> = {
+  enemyHp: '#e8dfc4',
+  damage: '#ffffff',
+  playerDamage: '#ff8a3d',
+  heal: '#7dff9a',
+};
+const LABEL_OUTLINE = '#07090c';
 
 const BANNER_COLOR: Record<BannerTone, string> = {
   info: '#6fd3ff',
@@ -104,6 +112,8 @@ export class CrtCanvas {
       return;
     }
 
+    this.drawLabels(ctx, sink, m.labels, s);
+
     // HP box, top-left.
     const hpText = String(m.hp);
     const hpColor = m.hpLow ? COLOR.hpLow : COLOR.hp;
@@ -155,6 +165,21 @@ export class CrtCanvas {
     }
 
     this.texture.needsUpdate = true;
+  }
+
+  /** Enemy HP and damage numbers with a dark outline, centred on their anchors. */
+  private drawLabels(ctx: CanvasRenderingContext2D, sink: PixelSink, labels: readonly HudLabel[], s: number): void {
+    for (const l of labels) {
+      const scale = l.tone === 'enemyHp' ? Math.max(1, s - 1) : s;
+      const x = Math.round(l.x - measureText(l.text, scale) / 2);
+      const y = Math.round(l.y - (7 * scale) / 2);
+      ctx.globalAlpha = l.alpha;
+      for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
+        drawText(sink, l.text, x + dx * scale, y + dy * scale, scale, LABEL_OUTLINE);
+      }
+      drawText(sink, l.text, x, y, scale, LABEL_COLOR[l.tone]);
+    }
+    ctx.globalAlpha = 1;
   }
 
   /** Session menu over the whole screen (TERMINAL.md §8). */
