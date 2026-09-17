@@ -92,6 +92,43 @@ export const DEFAULT_TUNING = {
     FIELD_SCREEN_SHARE: 0.6,
     MAX_PIXEL_RATIO: 2,
   },
+  /** Physical terminal NET-01 (docs/TERMINAL.md §17). */
+  terminal: {
+    /** Backing-store short side of the terminal canvas, upscaled without smoothing. */
+    RENDER_SCALE_SHORT: 400,
+    /** Battle render target shown on the CRT. */
+    CRT_RES_W: 240,
+    CRT_RES_H: 320,
+    /** Viewport aspect (w/h) range the terminal body stretches to; outside it the terminal is letterboxed. */
+    TERMINAL_ASPECT_MIN: 0.42,
+    TERMINAL_ASPECT_MAX: 0.62,
+    /** Vertical shares of the terminal, top to bottom (sum = 1). */
+    LAYOUT_TOP: 0.06,
+    LAYOUT_CRT: 0.5,
+    LAYOUT_RAIL: 0.14,
+    LAYOUT_DECK: 0.3,
+    /** Horizontal bezel around the CRT glass, as a share of terminal width on each side. */
+    CRT_MARGIN_X: 0.1,
+    /** Deck columns: CHIP SELECT | trackball zone | EXECUTE (shares of terminal width). */
+    DECK_SPLIT_LEFT: 0.27,
+    DECK_SPLIT_RIGHT: 0.63,
+    /** Pause key zone width at the right end of the top bar (share of terminal width). */
+    PAUSE_ZONE_W: 0.16,
+    /** Vertical field of view, degrees. */
+    CAMERA_FOV: 22,
+    CRT_SCANLINES: 0.35,
+    CRT_CURVATURE: 0.08,
+    CRT_BLEED: 0.5,
+    /** Previous-frame persistence; 0 disables the ghosting pass entirely. */
+    CRT_GHOSTING: 0.25,
+    CRT_FLASH_TIME: 0.12,
+    /** Button travel when pressed, world units. */
+    BUTTON_PRESS_DEPTH: 0.12,
+    /** Trackball rotation per CSS px of drag, radians. */
+    TRACKBALL_ROLL_GAIN: 0.02,
+    /** Trackball spin decay, 1/s. */
+    TRACKBALL_FRICTION: 6,
+  },
 };
 
 export type Tuning = typeof DEFAULT_TUNING;

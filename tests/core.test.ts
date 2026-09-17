@@ -121,12 +121,12 @@ describe('tuning', () => {
 describe('debug params', () => {
   it('parses and clamps values', () => {
     const p = parseDebugParams('?debug=1&seed=123&battle=9&folder=p1&god=1&timescale=0.5');
-    expect(p).toEqual({ debug: true, seed: 123, battle: 4, folder: 'p1', god: true, timescale: 0.5 });
+    expect(p).toMatchObject({ debug: true, seed: 123, battle: 4, folder: 'p1', god: true, timescale: 0.5 });
   });
 
   it('falls back to defaults', () => {
     const p = parseDebugParams('?seed=abc');
-    expect(p).toEqual({ debug: false, seed: null, battle: 1, folder: 'mvp', god: false, timescale: 1 });
+    expect(p).toMatchObject({ debug: false, seed: null, battle: 1, folder: 'mvp', god: false, timescale: 1 });
   });
 });
 

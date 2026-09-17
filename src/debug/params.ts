@@ -1,4 +1,6 @@
-// URL debug parameters (GDD §15.5): ?debug=1&seed=123&battle=3&folder=p1&god=1&timescale=0.5
+// URL debug parameters (GDD §15.5, TERMINAL.md §14):
+// ?debug=1&seed=123&battle=3&folder=p1&god=1&timescale=0.5
+// ?ui=css&rscale=300&crtres=160x240&bench=1&hitzones=1
 
 export interface DebugParams {
   debug: boolean;
@@ -7,6 +9,16 @@ export interface DebugParams {
   folder: 'mvp' | 'p1';
   god: boolean;
   timescale: number;
+  /** `css` = legacy HTML UI (kept until T2). */
+  ui: 'terminal' | 'css';
+  /** Overrides `tuning.terminal.RENDER_SCALE_SHORT`. */
+  rscale: number | null;
+  /** Overrides the CRT render target size `[w, h]`. */
+  crtres: [number, number] | null;
+  /** Autopilot benchmark (debug/bench.ts). */
+  bench: boolean;
+  /** Draws the pointer hit zones. */
+  hitzones: boolean;
 }
 
 export function parseDebugParams(search: string): DebugParams {
@@ -21,6 +33,10 @@ export function parseDebugParams(search: string): DebugParams {
   const seed = num('seed');
   const battle = num('battle');
   const timescale = num('timescale');
+  const rscale = num('rscale');
+  const crt = /^(\d+)x(\d+)$/.exec(q.get('crtres') ?? '');
+  const crtW = crt ? Number(crt[1]) : 0;
+  const crtH = crt ? Number(crt[2]) : 0;
   return {
     debug: flag('debug'),
     seed: seed === null ? null : Math.floor(seed) >>> 0,
@@ -28,5 +44,10 @@ export function parseDebugParams(search: string): DebugParams {
     folder: q.get('folder') === 'p1' ? 'p1' : 'mvp',
     god: flag('god'),
     timescale: timescale === null ? 1 : Math.min(4, Math.max(0.05, timescale)),
+    ui: q.get('ui') === 'css' ? 'css' : 'terminal',
+    rscale: rscale === null ? null : Math.min(2160, Math.max(120, Math.round(rscale))),
+    crtres: crtW > 0 && crtH > 0 ? [crtW, crtH] : null,
+    bench: flag('bench'),
+    hitzones: flag('hitzones'),
   };
 }

@@ -34,6 +34,14 @@ const RANGES: Record<string, [number, number, number]> = {
   FIELD_SCREEN_SHARE: [0.3, 0.9, 0.01],
   PANEL_GAP: [0, 0.3, 0.01],
   MAX_PIXEL_RATIO: [1, 3, 0.25],
+  RENDER_SCALE_SHORT: [120, 1440, 10],
+  CRT_RES_W: [80, 720, 10],
+  CRT_RES_H: [120, 960, 10],
+  CAMERA_FOV: [5, 60, 1],
+  CRT_SCANLINES: [0, 1, 0.01],
+  CRT_CURVATURE: [0, 0.4, 0.01],
+  CRT_BLEED: [0, 1, 0.01],
+  CRT_GHOSTING: [0, 0.9, 0.01],
 };
 
 /** lil-gui debug panel (GDD §15.5). Every tunable is editable live and persisted. */
