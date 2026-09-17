@@ -220,17 +220,6 @@ describe('chip use', () => {
     expect(w.player.x).toBe(0);
   });
 
-  it('a Buster shot released during a chip waits until the chip ends', () => {
-    const w = makeWorld();
-    addEnemy(w, 1, 1);
-    give(w, 'recover50');
-    use(w);
-    step(w, [{ type: 'busterDown' }, { type: 'busterUp' }]);
-    expect(w.player.buster.shots).toBe(0);
-    run(w, useTicks(CHIPS.recover50));
-    expect(w.player.buster.shots).toBe(1);
-  });
-
   it('a hit before the hit frame interrupts the chip and it is lost', () => {
     const w = makeWorld();
     const e = addEnemy(w, 1, 1);

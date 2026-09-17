@@ -260,9 +260,9 @@ describe('battle flow and gauge', () => {
   it('the second Custom Screen resets the gauge and resumes without the banner', () => {
     const w = new World({ seed: 1, battleIndex: 1, skipIntro: true, cheats: { god: true, aiEnabled: false } });
     w.fillGauge();
-    step(w, [{ type: 'busterDown' }, { type: 'openCustom' }]);
+    step(w, [{ type: 'move', dir: 'left' }, { type: 'openCustom' }]);
     expect(w.state).toBe('CUSTOM');
-    expect(w.player.buster.held).toBe(false);
+    expect(w.player.bufferedDir).toBeNull();
     w.customConfirm();
     expect(w.firstStart).toBe(false);
     expect(w.gauge.value).toBe(0);

@@ -1,29 +1,22 @@
-import { secondsToTicks, tuning } from '../config/tuning';
 import type { InputState } from '../core/input/commands';
 import { CHIPS } from '../data/chips';
 import { chipName, t } from '../i18n';
-import { chipIconHtml } from './chipIcon';
 import type { World } from '../sim/world';
+import { chipIconHtml } from './chipIcon';
 
-// On-screen battle buttons (GDD §12.1). Each button owns its pointer (multi-touch).
+// On-screen battle buttons (GDD §12.1): CUSTOM and the queue plate on the left,
+// CHIP on the right under the thumb. Each button owns its pointer (multi-touch).
 
 export class Controls {
   readonly root: HTMLElement;
-  private readonly buster: HTMLButtonElement;
   private readonly custom: HTMLButtonElement;
   private readonly chip: HTMLButtonElement;
-  private chipKey = '';
   private readonly queuePlate: HTMLElement;
-  private busterPointer: number | null = null;
-  private keyHeld = false;
+  private chipKey = '';
 
   constructor(parent: HTMLElement, private input: InputState) {
     this.root = document.createElement('div');
     this.root.className = 'controls';
-
-    this.buster = document.createElement('button');
-    this.buster.className = 'ctl-btn ctl-buster interactive';
-    this.buster.innerHTML = `<span class="ctl-cooldown"></span><span class="ctl-label">${t('btn.buster')}</span>`;
 
     const left = document.createElement('div');
     left.className = 'ctl-left';
@@ -34,87 +27,35 @@ export class Controls {
     this.custom.textContent = t('btn.custom');
     left.append(this.queuePlate, this.custom);
 
-    const right = document.createElement('div');
-    right.className = 'ctl-right';
     this.chip = document.createElement('button');
     this.chip.className = 'ctl-btn ctl-chip interactive';
-    right.append(this.chip, this.buster);
 
-    this.root.append(left, right);
+    this.root.append(left, this.chip);
+    parent.appendChild(this.root);
 
     this.chip.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       this.input.push({ type: 'useChip' });
     });
     this.chip.addEventListener('contextmenu', (e) => e.preventDefault());
-    parent.appendChild(this.root);
-
     this.custom.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       this.input.push({ type: 'openCustom' });
     });
 
-    this.buster.addEventListener('pointerdown', (e) => {
-      if (this.busterPointer !== null) return;
-      e.preventDefault();
-      this.busterPointer = e.pointerId;
-      this.input.push({ type: 'busterDown' });
-      try {
-        // Keeps receiving pointerup even if the finger slides off the button.
-        this.buster.setPointerCapture(e.pointerId);
-      } catch {
-        // Pointer already gone (or synthetic): pointerup/cancel still release the button.
+    window.addEventListener('keydown', (e) => {
+      if (e.repeat || e.target instanceof HTMLInputElement) return;
+      // Q / E open the Custom Screen (MMBN1: L / R).
+      if (e.code === 'KeyQ' || e.code === 'KeyE') this.input.push({ type: 'openCustom' });
+      // F / Space use the next chip (GDD §12.2).
+      if (e.code === 'KeyF' || e.code === 'Space') {
+        e.preventDefault();
+        this.input.push({ type: 'useChip' });
       }
     });
-    const release = (e: PointerEvent) => {
-      if (e.pointerId !== this.busterPointer) return;
-      this.busterPointer = null;
-      this.input.push({ type: 'busterUp' });
-    };
-    this.buster.addEventListener('pointerup', release);
-    this.buster.addEventListener('pointercancel', release);
-    this.buster.addEventListener('lostpointercapture', release);
-    this.buster.addEventListener('contextmenu', (e) => e.preventDefault());
-
-    window.addEventListener('keydown', (e) => {
-      if (e.code !== 'Space' || e.target instanceof HTMLInputElement) return;
-      e.preventDefault();
-      if (e.repeat || this.keyHeld) return;
-      this.keyHeld = true;
-      this.input.push({ type: 'busterDown' });
-    });
-    window.addEventListener('keyup', (e) => {
-      if (e.code !== 'Space' || !this.keyHeld) return;
-      this.keyHeld = false;
-      this.input.push({ type: 'busterUp' });
-    });
-    window.addEventListener('keydown', (e) => {
-      // Q / E open the Custom Screen (MMBN1: L / R).
-      if ((e.code === 'KeyQ' || e.code === 'KeyE') && !e.repeat) this.input.push({ type: 'openCustom' });
-      // F uses the next chip (GDD §12.2).
-      if (e.code === 'KeyF' && !e.repeat) this.input.push({ type: 'useChip' });
-    });
-    window.addEventListener('blur', () => {
-      if (this.keyHeld) this.input.push({ type: 'busterUp' });
-      this.keyHeld = false;
-    });
-  }
-
-  /** Clears held state after a battle restart. */
-  reset(): void {
-    this.busterPointer = null;
-    this.keyHeld = false;
   }
 
   update(world: World): void {
-    const b = world.player.buster;
-    const total = Math.max(1, secondsToTicks(tuning.buster.BUSTER_COOLDOWN));
-    const remaining = b.cooldownRemaining(world.tick) / total;
-    const charge = world.chargeDisplay();
-    this.buster.style.setProperty('--cooldown', remaining.toFixed(3));
-    this.buster.classList.toggle('cooling', remaining > 0);
-    this.buster.classList.toggle('pressed', b.held);
-    this.buster.dataset.charge = charge.visible ? String(charge.level) : '';
     this.root.classList.toggle('hidden', world.state !== 'ACTION');
 
     this.custom.classList.toggle('ready', world.gauge.full);
@@ -131,10 +72,10 @@ export class Controls {
     }
     this.chip.classList.toggle('empty', !next);
     this.chip.classList.toggle('busy', world.player.actionTicks > 0 || world.player.flinched);
-    const head = queue[0];
-    const text = head ? `${chipName(head.defId)}${CHIPS[head.defId].power !== null ? ' ' + CHIPS[head.defId].power : ''}` : '';
-    const plate = head ? `${text}${queue.length > 1 ? ` <span class="qp-count">+${queue.length - 1}</span>` : ''}` : '';
+
+    const text = next ? `${chipName(next.defId)}${CHIPS[next.defId].power !== null ? ' ' + CHIPS[next.defId].power : ''}` : '';
+    const plate = next ? `${text}${queue.length > 1 ? ` <span class="qp-count">+${queue.length - 1}</span>` : ''}` : '';
     if (this.queuePlate.innerHTML !== plate) this.queuePlate.innerHTML = plate;
-    this.queuePlate.classList.toggle('empty', !head);
+    this.queuePlate.classList.toggle('empty', !next);
   }
 }

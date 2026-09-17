@@ -219,7 +219,7 @@ describe('Spiker', () => {
 });
 
 describe('battles 2–4 are winnable', () => {
-  it.each([2, 3, 4])('battle %i with god mode and charged buster shots', (battle) => {
+  it.each([2, 3, 4])('battle %i with god mode and HiCannon chips', (battle) => {
     const w = world(battle, 9);
     w.cheats.god = true;
     for (let i = 0; i < 200 && w.state === 'ACTION'; i++) {
@@ -231,10 +231,9 @@ describe('battles 2–4 are winnable', () => {
         run(w, T(tuning.player.MOVE_COOLDOWN));
         continue;
       }
-      step(w, [{ type: 'busterDown' }]);
-      run(w, T(tuning.buster.CHARGE_T2));
-      step(w, [{ type: 'busterUp' }]);
-      run(w, 2);
+      w.giveChip({ uid: 20_000 + i, defId: 'hicannon', code: '*', state: 'queued' });
+      step(w, [{ type: 'useChip' }]);
+      run(w, T(tuning.chips.CHIP_USE_TIME_CANNON));
     }
     expect(w.state).toBe('BATTLE_WON');
   });

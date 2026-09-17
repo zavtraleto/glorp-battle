@@ -17,15 +17,6 @@ export const DEFAULT_TUNING = {
     PLAYER_FLINCH_TIME: 0.4,
     PLAYER_IFRAMES: 2.0,
   },
-  buster: {
-    BUSTER_DAMAGE: 1,
-    BUSTER_COOLDOWN: 2.0,
-    CHARGE_ENABLED: true,
-    CHARGE_T1: 1.0,
-    CHARGE_T2: 2.0,
-    CHARGE_MULT_1: 8,
-    CHARGE_MULT_2: 16,
-  },
   gauge: {
     GAUGE_FILL_TIME: 8.0,
   },
@@ -73,13 +64,11 @@ export const DEFAULT_TUNING = {
   fx: {
     HIT_FLASH: 0.1,
     IFRAME_BLINK_HZ: 15,
-    BUSTER_TRACER_TIME: 0.08,
     CANNON_TRACER_TIME: 0.18,
     SLASH_TIME: 0.15,
     EXPLOSION_TIME: 0.3,
     HEAL_FX_TIME: 0.5,
     WARP_FX_TIME: 0.15,
-    CHARGE_RING_DELAY: 0.15,
     DAMAGE_NUMBER_TIME: 0.6,
     DELETE_ANIM_TIME: 0.4,
     INTRO_TIME: 0.8,
@@ -92,9 +81,7 @@ export const DEFAULT_TUNING = {
   },
   input: {
     SWIPE_MIN_PX: 24,
-    /** Keep stepping while the finger stays down after a swipe. */
-    SWIPE_HOLD_ENABLED: true,
-    /** Delay before the first repeated step while a direction is held (swipe or key). */
+    /** Delay before the first repeated step while a movement key is held. */
     HOLD_REPEAT_DELAY: 0.35,
     /** Interval between further repeated steps while the direction stays held. */
     HOLD_REPEAT: 0.2,

@@ -105,16 +105,14 @@ describe('EventBus', () => {
 describe('tuning', () => {
   it('merges only known keys with matching types', () => {
     const dst = JSON.parse(JSON.stringify(DEFAULT_TUNING)) as Tuning;
-    mergeTuning(dst, { buster: { BUSTER_COOLDOWN: 0.5, UNKNOWN: 1, CHARGE_ENABLED: 'no' }, nope: { A: 1 } });
-    expect(dst.buster.BUSTER_COOLDOWN).toBe(0.5);
-    expect(dst.buster.CHARGE_ENABLED).toBe(true);
-    expect('UNKNOWN' in dst.buster).toBe(false);
+    mergeTuning(dst, { player: { MOVE_COOLDOWN: 0.5, UNKNOWN: 1 }, gauge: { GAUGE_FILL_TIME: 'fast' }, nope: { A: 1 } });
+    expect(dst.player.MOVE_COOLDOWN).toBe(0.5);
+    expect(dst.gauge.GAUGE_FILL_TIME).toBe(8);
+    expect('UNKNOWN' in dst.player).toBe(false);
   });
 
   it('matches GDD defaults for key MMBN1 values', () => {
     expect(DEFAULT_TUNING.player.PLAYER_MAX_HP).toBe(100);
-    expect(DEFAULT_TUNING.buster.CHARGE_MULT_1).toBe(8);
-    expect(DEFAULT_TUNING.buster.CHARGE_MULT_2).toBe(16);
     expect(DEFAULT_TUNING.chips.HAND_MAX).toBe(15);
     expect(DEFAULT_TUNING.mettik.MET_HP).toBe(40);
   });

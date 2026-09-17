@@ -11,18 +11,13 @@ export const DIR_VECTORS: Record<Dir, { dx: number; dy: number }> = {
 
 export type Command =
   | { type: 'move'; dir: Dir }
-  | { type: 'busterDown' }
-  | { type: 'busterUp' }
   | { type: 'useChip' }
-  | { type: 'openCustom' }
-  | { type: 'pause' };
-
-type HoldSource = 'keyboard' | 'swipe';
+  | { type: 'openCustom' };
 
 export class InputState {
   private queue: Command[] = [];
-  private held = new Map<HoldSource, Dir>();
-  private lastHeldSource: HoldSource | null = null;
+  /** Direction held on the keyboard (swipes never hold, GDD §12.1). */
+  private held: Dir | null = null;
 
   push(cmd: Command): void {
     // Bound the queue so a stalled simulation never accumulates stale input.
@@ -30,22 +25,12 @@ export class InputState {
     this.queue.push(cmd);
   }
 
-  /** Sets or clears the direction a device is currently holding. */
-  setHeld(source: HoldSource, dir: Dir | null): void {
-    if (dir) {
-      this.held.set(source, dir);
-      this.lastHeldSource = source;
-    } else {
-      this.held.delete(source);
-      if (this.lastHeldSource === source) this.lastHeldSource = null;
-    }
+  setHeld(dir: Dir | null): void {
+    this.held = dir;
   }
 
-  /** Direction currently held, preferring the most recently updated device. */
   get heldDir(): Dir | null {
-    if (this.lastHeldSource) return this.held.get(this.lastHeldSource) ?? null;
-    for (const d of this.held.values()) return d;
-    return null;
+    return this.held;
   }
 
   drain(): Command[] {
@@ -56,7 +41,6 @@ export class InputState {
 
   clear(): void {
     this.queue = [];
-    this.held.clear();
-    this.lastHeldSource = null;
+    this.held = null;
   }
 }

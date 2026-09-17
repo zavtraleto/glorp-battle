@@ -7,7 +7,6 @@ import { getBattle } from '../data/battles';
 import type { FolderId } from '../data/folders';
 import type { Attack, AttackContext } from './attacks/attack';
 import { PlayerBomb } from './attacks/bomb';
-import { Buster, type ChargeLevel } from './buster';
 import { ChipSystem, type ChipInstance } from './chips/chipSystem';
 import { startChip, type ActiveChip } from './chips/executor';
 import { hitscanCells, lobTarget, meleeCells } from './chips/patterns';
@@ -160,11 +159,8 @@ export class World implements EnemyContext, AttackContext {
   }
 
   private openCustom(): void {
-    const p = this.player;
-    // Held inputs do not survive the pause: the charge is lost and the button must be pressed again.
-    p.buster.cancel();
-    p.buster.held = false;
-    p.bufferedDir = null;
+    // A queued step must not fire after the Custom Screen closes.
+    this.player.bufferedDir = null;
     this.pendingOpenCustom = false;
     this.chips.openTurn();
     this.setState('CUSTOM');
@@ -201,14 +197,11 @@ export class World implements EnemyContext, AttackContext {
 
   /**
    * Pauses the battle (GDD §11). Only the running battle can be paused; the
-   * Custom Screen and the intro are already frozen. Held inputs are dropped.
+   * Custom Screen and the intro are already frozen. A buffered step is dropped.
    */
   pause(): boolean {
     if (this.state !== 'ACTION' && this.state !== 'BATTLE_START') return false;
-    const p = this.player;
-    p.buster.cancel();
-    p.buster.held = false;
-    p.bufferedDir = null;
+    this.player.bufferedDir = null;
     this.pausedFrom = this.state;
     this.setState('PAUSED');
     return true;
@@ -321,30 +314,6 @@ export class World implements EnemyContext, AttackContext {
       this.events.push({ type: 'enemyKilled', id: enemy.id, x: enemy.x, y: enemy.y });
       if (this.mettikTurnId === enemy.id) this.passTurn(enemy);
     }
-  }
-
-  /** Hitscan along the player's lane: first living enemy in front takes the hit (GDD §4.1). */
-  private fireBuster(level: ChargeLevel): void {
-    const p = this.player;
-    const damage = Buster.damageFor(level);
-    let target: Enemy | null = null;
-    for (let y = p.y - 1; y >= 0; y--) {
-      const e = this.enemyAt(p.x, y);
-      if (e && e.alive) {
-        target = e;
-        break;
-      }
-    }
-    this.events.push({
-      type: 'busterFired',
-      x: p.x,
-      fromY: p.y,
-      toY: target ? target.y : -1,
-      level,
-      damage,
-      hitId: target ? target.id : null,
-    });
-    if (target) this.damageEnemy(target, damage);
   }
 
   /** First living enemy in lane `x` in front of row `py`; -1 if none. */
@@ -492,14 +461,11 @@ export class World implements EnemyContext, AttackContext {
     const moves: Dir[] = [];
     for (const c of input.commands) {
       if (c.type === 'move') moves.push(c.dir);
-      else if (c.type === 'busterDown') p.buster.press(this.tick, p.flinched);
-      else if (c.type === 'busterUp') p.buster.release(this.tick);
       else if (c.type === 'openCustom' && this.gauge.full) this.pendingOpenCustom = true;
       else if (c.type === 'useChip') this.tryUseChip();
     }
     p.updateMovement(this.tick, moves, input.held);
     this.updateActiveChip();
-    p.buster.update(this.tick, p.flinched, p.actionTicks > 0, (level) => this.fireBuster(level));
     this.updateBombs();
 
     if (this.cheats.aiEnabled) {
@@ -530,18 +496,5 @@ export class World implements EnemyContext, AttackContext {
       this.events.push({ type: 'enemyRemoved', id: e.id });
       return false;
     });
-  }
-
-  /** Charge level for rendering; 0 while the ring should stay hidden. */
-  chargeDisplay(): { level: ChargeLevel; visible: boolean; progress: number } {
-    const b = this.player.buster;
-    const held = b.chargeTicks(this.tick) * this.dtApprox;
-    const visible = b.chargeStartTick !== null && held >= tuning.fx.CHARGE_RING_DELAY && tuning.buster.CHARGE_ENABLED;
-    const progress = Math.min(1, held / Math.max(1e-6, tuning.buster.CHARGE_T1));
-    return { level: b.chargeLevel(this.tick), visible, progress };
-  }
-
-  private get dtApprox(): number {
-    return 1 / tuning.sim.SIM_HZ;
   }
 }

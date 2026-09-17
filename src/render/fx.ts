@@ -9,9 +9,6 @@ import type { SimEvent } from '../sim/events';
 import type { World } from '../sim/world';
 import { CELL_DEPTH, CELL_WIDTH, cellToWorld } from './field';
 
-const CHARGE_COLORS = { 0: 0xbfe9ff, 1: 0x58e08a, 2: 0xff4fd8 } as const;
-const TRACER_COLORS = { 0: 0xfff27a, 1: 0x7dff9e, 2: 0xff7ae6 } as const;
-
 /** A short-lived effect driven by simulation ticks (pauses with the battle). */
 interface Timed {
   object: THREE.Object3D;
@@ -24,7 +21,7 @@ interface Timed {
 
 const tmp = new THREE.Vector3();
 
-/** Simulation-driven effects: enemy attacks, tracers, slashes, bombs, charge ring (GDD §14). */
+/** Simulation-driven effects: enemy attacks, tracers, slashes, bombs, cursors (GDD §14). */
 export class FxView {
   readonly group = new THREE.Group();
   private readonly attackMeshes = new Map<number, THREE.Mesh>();
@@ -44,13 +41,6 @@ export class FxView {
   private readonly cursors = new Map<number, THREE.Mesh>();
   private readonly cursorGeo = new THREE.RingGeometry(0.2, 0.3, 4, 1, Math.PI / 4);
   private timed: Timed[] = [];
-  private readonly chargeRing: THREE.Mesh;
-  private readonly chargeMat = new THREE.MeshBasicMaterial({
-    color: CHARGE_COLORS[0],
-    transparent: true,
-    depthTest: false,
-    side: THREE.DoubleSide,
-  });
 
   constructor() {
     // Wedge pointing toward the player (+z).
@@ -63,22 +53,11 @@ export class FxView {
     this.waveGeo.rotateX(-Math.PI / 2);
     this.waveGeo.rotateY(Math.PI);
     this.waveGeo.translate(0, 0, 0.05);
-
-    this.chargeRing = new THREE.Mesh(this.ringGeo, this.chargeMat);
-    this.chargeRing.rotation.x = -Math.PI / 2;
-    this.chargeRing.renderOrder = 5;
-    this.chargeRing.visible = false;
-    this.group.add(this.chargeRing);
   }
 
   handleEvent(e: SimEvent, world: World): void {
     const tick = world.tick;
     switch (e.type) {
-      case 'busterFired': {
-        const width = e.level === 0 ? 0.08 : e.level === 1 ? 0.16 : 0.26;
-        this.addTracer(e.x, e.fromY, e.toY, TRACER_COLORS[e.level], width, tuning.fx.BUSTER_TRACER_TIME, tick);
-        break;
-      }
       case 'chipEffect': {
         const color = new THREE.Color(CHIPS[e.defId].color);
         if (e.pattern === 'lane_hitscan' || e.pattern === 'lane_hitscan_pierce1') {
@@ -242,7 +221,6 @@ export class FxView {
     this.updateCursors(world);
     this.updateBombs(world.bombs, tick, alpha);
     this.updateTimed(tick, alpha);
-    this.updateCharge(world);
   }
 
   private updateAttacks(attacks: readonly Attack[], tick: number, alpha: number): void {
@@ -353,19 +331,6 @@ export class FxView {
       t.animate(Math.max(0, age) / t.life);
       return true;
     });
-  }
-
-  private updateCharge(world: World): void {
-    const c = world.chargeDisplay();
-    this.chargeRing.visible = c.visible && world.state === 'ACTION';
-    if (!this.chargeRing.visible) return;
-    const p = world.player;
-    cellToWorld(p.x, p.y, this.chargeRing.position);
-    this.chargeRing.position.y = 0.03;
-    this.chargeMat.color.setHex(CHARGE_COLORS[c.level]);
-    this.chargeMat.opacity = c.level === 0 ? 0.35 + 0.4 * c.progress : 0.9;
-    const s = c.level === 0 ? 0.8 + 0.2 * c.progress : 1 + 0.06 * Math.sin(world.tick * 0.8);
-    this.chargeRing.scale.set(s * CELL_WIDTH, s * CELL_WIDTH, 1);
   }
 
   clear(): void {

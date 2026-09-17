@@ -108,7 +108,7 @@ describe('player movement', () => {
     expect(pos(w)).toEqual([0, 5]);
   });
 
-  it('a short pause mid-swipe does not add an extra step', () => {
+  it('a key held shorter than the repeat delay steps only once', () => {
     const w = freshWorld();
     tick(w, ['right'], 'right');
     idle(w, secondsToTicks(0.3), 'right');
@@ -165,14 +165,15 @@ describe('SwipeRecognizer', () => {
     expect(s.move(126, 110)).toBe('right');
   });
 
-  it('re-anchors so one gesture yields several steps', () => {
+  it('one gesture yields exactly one step', () => {
     const s = new SwipeRecognizer(24);
     s.begin(0, 0);
     expect(s.move(30, 0)).toBe('right');
-    expect(s.move(40, 0)).toBeNull();
-    expect(s.move(30, -30)).toBe('up');
-    expect(s.move(30, -60)).toBe('up');
-    expect(s.lastDir).toBe('up');
+    expect(s.move(80, 0)).toBeNull();
+    expect(s.move(30, -60)).toBeNull();
+    s.end();
+    s.begin(0, 0);
+    expect(s.move(0, -30)).toBe('up');
   });
 
   it('detects all four directions in screen space', () => {
@@ -199,14 +200,11 @@ describe('SwipeRecognizer', () => {
 });
 
 describe('InputState', () => {
-  it('prefers the most recently held device and clears on release', () => {
+  it('tracks the held key direction and clears it', () => {
     const i = new InputState();
-    i.setHeld('keyboard', 'left');
-    i.setHeld('swipe', 'up');
-    expect(i.heldDir).toBe('up');
-    i.setHeld('swipe', null);
+    i.setHeld('left');
     expect(i.heldDir).toBe('left');
-    i.setHeld('keyboard', null);
+    i.clear();
     expect(i.heldDir).toBeNull();
   });
 

@@ -165,18 +165,6 @@ describe('pause', () => {
     expect(s.world.tick).toBe(tick0 + 1);
   });
 
-  it('drops a held buster charge', () => {
-    const s = make();
-    s.start();
-    enterAction(s);
-    tick(s, [{ type: 'busterDown' }]);
-    run(s, 30);
-    s.pause();
-    s.resume();
-    expect(s.world.player.buster.held).toBe(false);
-    expect(s.world.player.buster.chargeStartTick).toBeNull();
-  });
-
   it('is ignored on the title and on the Custom Screen', () => {
     const s = make();
     s.pause();

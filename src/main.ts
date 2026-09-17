@@ -3,7 +3,7 @@ import { Session } from './app/session';
 import { loadTuningOverrides, tuning } from './config/tuning';
 import { events } from './core/events';
 import { InputState } from './core/input/commands';
-import { attachKeyboard, attachSwipe } from './core/input/devices';
+import { attachKeyboard, attachSwipe, blockBrowserGestures, trapBackNavigation } from './core/input/devices';
 import { GameLoop } from './core/loop';
 import { randomSeed } from './core/rng';
 import { DebugOverlay } from './debug/overlay';
@@ -47,6 +47,9 @@ const customScreen = new CustomScreen(ui, () => session.world);
 const banner = new Banner(ui);
 attachKeyboard(input);
 attachSwipe(input);
+blockBrowserGestures();
+// A back gesture / button pauses the battle instead of leaving the game.
+trapBackNavigation(() => session.pause());
 
 // ---------- Screen wake lock (GDD §12.1) ----------
 type WakeLockLike = { release(): Promise<void> };
@@ -64,7 +67,6 @@ async function keepAwake(): Promise<void> {
 // ---------- Session actions ----------
 function afterWorldChange(): void {
   input.clear();
-  controls.reset();
   sceneRenderer.reset();
   labels.reset();
   banner.hide();
@@ -100,7 +102,7 @@ hud.gauge.addEventListener('pointerdown', (e) => {
   input.push({ type: 'openCustom' });
 });
 
-// Capture phase: menus take Enter/Space before the buster does; Esc toggles pause.
+// Capture phase: menus take Enter/Space before the chip key does; Esc toggles pause.
 window.addEventListener(
   'keydown',
   (e) => {
@@ -161,7 +163,6 @@ const loop = new GameLoop(
       updateBanner();
       screens.update(session);
       const p = world.player;
-      const b = p.buster;
       overlay.update(frameSeconds, {
         stats: loop.stats,
         state: `${session.screen}/${world.state}`,
@@ -172,7 +173,6 @@ const loop = new GameLoop(
         simTime: world.time,
         extra:
           `player ${p.x},${p.y} hp ${p.hp} hits ${p.hitsTaken} ${p.flinched ? 'FLINCH ' : ''}${p.invulnerable ? 'IFR' : ''}\n` +
-          `buster cd ${b.cooldownRemaining(world.tick)} chg ${b.chargeLevel(world.tick)} shots ${b.shots}\n` +
           `gauge ${(world.gauge.value * 100).toFixed(0)}%  turn ${world.chips.turns}  add ${world.chips.addStreak}\n` +
           `folder ${world.chips.folderRemaining} hand ${world.chips.hand.filter(Boolean).length}/${world.chips.hand.length}` +
           ` queue ${world.chips.queue.length} used ${world.chips.count('used')}` +
@@ -219,25 +219,19 @@ const panel = new DebugPanel(loop.clock, {
 });
 panel.syncSeed(session.seed, session.battleIndex);
 
+// Small toggle in the bottom-left corner: debug tools on phones and in the published build.
+const debugToggle = document.createElement('button');
+debugToggle.className = 'debug-toggle interactive';
+debugToggle.textContent = t('btn.debug');
+ui.appendChild(debugToggle);
+debugToggle.addEventListener('click', () => setDebugVisible(!panel.visible));
+
 function setDebugVisible(v: boolean): void {
   panel.visible = v;
   overlay.visible = v;
+  debugToggle.classList.toggle('on', v);
 }
 setDebugVisible(params.debug || import.meta.env.DEV);
-
-// Triple tap in the top-left corner (over the HP box) toggles debug tools on devices without a keyboard.
-const hotspot = document.createElement('div');
-hotspot.className = 'debug-hotspot';
-ui.appendChild(hotspot);
-let taps: number[] = [];
-hotspot.addEventListener('pointerdown', () => {
-  const now = performance.now();
-  taps = [...taps.filter((ts) => now - ts < 600), now];
-  if (taps.length >= 3) {
-    taps = [];
-    setDebugVisible(!panel.visible);
-  }
-});
 window.addEventListener('keydown', (e) => {
   if (e.key === '`' || e.key === 'F2') setDebugVisible(!panel.visible);
 });

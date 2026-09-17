@@ -1,6 +1,5 @@
 import { secondsToTicks, tuning } from '../config/tuning';
 import { DIR_VECTORS, type Dir } from '../core/input/commands';
-import { Buster } from './buster';
 import { inTerritory } from './grid';
 import type { EntityId, Occupancy } from './occupancy';
 
@@ -15,7 +14,6 @@ export class Player {
   y: number;
   hp: number;
   maxHp: number;
-  readonly buster = new Buster();
 
   /** Cell the player left on the last step (for render interpolation). */
   prevX: number;
@@ -24,11 +22,11 @@ export class Player {
   lastMoveTick = -Infinity;
   /** Direction queued while movement was on cooldown (only the latest is kept). */
   bufferedDir: Dir | null = null;
-  /** Remaining ticks of stun after a hit: no movement, no buster, charge lost. */
+  /** Remaining ticks of stun after a hit: no movement, no chips. */
   flinchTicks = 0;
   /** Remaining ticks of invulnerability after a hit. */
   iframeTicks = 0;
-  /** Remaining ticks of a chip animation (M4): no movement, buster waits. */
+  /** Remaining ticks of a chip animation: no movement. */
   actionTicks = 0;
   lastHitTick = -Infinity;
   moves = 0;
@@ -72,7 +70,6 @@ export class Player {
     this.bufferedDir = null;
     this.lastHitTick = tick;
     this.hitsTaken++;
-    this.buster.cancel();
   }
 
   private cooldownReady(tick: number): boolean {

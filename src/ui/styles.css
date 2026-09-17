@@ -29,8 +29,9 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
-  /* Disable browser gestures: pull-to-refresh, double-tap zoom, selection, callouts. */
+  /* Disable browser gestures: pull-to-refresh, swipe navigation, double-tap zoom, selection, callouts. */
   overscroll-behavior: none;
+  overscroll-behavior-x: none;
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
@@ -194,51 +195,10 @@ body {
   overflow: hidden;
 }
 
-.ctl-buster {
-  width: 104px;
-  height: 104px;
-  border-radius: 50%;
-  border-color: rgba(255, 242, 122, 0.55);
-  box-shadow: 0 0 0 0 transparent;
-  transition: transform 0.05s, box-shadow 0.1s, border-color 0.1s;
-}
-
-.ctl-buster.pressed {
-  transform: scale(0.94);
-}
-
-.ctl-buster .ctl-label {
-  position: relative;
-}
-
-/* Cooldown: a dark sector that shrinks clockwise as the buster becomes ready. */
-.ctl-cooldown {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: conic-gradient(rgba(0, 0, 0, 0.62) calc(var(--cooldown, 0) * 360deg), transparent 0);
-}
-
-.ctl-buster.cooling .ctl-label {
-  color: var(--text-dim);
-}
-
-.ctl-buster[data-charge='0'] {
-  border-color: #bfe9ff;
-}
-
-.ctl-buster[data-charge='1'] {
-  border-color: #58e08a;
-  box-shadow: 0 0 18px 2px rgba(88, 224, 138, 0.55);
-}
-
-.ctl-buster[data-charge='2'] {
-  border-color: #ff4fd8;
-  box-shadow: 0 0 22px 4px rgba(255, 79, 216, 0.6);
-}
-
 .ctl-left {
   margin-right: auto;
+  /* Leaves the bottom-left corner to the debug toggle. */
+  margin-bottom: 30px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -278,18 +238,11 @@ body {
   font-size: 13px;
 }
 
-.ctl-right {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
-}
-
 .ctl-chip {
-  width: 84px;
-  height: 84px;
-  border-radius: 18px;
-  padding: 6px;
+  width: 108px;
+  height: 108px;
+  border-radius: 22px;
+  padding: 8px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -310,8 +263,8 @@ body {
 }
 
 .ctl-chip-icon {
-  width: 52px;
-  height: 52px;
+  width: 68px;
+  height: 68px;
   pointer-events: none;
 }
 
@@ -852,14 +805,28 @@ body {
   color: #ffb3b3;
 }
 
-.debug-hotspot {
+.debug-toggle {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 48px;
-  height: 48px;
-  pointer-events: auto;
+  left: calc(var(--safe-left) + 6px);
+  bottom: calc(var(--safe-bottom) + 6px);
+  width: 40px;
+  height: 26px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  color: var(--text-dim);
+  font: 800 10px/1 var(--mono);
+  letter-spacing: 0.05em;
+  opacity: 0.55;
   z-index: 60;
+  pointer-events: auto;
+}
+
+.debug-toggle.on {
+  opacity: 1;
+  color: #b8ffcf;
+  border-color: #58e08a;
 }
 
 .lil-gui.lil-root {
