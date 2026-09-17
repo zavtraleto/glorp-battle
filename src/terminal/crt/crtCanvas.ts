@@ -101,6 +101,13 @@ export class CrtCanvas {
     this.drawBars(ctx, m.bars, s);
     this.drawLabels(sink, m.labels);
     if (m.info) this.drawInfo(ctx, sink, m.info, W, H, s, M);
+    if (m.title) {
+      if (!m.info) {
+        ctx.fillStyle = COLOR.shade;
+        ctx.fillRect(0, 0, W, H);
+      }
+      drawText(sink, m.title, Math.round((W - measureText(m.title, s + 1)) / 2), M + 4 * s, s + 1, COLOR.infoPower);
+    }
     this.texture.needsUpdate = true;
   }
 
@@ -157,7 +164,7 @@ export class CrtCanvas {
     W: number,
     H: number,
   ): void {
-    const l = menuLayout(spec, W, H);
+    const l = menuLayout(spec, W, H, cursor);
     ctx.fillStyle = MENU.shade;
     ctx.fillRect(0, 0, W, H);
     const tone = MENU_COLOR[spec.tone];
@@ -167,8 +174,9 @@ export class CrtCanvas {
       drawText(sink, r.label.text.toUpperCase(), r.label.x, r.label.y, r.label.scale, MENU.rowLabel);
       drawText(sink, r.value.text, r.value.x, r.value.y, r.value.scale, MENU.rowValue);
     }
-    l.items.forEach((item, i) => {
-      const active = i === cursor;
+    for (const m of l.more) drawText(sink, m.text, m.x, m.y, m.scale, MENU.hint);
+    l.items.forEach((item) => {
+      const active = item.index === cursor;
       if (active) {
         ctx.fillStyle = MENU.itemBand;
         ctx.fillRect(item.rect.x, item.rect.y, item.rect.w, item.rect.h);

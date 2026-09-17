@@ -13,9 +13,20 @@ function session(screen: Screen, over: Partial<MenuSession> = {}): MenuSession {
   ];
   return {
     screen,
-    battleIndex: 2,
-    battleCount: 4,
-    attempt: 0,
+    generation: 7,
+    depth: 4,
+    steps: 10,
+    hp: 60,
+    maxHp: 100,
+    folderSize: 21,
+    path: [
+      { kind: 'normal', enemies: 2 },
+      { kind: 'elite', enemies: 3 },
+    ],
+    legacyChoices: [
+      { defId: 'cannon', code: 'A', count: 3 },
+      { defId: 'mcannon', code: 'K', count: 1, legacyGen: 6 },
+    ],
     results,
     lastResult: results[1],
     totalTime: 42.5,
@@ -23,25 +34,33 @@ function session(screen: Screen, over: Partial<MenuSession> = {}): MenuSession {
   };
 }
 
+const manyChoices = Array.from({ length: 12 }, (_, i) => ({ defId: 'recover50' as const, code: 'A' as const, count: i + 1 }));
+
 describe('menuFor', () => {
-  it('has no menu in battle', () => {
+  it('has no menu in battle or on the reward tray', () => {
     expect(menuFor(session('BATTLE'))).toBeNull();
+    expect(menuFor(session('REWARD'))).toBeNull();
   });
 
   it('builds each screen with its actions', () => {
     expect(menuFor(session('TITLE'))!.items.map((i) => i.action)).toEqual(['start']);
-    expect(menuFor(session('PAUSED'))!.items.map((i) => i.action)).toEqual(['resume', 'retry', 'restart']);
-    expect(menuFor(session('RESULT'))!.items.map((i) => i.action)).toEqual(['next']);
-    expect(menuFor(session('DEFEAT'))!.items.map((i) => i.action)).toEqual(['retry', 'restart']);
-    expect(menuFor(session('COMPLETE'))!.items.map((i) => i.action)).toEqual(['restart']);
+    expect(menuFor(session('PATH'))!.items.map((i) => i.action)).toEqual(['path:0', 'path:1']);
+    expect(menuFor(session('PAUSED'))!.items.map((i) => i.action)).toEqual(['resume', 'abandon']);
+    expect(menuFor(session('LEGACY'))!.items.map((i) => i.action)).toEqual(['legacy:0', 'legacy:1']);
+    expect(menuFor(session('COMPLETE'))!.items.map((i) => i.action)).toEqual(['title']);
   });
 
-  it('shows battle results and totals', () => {
-    expect(menuFor(session('RESULT'))!.rows).toEqual([
-      ['Time', '0:30.00'],
-      ['Hits taken', '1'],
-      ['HP left', '60'],
+  it('shows the step, the generation and the path', () => {
+    expect(menuFor(session('TITLE'))!.subtitle).toBe('Generation 07');
+    const path = menuFor(session('PATH'))!;
+    expect(path.title).toBe('STEP 04/10');
+    expect(path.rows).toEqual([
+      ['HP', '60/100'],
+      ['Folder', '21'],
     ]);
+    expect(path.items.map((i) => i.label)).toEqual(['Battle x2', 'Elite x3']);
+    expect(menuFor(session('PATH', { path: [{ kind: 'boss', enemies: 2 }] }))!.items[0]!.label).toBe('Boss');
+    expect(menuFor(session('LEGACY'))!.items.map((i) => i.label)).toEqual(['Cannon A x3', 'M-Cannon K G06']);
     expect(menuFor(session('COMPLETE'))!.rows).toEqual([
       ['Battles', '2'],
       ['Total time', '0:42.50'],
@@ -51,7 +70,7 @@ describe('menuFor', () => {
   });
 
   it('changes the key when the content changes', () => {
-    expect(menuFor(session('DEFEAT'))!.key).not.toBe(menuFor(session('DEFEAT', { attempt: 1 }))!.key);
+    expect(menuFor(session('PATH'))!.key).not.toBe(menuFor(session('PATH', { depth: 5 }))!.key);
   });
 
   it('formats time', () => {
@@ -69,20 +88,34 @@ describe('menu cursor and layout', () => {
   });
 
   it('fits every screen on a 240×320 CRT without overlaps', () => {
-    for (const screen of ['TITLE', 'PAUSED', 'RESULT', 'DEFEAT', 'COMPLETE'] as const) {
-      const spec = menuFor(session(screen))!;
-      const l = menuLayout(spec, 240, 320);
+    const specs = (['TITLE', 'PATH', 'PAUSED', 'LEGACY', 'COMPLETE'] as const).map((screen) => ({
+      screen,
+      spec: menuFor(session(screen, screen === 'LEGACY' ? { legacyChoices: manyChoices } : {}))!,
+    }));
+    for (const { screen, spec } of specs) {
+      const l = menuLayout(spec, 240, 320, spec.items.length - 1);
       expect(l.title.x, screen).toBeGreaterThanOrEqual(0);
       expect(l.title.x + measureText(l.title.text, l.title.scale), screen).toBeLessThanOrEqual(240);
       let prevBottom = 0;
-      for (const { rect } of l.items) {
+      for (const { rect, text } of l.items) {
         expect(rect.y, screen).toBeGreaterThanOrEqual(prevBottom);
+        expect(text.x + measureText(text.text, text.scale), screen).toBeLessThanOrEqual(240);
         prevBottom = rect.y + rect.h;
       }
+      expect(prevBottom, screen).toBeLessThanOrEqual(320);
       const hintTop = l.hint[0]?.y ?? 320;
       expect(prevBottom, screen).toBeLessThanOrEqual(hintTop);
       for (const h of l.hint) expect(h.x + measureText(h.text, h.scale), screen).toBeLessThanOrEqual(240);
     }
+  });
+
+  it('scrolls a long list with the cursor', () => {
+    const spec = menuFor(session('LEGACY', { legacyChoices: manyChoices }))!;
+    expect(menuLayout(spec, 240, 320, 0).items.map((i) => i.index)).toEqual([0, 1, 2, 3, 4]);
+    const mid = menuLayout(spec, 240, 320, 7);
+    expect(mid.items.map((i) => i.index)).toContain(7);
+    expect(mid.more).toHaveLength(2);
+    expect(menuLayout(spec, 240, 320, 11).items.map((i) => i.index)).toEqual([7, 8, 9, 10, 11]);
   });
 
   it('finds the item under a point', () => {
@@ -90,6 +123,10 @@ describe('menu cursor and layout', () => {
     const r = l.items[1]!.rect;
     expect(menuItemAt(l, r.x + 5, r.y + 5)).toBe(1);
     expect(menuItemAt(l, 1, 1)).toBe(-1);
+    const spec = menuFor(session('LEGACY', { legacyChoices: manyChoices }))!;
+    const scrolled = menuLayout(spec, 240, 320, 11);
+    const first = scrolled.items[0]!.rect;
+    expect(menuItemAt(scrolled, first.x + 5, first.y + 5)).toBe(7);
   });
 });
 

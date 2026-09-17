@@ -1,3 +1,5 @@
+import { RewardPick } from '../src/app/reward';
+import { terminalMode } from '../src/terminal/terminalMode';
 import { describe, expect, it } from 'vitest';
 import { railSlotRects, trayLayout, type TrayTarget } from '../src/terminal/chips/trayLayout';
 import { TrayInput, type TrayActions } from '../src/terminal/interaction/trayInput';
@@ -116,5 +118,46 @@ describe('TrayInput', () => {
     const { input, log } = setup({ enabled: false });
     expect(input.down(1, ...c(tray.cells[0]!))).toBe(false);
     expect(log).toEqual([]);
+  });
+});
+
+describe('reward pick', () => {
+  const chips = [
+    { defId: 'cannon' as const, code: 'A' as const },
+    { defId: 'steal' as const, code: 'S' as const },
+    { defId: 'invis' as const, code: '*' as const },
+  ];
+
+  it('holds one cassette at a time and reports the choice', () => {
+    let done = 0;
+    const r = new RewardPick(chips, () => done++);
+    expect(r.hand.map((c) => c.defId)).toEqual(['cannon', 'steal', 'invis']);
+    r.confirm();
+    expect(done).toBe(0);
+    expect(r.selectAt(0, 0)).toBe(true);
+    expect(r.selectAt(2, 1)).toBe(true);
+    expect(r.selection).toEqual([2]);
+    expect(r.selectedChips().map((c) => c.defId)).toEqual(['invis']);
+    expect(r.unselect(0)).toBe(true);
+    expect(r.selection).toEqual([]);
+    r.selectAt(1, 0);
+    r.confirm();
+    expect(done).toBe(1);
+    expect(r.taken).toEqual({ defId: 'steal', code: 'S' });
+    expect(r.selectAt(0, 0)).toBe(false);
+    r.add();
+    expect(done).toBe(1);
+  });
+
+  it('skips', () => {
+    let done = 0;
+    const r = new RewardPick(chips, () => done++);
+    r.add();
+    expect([done, r.skipped, r.taken]).toEqual([1, true, null]);
+  });
+
+  it('is picked on the tray', () => {
+    expect(terminalMode('REWARD', 'BATTLE_WON')).toBe('CHIP_SELECT');
+    expect(terminalMode('PATH', 'TITLE')).toBe('MENU');
   });
 });

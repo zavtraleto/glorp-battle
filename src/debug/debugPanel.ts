@@ -31,6 +31,10 @@ export interface DebugActions {
   clearCellStates(): void;
   demoCellStates(): void;
   rerollEnemies(): void;
+  /** Roguelite run (roguelite spec §6.6). */
+  runDepth(depth: number): void;
+  clearLegacy(): void;
+  setGeneration(generation: number): void;
   /** Changes the real panels (roguelite spec §3). */
   simPanel(x: number, y: number, action: 'crack' | 'break' | 'repair' | 'steal' | 'rock'): void;
 }
@@ -107,6 +111,12 @@ export class DebugPanel {
     f.add({ apply: () => this.actions.restart({ seed: s.seed >>> 0 }) }, 'apply').name('restart with seed');
     f.add({ random: () => this.actions.restart({ seed: 'random' }) }, 'random').name('restart random seed');
     f.add({ copy: () => this.copyLink() }, 'copy').name('copy repro link');
+    const run = { depth: 1, generation: 1 };
+    f.add(run, 'depth', 1, 10, 1).name('run step');
+    f.add({ go: () => this.actions.runDepth(run.depth) }, 'go').name('go to step');
+    f.add(run, 'generation', 1, 99, 1).name('generation');
+    f.add({ set: () => this.actions.setGeneration(run.generation) }, 'set').name('set generation');
+    f.add({ clear: () => this.actions.clearLegacy() }, 'clear').name('clear legacy');
 
     const tf = this.gui.addFolder('Time');
     tf.add(s, 'timeScale', [0.25, 0.5, 1, 2]).name('time scale').onChange((v: number) => {

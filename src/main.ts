@@ -39,8 +39,9 @@ const ui = byId('ui');
 
 const cheats: Cheats = { god: params.god, aiEnabled: true, buster: true };
 const session = new Session({ seed: params.seed ?? randomSeed(), cheats, folder: params.folder });
-// ?battle=N skips the title and jumps straight into that battle (debug).
-if (query.has('battle')) session.debugJump(params.battle);
+// ?battle=N / ?encounter=<id> skip the title and jump straight into a battle (debug).
+if (params.encounter) session.debugEncounter(params.encounter);
+else if (query.has('battle')) session.debugJump(params.battle);
 
 // ?bench=1: autopilot on battle 1 for the frame budget check (TERMINAL.md §10).
 const perf = new PerfProbe();
@@ -92,12 +93,16 @@ const terminal = new Terminal({
       if (session.screen === 'BATTLE' || session.screen === 'PAUSED') togglePause();
     },
     menu: (action) => {
-      if (action === 'start' || action === 'restart') {
+      const [kind, arg] = action.split(':');
+      const index = Number(arg ?? 0);
+      if (kind === 'start') {
         session.start();
         void keepAwake();
-      } else if (action === 'resume') session.resume();
-      else if (action === 'retry') session.retry();
-      else session.next();
+      } else if (kind === 'resume') session.resume();
+      else if (kind === 'abandon') session.abandon();
+      else if (kind === 'title') session.toTitle();
+      else if (kind === 'path') session.choosePath(index);
+      else if (kind === 'legacy') session.chooseLegacy(index);
     },
   },
 });
@@ -108,7 +113,7 @@ function afterWorldChange(): void {
   input.clear();
   sceneRenderer.reset();
   terminal.resetWorld();
-  panel.syncSeed(session.seed, session.battleIndex);
+  panel.syncSeed(session.seed, Math.min(4, session.battleIndex));
   events.emit('seedChanged', { seed: session.world.seed });
 }
 
@@ -131,7 +136,7 @@ window.addEventListener('keydown', (e) => {
 function driveBench(frameSeconds: number): void {
   if (!bench || bench.done) return;
   const w = session.world;
-  if (session.screen === 'RESULT' || session.screen === 'DEFEAT') {
+  if (session.screen !== 'BATTLE' && session.screen !== 'PAUSED') {
     session.debugJump(1);
     return;
   }
@@ -189,7 +194,7 @@ const loop = new GameLoop(
           `folder ${world.chips.folderRemaining} hand ${world.chips.hand.filter(Boolean).length}/${world.chips.hand.length}` +
           ` queue ${world.chips.queue.length} used ${world.chips.count('used')}` +
           ` chip ${world.activeChip ? world.activeChip.def.id : '-'}\n` +
-          `attempt ${session.attempt}  hpStart ${session.hpAtBattleStart}\n` +
+          `gen ${session.generation}  step ${session.depth}/${session.steps}  folder ${session.folderSize}\n` +
           world.enemies.map((e) => `${e.kind}#${e.id} ${e.x},${e.y} hp ${e.hp} ${e.state}`).join('\n') +
           `\nattacks ${world.attacks.length}${cheats.god ? '  GOD' : ''}${cheats.aiEnabled ? '' : '  AI OFF'}`,
       });
@@ -204,7 +209,7 @@ let debugChipUid = 10_000;
 const panel = new DebugPanel(loop.clock, {
   getSeed: () => session.seed,
   restart: ({ seed, battle }) => {
-    session.debugJump(battle ?? session.battleIndex, seed === 'random' ? randomSeed() : seed);
+    session.debugJump(battle ?? 1, seed === 'random' ? randomSeed() : seed);
     syncWorld();
   },
   setCoordsVisible: (v) => sceneRenderer.field.setCoordsVisible(v),
@@ -233,6 +238,9 @@ const panel = new DebugPanel(loop.clock, {
     if (state === 'NONE') sceneRenderer.field.overrides.delete(key);
     else sceneRenderer.field.overrides.set(key, state);
   },
+  runDepth: (depth) => session.debugDepth(depth),
+  clearLegacy: () => session.debugClearLegacy(),
+  setGeneration: (g) => session.debugSetGeneration(g),
   simPanel: (x, y, action) => {
     const w = session.world;
     const occupied = !w.occupancy.isFree(x, y);
@@ -260,7 +268,7 @@ const panel = new DebugPanel(loop.clock, {
     sceneRenderer.reset();
   },
 });
-panel.syncSeed(session.seed, session.battleIndex);
+panel.syncSeed(session.seed, Math.min(4, session.battleIndex));
 
 // Small toggle in the bottom-left corner: debug tools on phones and in the published build.
 const debugToggle = document.createElement('button');
@@ -315,7 +323,7 @@ if (import.meta.env.DEV) {
       tuning,
       cheats,
       startBattle: (opts: { battle?: number } = {}) => {
-        session.debugJump(opts.battle ?? session.battleIndex);
+        session.debugJump(opts.battle ?? 1);
         syncWorld();
       },
     },

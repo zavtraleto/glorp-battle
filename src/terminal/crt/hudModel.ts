@@ -32,14 +32,17 @@ export interface HudModel {
   info: { defId: ChipId; code: ChipCode } | null;
   /** A session menu covers the whole CRT (TERMINAL.md §8). */
   menu: { spec: MenuSpec; cursor: number } | null;
+  /** Heading over the chip description (REWARD). */
+  title: string | null;
 }
 
-export const EMPTY_HUD: HudModel = { labels: [], bars: [], info: null, menu: null };
+export const EMPTY_HUD: HudModel = { labels: [], bars: [], info: null, menu: null, title: null };
 
 /** Redraw key: changes whenever the drawn HUD would change. */
 export function hudKey(m: HudModel, blinkOn: boolean): string {
   return [
     m.info ? `${m.info.defId}${m.info.code}` : '',
+    m.title ?? '',
     m.menu ? `${m.menu.spec.key}:${m.menu.cursor}:${blinkOn ? 1 : 0}` : '',
     m.labels.map((l) => `${l.text}@${Math.round(l.x)},${Math.round(l.y)}`).join(';'),
     m.bars.map((b) => `${b.filled}/${b.total}L${b.level}@${Math.round(b.x)},${Math.round(b.y)}`).join(';'),

@@ -64,6 +64,7 @@ export class ChipTray {
   private readonly okMat = new THREE.MeshLambertMaterial({ color: COLOR.ok });
   private readonly addMat = new THREE.MeshLambertMaterial({ color: COLOR.add });
   private readonly owned: { dispose(): void }[] = [];
+  private addLabel = '';
 
   constructor() {
     this.group.add(this.statics, this.keys.ok.object, this.keys.add.object);
@@ -88,6 +89,13 @@ export class ChipTray {
     this.cells = [];
   }
 
+  /** ADD key caption (SKIP on a reward); a change rebuilds the keys. */
+  setAddLabel(text: string): void {
+    if (text === this.addLabel) return;
+    this.addLabel = text;
+    this.trayKey = '';
+  }
+
   setOpen(open: boolean): void {
     this.open.target = open ? 1 : 0;
   }
@@ -96,7 +104,7 @@ export class ChipTray {
   setHand(hand: readonly (RailChip | null)[], states: readonly HandCellState[], tray: TrayLayout): void {
     const layout = this.layout;
     if (!layout) return;
-    const key = `${tray.cells.length}|${tray.scale}`;
+    const key = `${tray.cells.length}|${tray.scale}|${this.addLabel}`;
     if (key !== this.trayKey) {
       this.trayKey = key;
       this.buildStatics(layout, tray);
@@ -190,7 +198,7 @@ export class ChipTray {
       this.addBox(this.wellMat, w.cx, w.cy, PLATE_Z + 0.04, w.w * 0.9, w.h * 0.9, 0.06);
     }
     this.buildKey(this.keys.ok, this.okMat, rectToWorld(layout, tray.ok), t('custom.ok'));
-    this.buildKey(this.keys.add, this.addMat, rectToWorld(layout, tray.add), t('custom.add'));
+    this.buildKey(this.keys.add, this.addMat, rectToWorld(layout, tray.add), this.addLabel || t('custom.add'));
   }
 
   private buildKey(key: PressKey, mat: THREE.Material, r: { cx: number; cy: number; w: number; h: number }, text: string): void {

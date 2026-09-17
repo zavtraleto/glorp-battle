@@ -7,6 +7,8 @@ import type { GameState } from '../sim/world';
 export type TerminalMode = 'BATTLE' | 'CHIP_SELECT' | 'MENU' | 'TRANSITION';
 
 export function terminalMode(screen: Screen, state: GameState): TerminalMode {
+  // The reward is picked on the chip tray (roguelite spec §6.3).
+  if (screen === 'REWARD') return 'CHIP_SELECT';
   if (screen !== 'BATTLE') return 'MENU';
   if (state === 'ACTION') return 'BATTLE';
   if (state === 'CUSTOM') return 'CHIP_SELECT';

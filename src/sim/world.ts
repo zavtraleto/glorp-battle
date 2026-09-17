@@ -612,7 +612,12 @@ export class World implements EnemyContext, AttackContext {
   }
 
   killAllEnemies(): void {
-    for (const e of this.enemies) if (e.alive) this.damageEnemy(e, e.hp);
+    for (const e of this.enemies) {
+      if (!e.alive) continue;
+      // The debug kill ignores guards.
+      e.guarded = false;
+      this.damageEnemy(e, e.hp);
+    }
   }
 
   // ---------- Tick ----------

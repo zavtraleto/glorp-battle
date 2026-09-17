@@ -36,6 +36,8 @@ import { HitZones } from './parts/hitZones';
 import { Housing } from './parts/housing';
 import { Trackball } from './parts/trackball';
 import { lampStates, terminalMode } from './terminalMode';
+import type { TraySource } from '../app/reward';
+import { t as tr } from '../i18n';
 
 // NET-01 terminal (TERMINAL.md §13). Owns the terminal scene and camera, draws
 // the battle and the HUD into the CRT and the terminal into a low-resolution
@@ -263,13 +265,15 @@ export class Terminal {
     const screen = this.battle.render(sceneRenderer, world, alpha, dt);
     this.crt.setScreen(screen, this.battle.width, this.battle.height);
     this.crt.update(dt);
-    this.syncTray(world);
-    const focused = world.state === 'CUSTOM' ? world.chips.hand[this.focusSlot] : null;
+    const source = this.traySource();
+    this.syncTray(world, source);
+    const focused = source ? source.hand[this.focusSlot] : null;
     const info = focused ? { defId: focused.defId, code: focused.code } : null;
     this.syncMenu();
     const menu = this.menu ? { spec: this.menu, cursor: this.menuCursor } : null;
-    const marks = world.state === 'CUSTOM' ? EMPTY_HUD : this.fieldMarks(world, alpha);
-    this.hud.draw({ labels: marks.labels, bars: marks.bars, info, menu }, this.time);
+    const marks = source ? EMPTY_HUD : this.fieldMarks(world, alpha);
+    const title = this.opts.session.screen === 'REWARD' ? tr('reward.title') : null;
+    this.hud.draw({ labels: marks.labels, bars: marks.bars, info, menu, title }, this.time);
 
     this.syncIndicators(world);
     this.rail.update(dt);
@@ -401,26 +405,52 @@ export class Terminal {
     this.camera.lookAt(b.x, b.y, 0);
   }
 
-  /** Custom Screen: tray open state, hand cartridges, and the rail showing the selection. */
-  private syncTray(world: World): void {
-    const chips = world.chips;
-    const custom = world.state === 'CUSTOM';
-    this.tray.setOpen(custom);
-    if (custom) {
-      const geomKey = `${chips.hand.length}|${this.layoutKey}`;
+  /** What the tray edits now: the Custom Screen hand, a reward pick, or nothing. */
+  private traySource(): TraySource | null {
+    const { session } = this.opts;
+    if (session.screen === 'REWARD') return session.reward;
+    if (session.screen !== 'BATTLE' || session.world.state !== 'CUSTOM') return null;
+    const w = session.world;
+    const chips = w.chips;
+    return {
+      get hand() {
+        return chips.hand;
+      },
+      get selection() {
+        return chips.selection;
+      },
+      selectedChips: () => chips.selectedChips(),
+      isSelected: (slot) => chips.isSelected(slot),
+      canSelect: (slot) => chips.canSelect(slot),
+      selectAt: (slot, index) => w.customSelectAt(slot, index),
+      unselect: (index) => w.customUnselect(index),
+      cancelLast: () => w.customCancel(),
+      confirm: () => w.customConfirm(),
+      add: () => w.customAdd(),
+    };
+  }
+
+  /** Tray open state, hand cartridges, and the rail showing the selection (or the battle queue). */
+  private syncTray(world: World, source: TraySource | null): void {
+    const { session } = this.opts;
+    this.tray.setOpen(source !== null);
+    this.tray.setAddLabel(session.screen === 'REWARD' ? tr('tray.skip') : tr('custom.add'));
+    if (source) {
+      const hand = source.hand;
+      const geomKey = `${hand.length}|${this.layoutKey}`;
       if (geomKey !== this.trayGeomKey || !this.trayGeom) {
         this.trayGeomKey = geomKey;
-        this.trayGeom = trayLayout(this.layout, chips.hand.length);
+        this.trayGeom = trayLayout(this.layout, hand.length);
       }
-      if (!chips.hand[this.focusSlot]) this.focusSlot = chips.hand.findIndex((c) => c !== null);
+      if (!hand[this.focusSlot]) this.focusSlot = hand.findIndex((c) => c !== null);
       this.tray.setFocus(this.focusSlot);
-      const states: HandCellState[] = chips.hand.map((c, i) =>
-        !c ? 'empty' : chips.isSelected(i) ? 'selected' : chips.canSelect(i) ? 'ok' : 'dim',
+      const states: HandCellState[] = hand.map((c, i) =>
+        !c ? 'empty' : source.isSelected(i) ? 'selected' : source.canSelect(i) ? 'ok' : 'dim',
       );
-      const selected = new Set(chips.selectedChips().map((c) => c.uid));
-      this.tray.setHand(chips.hand, states, this.trayGeom);
+      const selected = new Set(source.selectedChips().map((c) => c.uid));
+      this.tray.setHand(hand, states, this.trayGeom);
       // Chips pulled out of the rail start their way back from there.
-      chips.hand.forEach((c, i) => {
+      hand.forEach((c, i) => {
         if (!c || !this.selectedBefore.has(c.uid) || selected.has(c.uid)) return;
         const from = this.rail.cartPosition(c.uid);
         if (from) this.tray.flyFrom(i, from);
@@ -430,27 +460,28 @@ export class Terminal {
       this.selectedBefore.clear();
     }
 
-    const handIndex = (uid: number) => chips.hand.findIndex((c) => c?.uid === uid);
-    this.rail.sync(custom ? chips.selectedChips() : chips.queue, {
-      mode: custom ? 'select' : 'queue',
-      burning: custom,
+    const inBattle = session.screen === 'BATTLE' || session.screen === 'PAUSED';
+    const list = source ? source.selectedChips() : inBattle ? world.chips.queue : [];
+    const handIndex = (uid: number) => (source ? source.hand.findIndex((c) => c?.uid === uid) : -1);
+    this.rail.sync(list, {
+      mode: source ? 'select' : 'queue',
+      burning: source !== null,
       inHand: (uid) => handIndex(uid) >= 0,
       spawnFrom: (uid) => this.tray.cellPosition(handIndex(uid)),
     });
   }
 
   private trayReady(): boolean {
-    const { session } = this.opts;
-    return session.screen === 'BATTLE' && session.world.state === 'CUSTOM' && this.tray.openness > TRAY_READY;
+    return this.traySource() !== null && this.tray.openness > TRAY_READY;
   }
 
   private trayHoverAt(x: number, y: number): void {
-    const chips = this.opts.session.world.chips;
+    const source = this.traySource();
     const target =
-      this.trayReady() && this.trayGeom && x >= 0
-        ? trayTargetAt(this.layout, this.trayGeom, x, y, chips.selection.length)
+      source && this.trayReady() && this.trayGeom && x >= 0
+        ? trayTargetAt(this.layout, this.trayGeom, x, y, source.selection.length)
         : null;
-    if (target?.kind === 'hand' && chips.hand[target.slot]) this.focusSlot = target.slot;
+    if (target?.kind === 'hand' && source?.hand[target.slot]) this.focusSlot = target.slot;
     const hover = target !== null;
     if (hover !== this.trayHover) {
       this.trayHover = hover;
@@ -459,29 +490,29 @@ export class Terminal {
   }
 
   private makeTrayInput(): TrayInput {
-    const world = () => this.opts.session.world;
+    const src = () => this.traySource();
     const toWorld = (x: number, y: number) => {
       const p = cssToWorld(this.layout, x, y);
       return new THREE.Vector3(p.x, p.y, 0);
     };
-    const railUid = (index: number) => world().chips.selectedChips()[index]?.uid ?? null;
+    const railUid = (index: number) => src()?.selectedChips()[index]?.uid ?? null;
     return new TrayInput({
       layout: () => this.layout,
-      tray: () => this.trayGeom ?? trayLayout(this.layout, world().chips.hand.length),
-      selectedCount: () => world().chips.selection.length,
-      canPick: (slot) => world().chips.canSelect(slot),
+      tray: () => this.trayGeom ?? trayLayout(this.layout, src()?.hand.length ?? 0),
+      selectedCount: () => src()?.selection.length ?? 0,
+      canPick: (slot) => src()?.canSelect(slot) ?? false,
       enabled: () => this.trayReady(),
       select: (slot, index) => {
-        if (!world().customSelectAt(slot, index)) this.tray.refuse(slot);
+        if (!src()?.selectAt(slot, index)) this.tray.refuse(slot);
       },
       unselect: (index) => {
-        world().customUnselect(index);
+        src()?.unselect(index);
       },
       reorder: (from, to) => {
-        const w = world();
-        const slot = w.chips.selection[from];
-        if (slot === undefined || !w.customUnselect(from)) return;
-        w.customSelectAt(slot, to);
+        const s = src();
+        const slot = s?.selection[from];
+        if (!s || slot === undefined || !s.unselect(from)) return;
+        s.selectAt(slot, to);
       },
       refuse: (slot) => this.tray.refuse(slot),
       focus: (slot) => {
@@ -491,8 +522,8 @@ export class Terminal {
       keyUp: (k, fire) => {
         this.tray.keys[k].release();
         if (!fire) return;
-        if (k === 'ok') world().customConfirm();
-        else world().customAdd();
+        if (k === 'ok') src()?.confirm();
+        else src()?.add();
       },
       drag: (source: TrayTarget, x, y) => {
         this.trayDragging = true;
@@ -534,26 +565,26 @@ export class Terminal {
   /** Keyboard on the chip tray; returns true if the key was used. */
   private trayKey(code: string): boolean {
     const action = trayKeyAction(code, TRAY_COLUMNS);
-    if (!action || !this.trayReady()) return false;
-    const w = this.opts.session.world;
-    const hand = w.chips.hand;
+    const source = this.traySource();
+    if (!action || !source || !this.trayReady()) return false;
+    const hand = source.hand;
     switch (action.kind) {
       case 'focus':
         this.focusSlot = stepFocus(Math.max(0, this.focusSlot), action.delta, hand.map((c) => c !== null));
         break;
       case 'pick':
-        if (!w.customSelect(this.focusSlot)) this.tray.refuse(this.focusSlot);
+        if (!source.selectAt(this.focusSlot, source.selection.length)) this.tray.refuse(this.focusSlot);
         break;
       case 'removeLast':
-        w.customCancel();
+        source.cancelLast();
         break;
       case 'ok':
         this.tray.keys.ok.press(false);
-        w.customConfirm();
+        source.confirm();
         break;
       case 'add':
         this.tray.keys.add.press(false);
-        w.customAdd();
+        source.add();
         break;
     }
     return true;
@@ -585,7 +616,7 @@ export class Terminal {
     const t = tuning.terminal;
     const g = glassRect(this.layout, t.CRT_RES_W / t.CRT_RES_H);
     if (!rectContains(g, x, y)) return -1;
-    const layout = menuLayout(this.menu, t.CRT_RES_W, t.CRT_RES_H);
+    const layout = menuLayout(this.menu, t.CRT_RES_W, t.CRT_RES_H, this.menuCursor);
     return menuItemAt(layout, ((x - g.x) / g.w) * t.CRT_RES_W, ((y - g.y) / g.h) * t.CRT_RES_H);
   }
 
@@ -643,7 +674,8 @@ export class Terminal {
     const gauge = gaugeLedCount(world.gauge.value, world.gauge.full, GAUGE_LEDS);
     const hp = hpLedCount(world.player.hp, world.player.maxHp, HP_LEDS);
     // On the Custom Screen the counter shows the chips placed in the rail.
-    const chips = world.state === 'CUSTOM' ? world.chips.selection.length : world.chips.queue.length;
+    const source = this.traySource();
+    const chips = source ? source.selection.length : world.chips.queue.length;
     const lamps = lampStates(terminalMode(session.screen, world.state), session.screen, world.gauge.full, this.time);
     const lampKey = `${+lamps.power}${+lamps.sync}${+lamps.link}${+lamps.battle}`;
     const s = this.shown;

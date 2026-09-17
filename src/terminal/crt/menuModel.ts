@@ -1,12 +1,13 @@
 import type { Screen } from '../../app/session';
-import { t } from '../../i18n';
+import type { LegacyChoice, PathChoice } from '../../app/session';
+import { chipName, t } from '../../i18n';
 import type { Rect } from '../layout';
 import { GLYPH_H, measureText, wrapText } from './pixelFont';
 
 // Session menus drawn inside the CRT (TERMINAL.md §8). Pure: what each screen
 // shows, where it goes on the CRT canvas, and cursor movement.
 
-export type MenuAction = 'start' | 'resume' | 'retry' | 'restart' | 'next';
+export type MenuAction = 'start' | 'resume' | 'abandon' | 'title' | `path:${number}` | `legacy:${number}`;
 export type MenuTone = 'title' | 'info' | 'win' | 'lose';
 
 export interface MenuItem {
@@ -33,13 +34,21 @@ export interface MenuResult {
 
 export interface MenuSession {
   screen: Screen;
-  battleIndex: number;
-  battleCount: number;
-  attempt: number;
+  generation: number;
+  depth: number;
+  steps: number;
+  hp: number;
+  maxHp: number;
+  folderSize: number;
+  path: readonly PathChoice[];
+  legacyChoices: readonly LegacyChoice[];
   results: readonly MenuResult[];
   lastResult: MenuResult | undefined;
   totalTime: number;
 }
+
+/** Most menu items shown at once; the list scrolls with the cursor. */
+export const MENU_VISIBLE = 5;
 
 export function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -47,79 +56,84 @@ export function formatTime(seconds: number): string {
   return `${m}:${s.toFixed(2).padStart(5, '0')}`;
 }
 
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+function pathLabel(p: PathChoice): string {
+  if (p.kind === 'boss') return t('path.boss');
+  return t(p.kind === 'elite' ? 'path.elite' : 'path.normal', { n: p.enemies });
+}
+
+function legacyLabel(c: LegacyChoice): string {
+  const tail = c.legacyGen !== undefined ? t('legacy.gen', { n: pad2(c.legacyGen) }) : `x${c.count}`;
+  return `${chipName(c.defId)} ${c.code} ${tail}`;
+}
+
 export function menuFor(s: MenuSession): MenuSpec | null {
-  const battle = t('banner.battle', { n: s.battleIndex, total: s.battleCount });
-  const r = s.lastResult;
+  const step = t('path.title', { n: pad2(s.depth), total: pad2(s.steps) });
   switch (s.screen) {
     case 'TITLE':
       return {
-        key: 'title',
+        key: `title-${s.generation}`,
         tone: 'title',
         title: t('game.title'),
-        subtitle: t('title.subtitle'),
+        subtitle: t('title.generation', { n: pad2(s.generation) }),
         rows: [],
         items: [{ label: t('title.start'), action: 'start' }],
         hint: [t('title.hintTerminal'), t('title.hintKeys')],
+      };
+    case 'PATH':
+      return {
+        key: `path-${s.generation}-${s.depth}-${s.results.length}`,
+        tone: 'info',
+        title: step,
+        subtitle: t('path.subtitle'),
+        rows: [
+          [t('result.hpNow'), `${s.hp}/${s.maxHp}`],
+          [t('result.folder'), String(s.folderSize)],
+        ],
+        items: s.path.map((p, i) => ({ label: pathLabel(p), action: `path:${i}` as const })),
+        hint: [t('path.hint')],
       };
     case 'PAUSED':
       return {
         key: 'paused',
         tone: 'info',
         title: t('banner.paused'),
-        subtitle: battle,
+        subtitle: step,
         rows: [],
         items: [
           { label: t('btn.resume'), action: 'resume' },
-          { label: t('btn.retry'), action: 'retry' },
-          { label: t('btn.restart'), action: 'restart' },
+          { label: t('btn.abandon'), action: 'abandon' },
         ],
         hint: [],
       };
-    case 'RESULT':
+    case 'LEGACY':
       return {
-        key: `result-${s.battleIndex}-${s.results.length}`,
-        tone: 'win',
-        title: t('banner.enemyDeleted'),
-        subtitle: battle,
-        rows: r
-          ? [
-              [t('result.time'), formatTime(r.time)],
-              [t('result.hits'), String(r.hits)],
-              [t('result.hp'), String(r.hpLeft)],
-            ]
-          : [],
-        items: [{ label: t('btn.next'), action: 'next' }],
-        hint: [],
-      };
-    case 'DEFEAT':
-      return {
-        key: `defeat-${s.battleIndex}-${s.attempt}`,
+        key: `legacy-${s.generation}-${s.depth}-${s.results.length}`,
         tone: 'lose',
         title: t('banner.gameOver'),
-        subtitle: battle,
+        subtitle: t('legacy.subtitle'),
         rows: [],
-        items: [
-          { label: t('btn.retry'), action: 'retry' },
-          { label: t('btn.restart'), action: 'restart' },
-        ],
+        items: s.legacyChoices.map((c, i) => ({ label: legacyLabel(c), action: `legacy:${i}` as const })),
         hint: [],
       };
     case 'COMPLETE':
       return {
-        key: 'complete',
+        key: `complete-${s.generation}`,
         tone: 'win',
-        title: t('banner.allClear'),
-        subtitle: null,
+        title: t('banner.runClear'),
+        subtitle: t('title.generation', { n: pad2(s.generation) }),
         rows: [
           [t('result.battles'), String(s.results.length)],
           [t('result.total'), formatTime(s.totalTime)],
           [t('result.hits'), String(s.results.reduce((n, x) => n + x.hits, 0))],
           [t('result.hp'), String(s.lastResult?.hpLeft ?? 0)],
         ],
-        items: [{ label: t('btn.restart'), action: 'restart' }],
+        items: [{ label: t('btn.title'), action: 'title' }],
         hint: [],
       };
     case 'BATTLE':
+    case 'REWARD':
       return null;
   }
 }
@@ -141,14 +155,17 @@ export interface MenuLayout {
   title: TextLine;
   subtitle: TextLine | null;
   rows: { label: TextLine; value: TextLine }[];
-  items: { rect: Rect; text: TextLine }[];
+  /** Visible items; `index` points into `spec.items`. */
+  items: { rect: Rect; text: TextLine; index: number }[];
+  /** "..." marks when the list scrolls past the window. */
+  more: TextLine[];
   hint: TextLine[];
   /** Base pixel scale for this canvas size. */
   s: number;
 }
 
 /** Positions of everything on a W×H CRT canvas. */
-export function menuLayout(spec: MenuSpec, W: number, H: number): MenuLayout {
+export function menuLayout(spec: MenuSpec, W: number, H: number, cursor = 0): MenuLayout {
   const s = Math.max(1, Math.floor(W / 120));
   const M = 6 * s;
   const centered = (text: string, y: number, scale: number): TextLine => ({
@@ -180,12 +197,19 @@ export function menuLayout(spec: MenuSpec, W: number, H: number): MenuLayout {
   if (rows.length) y += 6 * s;
 
   const itemH = 13 * s;
-  const items = spec.items.map((item) => {
+  const count = spec.items.length;
+  const first = Math.max(0, Math.min(count - MENU_VISIBLE, cursor - Math.floor(MENU_VISIBLE / 2)));
+  const shown = spec.items.slice(first, first + MENU_VISIBLE);
+  const more: TextLine[] = [];
+  if (first > 0) more.push(centered('...', y - 4 * s, s));
+  const items = shown.map((item, k) => {
     const rect: Rect = { x: M, y, w: W - 2 * M, h: itemH };
-    const text = centered(item.label.toUpperCase(), y + Math.round((itemH - GLYPH_H * s) / 2), s);
+    const label = item.label.toUpperCase();
+    const text = centered(label, y + Math.round((itemH - GLYPH_H * s) / 2), fit(label, s));
     y += itemH + 3 * s;
-    return { rect, text };
+    return { rect, text, index: first + k };
   });
+  if (first + shown.length < count) more.push(centered('...', y - 2 * s, s));
 
   const hintScale = Math.max(1, s - 1);
   const lines = spec.hint.flatMap((h) => wrapText(h.toUpperCase(), Math.floor((W - 2 * M) / (6 * hintScale))));
@@ -196,10 +220,11 @@ export function menuLayout(spec: MenuSpec, W: number, H: number): MenuLayout {
     return line;
   });
 
-  return { title, subtitle, rows, items, hint, s };
+  return { title, subtitle, rows, items, more, hint, s };
 }
 
 /** Index of the item under a CRT-canvas point, or -1. */
 export function menuItemAt(layout: MenuLayout, x: number, y: number): number {
-  return layout.items.findIndex(({ rect }) => x >= rect.x && x < rect.x + rect.w && y >= rect.y && y < rect.y + rect.h);
+  const hit = layout.items.find(({ rect }) => x >= rect.x && x < rect.x + rect.w && y >= rect.y && y < rect.y + rect.h);
+  return hit ? hit.index : -1;
 }
