@@ -39,7 +39,7 @@ Before every commit: `npm test` and `npm run build` must pass. Pushing to `main`
 ```
 src/sim/      pure simulation: no DOM, no Three.js — World, Player, enemies, attacks, chips, gauge
 src/app/      Session: title → 4 battles (HP carries over) → result/defeat/complete, pause
-src/render/   Three.js views; read sim state, never mutate it
+src/render/   battle view (BATTLE_VISUAL.md): grid + cell states, procedural sprites, FX, palette pass; reads sim state, never mutates it
 src/terminal/ 3D physical terminal: CRT (battle render target + HUD/menu canvas), controls, chip rail, tray
 src/core/     fixed-step loop, seeded RNG, input (commands, swipe, keyboard, browser-gesture guards)
 src/data/     battles, chips, folders, enemy looks — content is data, not code
@@ -56,6 +56,7 @@ Invariants:
 - **Determinism.** All sim randomness uses `world.rngFolder` / `world.rngAi` (seeded, forked streams). No `Math.random()` in `src/sim`. Session derives a seed per battle and per retry.
 - **Enemies** extend `Enemy` (`src/sim/enemies/enemyBase.ts`), act only through `EnemyContext`, register in `factory.ts`, and are placed in `data/battles.ts`. Lane attacks implement `LaneMover` so FX can interpolate them.
 - **New tunables** go into the right group in `tuning.ts`; the debug panel picks them up automatically (add a slider range in `RANGES` if the auto range is wrong).
+- **Battle palette.** Battle materials emit a signal, not a colour: G = phosphor, R = red, B = accent (`render/palette.ts`); the palette pass maps them to the three colours with Bayer dithering. No text in battle: HUD shows only HP segments, damage numbers and menus.
 - **New chips:** add to `data/chips.ts` (+ pattern in `sim/chips/patterns.ts`), strings to `i18n/en.ts`, and a test in `tests/chipUse.test.ts`.
 
 - **The terminal only reads** sim/session state; it changes them only through `InputState`, `world.custom*()` and `Session` actions. Its mode is derived from `session.screen` + `world.state`, never stored.
@@ -74,7 +75,7 @@ Comments cite GDD sections (`// GDD §8.2`). Match the surrounding style: short 
 
 ## Verifying in the browser
 
-- Dev-only handle: `window.__glorp` (`world`, `session`, `input`, `loop`, `sceneRenderer`, `tuning`, `cheats`, `startBattle`).
+- Dev-only handle: `window.__glorp` (`world`, `session`, `input`, `loop`, `sceneRenderer` / `battleView`, `terminal`, `tuning`, `cheats`, `startBattle`).
 - URL params: `?debug=1&seed=123&battle=3&folder=p1&god=1&timescale=0.5` (`battle=` skips the title); terminal: `?hitzones=1&rscale=400&crtres=240x320&bench=1`.
 - Drive the terminal with synthetic `PointerEvent`s on `#terminal-canvas`; zone rects are in `__glorp.terminal.layout.zones` (CSS px).
 - Do not run `?bench=1` or CPU-throttled measurements unless the user asks.

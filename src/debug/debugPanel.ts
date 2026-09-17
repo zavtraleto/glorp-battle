@@ -9,6 +9,7 @@ import {
 import { events } from '../core/events';
 import type { FixedStepClock } from '../core/loop';
 import { CHIPS, type ChipId } from '../data/chips';
+import type { DebugCellState } from '../render/cellStates';
 import type { Cheats } from '../sim/world';
 
 export interface DebugActions {
@@ -24,6 +25,11 @@ export interface DebugActions {
   fillGauge(): void;
   openCustom(): void;
   giveChip(id: ChipId): void;
+  /** Battle field look (BATTLE_VISUAL.md §10). */
+  setCellState(x: number, y: number, state: DebugCellState | 'NONE'): void;
+  clearCellStates(): void;
+  demoCellStates(): void;
+  rerollEnemies(): void;
 }
 
 // Slider ranges for numeric tunables; anything not listed gets an auto range.
@@ -131,6 +137,17 @@ export class DebugPanel {
     cf.add({ set: () => a.setPlayerHp(hp.value) }, 'set').name('set player HP');
     cf.add({ retry: () => a.restart({}) }, 'retry').name('restart battle');
     cf.close();
+
+    const ff = this.gui.addFolder('Field');
+    const cell = { x: 1, y: 1, state: 'BROKEN' as DebugCellState | 'NONE' };
+    ff.add(cell, 'x', 0, 2, 1).name('cell x');
+    ff.add(cell, 'y', 0, 5, 1).name('cell y');
+    ff.add(cell, 'state', ['BROKEN', 'EMPTY', 'OBJECT', 'NONE']).name('state');
+    ff.add({ apply: () => a.setCellState(cell.x, cell.y, cell.state) }, 'apply').name('apply to cell');
+    ff.add({ clear: () => a.clearCellStates() }, 'clear').name('clear cell states');
+    ff.add({ demo: () => a.demoCellStates() }, 'demo').name('demo all states');
+    ff.add({ reroll: () => a.rerollEnemies() }, 'reroll').name('new enemy looks');
+    ff.close();
   }
 
   private buildTuning(): void {

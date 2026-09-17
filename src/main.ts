@@ -16,6 +16,10 @@ import { t } from './i18n';
 import { SceneRenderer } from './render/scene';
 import type { Cheats } from './sim/world';
 import { Terminal } from './terminal/terminal';
+import { ENEMY_SEEDS } from './data/enemies';
+import { clearCreatureCache } from './render/actors';
+import { cellKey } from './render/cellStates';
+import { COLS } from './sim/grid';
 
 function byId(id: string): HTMLElement {
   const e = document.getElementById(id);
@@ -224,6 +228,28 @@ const panel = new DebugPanel(loop.clock, {
     const w = session.world;
     for (const e of w.enemies) e.forceAttack(w.tick);
   },
+  setCellState: (x, y, state) => {
+    const key = cellKey(x, y, COLS);
+    if (state === 'NONE') sceneRenderer.field.overrides.delete(key);
+    else sceneRenderer.field.overrides.set(key, state);
+  },
+  clearCellStates: () => sceneRenderer.field.overrides.clear(),
+  demoCellStates: () => {
+    const f = sceneRenderer.field;
+    f.overrides.clear();
+    f.overrides.set(cellKey(0, 0, COLS), 'BROKEN');
+    f.overrides.set(cellKey(2, 0, COLS), 'EMPTY');
+    f.overrides.set(cellKey(1, 2, COLS), 'OBJECT');
+    f.overrides.set(cellKey(0, 5, COLS), 'BROKEN');
+    const w = session.world;
+    f.markAttack([{ x: 2, y: 3 }], w.tick, 'accent');
+    f.markAttack([{ x: 0, y: 3 }], w.tick, 'red');
+  },
+  rerollEnemies: () => {
+    for (const kind of Object.keys(ENEMY_SEEDS) as (keyof typeof ENEMY_SEEDS)[]) ENEMY_SEEDS[kind] = randomSeed();
+    clearCreatureCache();
+    sceneRenderer.reset();
+  },
 });
 panel.syncSeed(session.seed, session.battleIndex);
 
@@ -274,6 +300,7 @@ if (import.meta.env.DEV) {
       input,
       loop,
       sceneRenderer,
+      battleView: sceneRenderer,
       terminal,
       perf,
       tuning,

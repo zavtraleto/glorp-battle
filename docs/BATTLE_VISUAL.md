@@ -1,6 +1,6 @@
 # Glorp Battle — визуал поля боя «CRT Occult Vector»
 
-Версия 1.0 · 2026-09-17 · этап T2.5 (см. [TERMINAL.md §11](TERMINAL.md)) · статус: утверждено к разработке
+Версия 1.0 · 2026-09-17 · этап T2.5 (см. [TERMINAL.md §11](TERMINAL.md)) · статус: V1–V5 готовы (2026-09-17)
 
 Как выглядит бой на экране CRT терминала: поле, клетки, игрок, враги, атаки, HP и урон. Правила боя — [GDD.md](GDD.md), терминал вокруг экрана — [TERMINAL.md](TERMINAL.md). Решения из обсуждения 2026-09-17 помечены `[решение 2026-09-17]`, стартовые значения — `[оценка]`.
 
@@ -126,8 +126,8 @@ BROKEN / EMPTY / OBJECT пока только визуал: включаются
 
 ## 10. Отладка
 
-- DBG → `field`: выбрать клетку (x, y) и состояние → применить / очистить все; «демо всех состояний»; перегенерировать сиды врагов; координаты клеток.
-- `window.__glorp.battleView`.
+- DBG → Field: клетка (x, y) и состояние BROKEN / EMPTY / OBJECT / NONE → apply; clear cell states; demo all states (BROKEN, EMPTY, OBJECT и две атаки); new enemy looks — новые сиды врагов (до перезагрузки). Координаты клеток — DBG → View.
+- `window.__glorp.battleView` — `SceneRenderer` (`field.overrides`, `reset()`).
 
 ## 11. Тесты
 
