@@ -225,7 +225,7 @@ export class ChipTray {
   }
 
   private addCell(chip: RailChip, r: { cx: number; cy: number }, scale: number): Cell {
-    const cart = new Cartridge(chip.defId, chip.code);
+    const cart = new Cartridge(chip.defId, chip.code, chip.legacyGen);
     cart.shape(this.texel);
     const home = new THREE.Vector3(r.cx, r.cy, CART_Z);
     cart.object.position.copy(home);

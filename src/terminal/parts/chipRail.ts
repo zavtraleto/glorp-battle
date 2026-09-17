@@ -17,6 +17,7 @@ export interface RailChip {
   uid: number;
   defId: ChipId;
   code: ChipCode;
+  legacyGen?: number;
 }
 
 export interface RailSyncOptions {
@@ -351,7 +352,7 @@ export class ChipRail {
   }
 
   private makeCart(chip: RailChip, slot: number, phase: 'load' | 'fly', delay: number, from: THREE.Vector3 | null): Cart {
-    const cart = new Cartridge(chip.defId, chip.code);
+    const cart = new Cartridge(chip.defId, chip.code, chip.legacyGen);
     cart.shape(this.texel, this.maxH);
     cart.faceMat.color.copy(COLOR.faceIdle);
     const o = cart.object;

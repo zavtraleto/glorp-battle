@@ -38,8 +38,9 @@ export class Cartridge {
   constructor(
     readonly defId: ChipId,
     readonly code: ChipCode,
+    legacyGen?: number,
   ) {
-    this.faceMat = new THREE.MeshBasicMaterial({ map: chipFaceTexture(defId, code) });
+    this.faceMat = new THREE.MeshBasicMaterial({ map: chipFaceTexture(defId, code, legacyGen) });
     this.body = new THREE.Mesh(shared.body, shared.bodyMat);
     this.face = new THREE.Mesh(shared.plane, this.faceMat);
     this.clip = new THREE.Mesh(shared.box, shared.clipMat);

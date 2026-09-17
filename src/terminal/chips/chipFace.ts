@@ -25,13 +25,15 @@ const COLOR = {
   codeText: '#141414',
   contact: '#c9a24a',
   contactShade: '#6b5424',
+  legacy: '#ff6b6b',
+  legacyBack: '#2a0d0d',
 };
 
 const ICON_SCALE = 2;
 const cache = new Map<string, THREE.CanvasTexture>();
 
-export function chipFaceTexture(defId: ChipId, code: ChipCode): THREE.CanvasTexture {
-  const key = `${defId}:${code}`;
+export function chipFaceTexture(defId: ChipId, code: ChipCode, legacyGen?: number): THREE.CanvasTexture {
+  const key = `${defId}:${code}:${legacyGen ?? ''}`;
   let tex = cache.get(key);
   if (tex) return tex;
 
@@ -76,6 +78,14 @@ export function chipFaceTexture(defId: ChipId, code: ChipCode): THREE.CanvasText
   ctx.fillStyle = group.frame;
   ctx.fillRect(FACE_W - 16, rowY, 11, 11);
   drawText(sink, code, FACE_W - 13, rowY + 2, 1, COLOR.codeText);
+  // Legacy mark: the generation that left this chip (roguelite spec §6.4).
+  if (legacyGen !== undefined) {
+    const mark = `G${String(legacyGen).padStart(2, '0')}`;
+    const mx = Math.round((FACE_W - measureText(mark)) / 2) + 2;
+    ctx.fillStyle = COLOR.legacyBack;
+    ctx.fillRect(mx - 1, rowY + 1, measureText(mark) + 2, 9);
+    drawText(sink, mark, mx, rowY + 2, 1, COLOR.legacy);
+  }
 
   // Gold contacts.
   for (let i = 0; i < 6; i++) {
