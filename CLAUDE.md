@@ -57,6 +57,7 @@ Invariants:
 - **Enemies** extend `Enemy` (`src/sim/enemies/enemyBase.ts`), act only through `EnemyContext`, register in `factory.ts`, and are placed in `data/battles.ts`. Lane attacks implement `LaneMover` so FX can interpolate them.
 - **New tunables** go into the right group in `tuning.ts`; the debug panel picks them up automatically (add a slider range in `RANGES` if the auto range is wrong).
 - **Battle palette.** Battle materials emit a signal, not a colour: G = phosphor, R = red, B = accent (`render/palette.ts`); the palette pass maps them to the three colours with Bayer dithering. No text in battle: HUD shows only HP segments, damage numbers and menus.
+- **Panels live in the sim.** `world.field` owns panel state and ownership; movement, warps and waves ask `field.canStand` / `field.panel`, and anything leaving a cell calls `field.onLeave`. Objects (`world.objects`) sit in `Occupancy` and stop shots.
 - **New chips:** add to `data/chips.ts` (+ pattern in `sim/chips/patterns.ts`), strings to `i18n/en.ts`, and a test in `tests/chipUse.test.ts`.
 
 - **The terminal only reads** sim/session state; it changes them only through `InputState`, `world.custom*()` and `Session` actions. Its mode is derived from `session.screen` + `world.state`, never stored.

@@ -30,6 +30,8 @@ export interface DebugActions {
   clearCellStates(): void;
   demoCellStates(): void;
   rerollEnemies(): void;
+  /** Changes the real panels (roguelite spec §3). */
+  simPanel(x: number, y: number, action: 'crack' | 'break' | 'repair' | 'steal' | 'rock'): void;
 }
 
 // Slider ranges for numeric tunables; anything not listed gets an auto range.
@@ -145,6 +147,9 @@ export class DebugPanel {
     ff.add(cell, 'y', 0, 5, 1).name('cell y');
     ff.add(cell, 'state', ['BROKEN', 'EMPTY', 'OBJECT', 'NONE']).name('state');
     ff.add({ apply: () => a.setCellState(cell.x, cell.y, cell.state) }, 'apply').name('apply to cell');
+    const sim = { action: 'crack' as 'crack' | 'break' | 'repair' | 'steal' | 'rock' };
+    ff.add(sim, 'action', ['crack', 'break', 'repair', 'steal', 'rock']).name('sim action');
+    ff.add({ run: () => a.simPanel(cell.x, cell.y, sim.action) }, 'run').name('apply to sim');
     ff.add({ clear: () => a.clearCellStates() }, 'clear').name('clear cell states');
     ff.add({ demo: () => a.demoCellStates() }, 'demo').name('demo all states');
     ff.add({ reroll: () => a.rerollEnemies() }, 'reroll').name('new enemy looks');

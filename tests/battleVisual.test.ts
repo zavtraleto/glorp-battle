@@ -8,6 +8,8 @@ import { bayer4, paletteIndex, signal } from '../src/render/palette';
 import { fitView } from '../src/render/viewCamera';
 import { texelScale } from '../src/render/pixelSprite';
 import { PLAYER_ROWS, playerBitmap } from '../src/render/playerSprite';
+import type { Panel } from '../src/sim/field';
+import { sideOfRow, type Side } from '../src/sim/grid';
 
 describe('palette', () => {
   it('has a 4×4 Bayer matrix with 16 distinct steps', () => {
@@ -59,6 +61,8 @@ function inputs(over: Partial<CellInputs> = {}): CellInputs {
     attackTicks: 9,
     afterTicks: 12,
     spawnTicks: 36,
+    panels: Array.from({ length: 18 }, (_, i) => ({ panel: 'NORMAL' as Panel, owner: sideOfRow(Math.floor(i / 3)) as Side })),
+    objects: [],
     ...over,
   };
 }
@@ -84,9 +88,23 @@ describe('cellStates', () => {
       }),
     );
     expect(s[k(0, 3)]!.state).toBe('DANGER');
-    expect(s[k(1, 1)]).toEqual({ state: 'ATTACK', tone: 'accent', age: 5 });
-    expect(s[k(2, 1)]).toEqual({ state: 'AFTER', tone: 'red', age: 6 });
+    expect(s[k(1, 1)]).toEqual({ state: 'ATTACK', tone: 'accent', age: 5, owner: 'enemy', cracked: false });
+    expect(s[k(2, 1)]).toEqual({ state: 'AFTER', tone: 'red', age: 6, owner: 'enemy', cracked: false });
     expect(s[k(0, 0)]!.state).toBe('NORMAL');
+  });
+
+  it('reads panels, owners and objects from the simulation', () => {
+    const base = inputs();
+    const panels = base.panels.map((p) => ({ ...p }));
+    panels[k(0, 3)] = { panel: 'BROKEN', owner: 'player' };
+    panels[k(2, 3)] = { panel: 'CRACKED', owner: 'player' };
+    panels[k(1, 2)] = { panel: 'NORMAL', owner: 'player' };
+    const s = cellStates({ ...base, panels, objects: [{ x: 2, y: 5 }] });
+    expect(s[k(0, 3)]!.state).toBe('BROKEN');
+    expect(s[k(2, 3)]).toMatchObject({ state: 'NORMAL', cracked: true });
+    expect(s[k(1, 2)]!.owner).toBe('player');
+    expect(s[k(1, 1)]!.owner).toBe('enemy');
+    expect(s[k(2, 5)]!.state).toBe('OBJECT');
   });
 
   it('applies the priority order', () => {
@@ -105,7 +123,7 @@ describe('cellStates', () => {
     expect(s[k(1, 4)]!.state).toBe('DANGER'); // danger beats the player highlight
     expect(s[k(2, 2)]!.state).toBe('BROKEN'); // debug break beats an attack
     expect(s[k(0, 5)]!.state).toBe('EMPTY');
-    expect(s[k(0, 0)]).toEqual({ state: 'SPAWN', tone: null, age: 10 });
+    expect(s[k(0, 0)]).toMatchObject({ state: 'SPAWN', tone: null, age: 10 });
     expect(s[k(1, 3)]!.state).toBe('OBJECT');
   });
 

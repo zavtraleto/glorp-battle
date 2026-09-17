@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { secondsToTicks, tuning } from '../config/tuning';
-import { COLS, ROWS, sideOfRow, type Cell } from '../sim/grid';
+import { COLS, ROWS, type Cell } from '../sim/grid';
 import type { World } from '../sim/world';
 import { LineBatch, QuadBatch } from './batch';
 import { NO_SIGNAL, type GridSignal } from './battleSignals';
@@ -108,6 +108,8 @@ export class FieldView {
       attacks: this.marks,
       spawns,
       overrides: this.overrides,
+      panels: world.field.snapshot(),
+      objects: world.objects.filter((o) => o.alive),
       attackTicks: secondsToTicks(v.ATTACK_CELL_TIME),
       afterTicks: secondsToTicks(v.AFTER_TIME),
       spawnTicks: secondsToTicks(v.SPAWN_TIME),
@@ -142,7 +144,7 @@ export class FieldView {
         const state = fx.broken(x, y) && view.state !== 'EMPTY' ? 'BROKEN' : view.state;
         const flash = fx.flash(x, y);
         // Enemy territory is drawn in red (BATTLE_VISUAL.md §3).
-        const enemySide = sideOfRow(y) === 'enemy';
+        const enemySide = view.owner === 'enemy';
         const line = fx.red || enemySide ? col.red : col.phosphor;
         const dim = enemySide ? col.dimRed : col.dim;
         const base = flash > 0 ? col.tmp.copy(col.accent).multiplyScalar(Math.min(1, flash)) : line;
@@ -196,9 +198,10 @@ export class FieldView {
             this.outline(c, cellHw, cellHd, flash > 0 || fx.red ? base : dim);
             break;
         }
+        if (view.cracked && state !== 'BROKEN' && state !== 'EMPTY') this.crackMark(c, cellHw, cellHd, line);
       }
     }
-    this.divider(fx.reveal(Math.floor(ROWS / 2)));
+    this.borders(views, fx);
 
     this.lines.end();
     this.fills.end();
@@ -261,15 +264,40 @@ export class FieldView {
     for (const x of xs) for (const z of zs) this.lines.line(x, 0, z, x, h, z, color);
   }
 
-  /** Red dashed line between the two territories. */
-  private divider(reveal: number): void {
-    if (reveal <= 0) return;
-    const z = (ROWS / 2 - (ROWS - 1) / 2 - 0.5) * CELL_DEPTH;
-    const half = (COLS * CELL_WIDTH) / 2;
-    const step = (half * 2) / DASHES;
-    for (let i = 0; i < DASHES; i++) {
-      const x0 = -half + i * step + step * 0.2;
-      this.lines.line(x0, LINE_Y, z, x0 + step * 0.6 * reveal, LINE_Y, z, col.red);
+  /** Zigzag across a cracked panel. */
+  private crackMark(c: THREE.Vector3, hw: number, hd: number, color: THREE.Color): void {
+    const pts: [number, number][] = [
+      [-0.8, -0.7],
+      [-0.2, -0.1],
+      [0.15, -0.35],
+      [0.4, 0.3],
+      [0.85, 0.75],
+    ];
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const [ax, az] = pts[i] as [number, number];
+      const [bx, bz] = pts[i + 1] as [number, number];
+      this.lines.line(c.x + ax * hw, LINE_Y, c.z + az * hd, c.x + bx * hw, LINE_Y, c.z + bz * hd, color);
+    }
+  }
+
+  /** Red dashes where ownership changes between a cell and the one in front of it. */
+  private borders(views: readonly CellView[], fx: GridSignal): void {
+    const dashes = DASHES / COLS;
+    for (let y = 1; y < ROWS; y++) {
+      const reveal = Math.min(fx.reveal(y), fx.reveal(y - 1));
+      if (reveal <= 0) continue;
+      const z = (y - ROWS / 2) * CELL_DEPTH;
+      for (let x = 0; x < COLS; x++) {
+        const a = views[cellKey(x, y, COLS)] as CellView;
+        const b = views[cellKey(x, y - 1, COLS)] as CellView;
+        if (a.owner === b.owner) continue;
+        const left = (x - COLS / 2) * CELL_WIDTH;
+        const step = CELL_WIDTH / dashes;
+        for (let i = 0; i < dashes; i++) {
+          const x0 = left + i * step + step * 0.2;
+          this.lines.line(x0, LINE_Y, z, x0 + step * 0.6 * reveal, LINE_Y, z, col.red);
+        }
+      }
     }
   }
 }

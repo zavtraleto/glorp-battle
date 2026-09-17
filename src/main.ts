@@ -233,6 +233,15 @@ const panel = new DebugPanel(loop.clock, {
     if (state === 'NONE') sceneRenderer.field.overrides.delete(key);
     else sceneRenderer.field.overrides.set(key, state);
   },
+  simPanel: (x, y, action) => {
+    const w = session.world;
+    const occupied = !w.occupancy.isFree(x, y);
+    if (action === 'crack') w.field.crack(x, y);
+    else if (action === 'break') w.field.breakPanel(x, y, w.tick, occupied);
+    else if (action === 'repair') w.field.repair(x, y);
+    else if (action === 'steal') w.field.setOwner(x, y, w.field.owner(x, y) === 'enemy' ? 'player' : 'enemy', w.tick);
+    else w.placeObject('rock', x, y, w.field.owner(x, y) ?? 'player');
+  },
   clearCellStates: () => sceneRenderer.field.overrides.clear(),
   demoCellStates: () => {
     const f = sceneRenderer.field;
