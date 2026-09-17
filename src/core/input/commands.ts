@@ -1,4 +1,4 @@
-// Abstract input (GDD §12.3). Devices write here; the simulation reads it once per tick.
+// Abstract input (GDD §12.1). Devices write here; the simulation reads it once per tick.
 
 export type Dir = 'up' | 'down' | 'left' | 'right';
 
@@ -16,7 +16,7 @@ export type Command =
 
 export class InputState {
   private queue: Command[] = [];
-  /** Direction held on the keyboard (swipes never hold, GDD §12.1). */
+  /** Direction held on the keyboard (trackball gestures never hold, GDD §12). */
   private held: Dir | null = null;
 
   push(cmd: Command): void {

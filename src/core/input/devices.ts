@@ -18,7 +18,7 @@ function isTextField(target: EventTarget | null): boolean {
   return target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement;
 }
 
-/** Keys that use the next chip (GDD §12.2) and open the Custom Screen (MMBN1: L / R). */
+/** Keys that use the next chip (GDD §12) and open the Custom Screen (MMBN1: L / R). */
 const CHIP_KEYS = new Set(['Space', 'KeyF']);
 const CUSTOM_KEYS = new Set(['KeyQ', 'KeyE']);
 

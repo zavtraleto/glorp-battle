@@ -1,6 +1,6 @@
 import type { Dir } from './commands';
 
-// Swipe recognition (GDD §12.1). Pure logic, no DOM: fed with pointer positions.
+// Swipe recognition for the trackball (TERMINAL.md §5.1). Pure logic, no DOM: fed with pointer positions.
 // One gesture = one step: the direction fires as soon as the finger travels
 // `threshold` px (dominant axis), and the rest of the gesture is ignored until
 // the finger is lifted.

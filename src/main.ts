@@ -53,7 +53,7 @@ blockBrowserGestures();
 // A back gesture / button pauses the battle instead of leaving the game.
 trapBackNavigation(() => session.pause());
 
-// ---------- Screen wake lock (GDD §12.1) ----------
+// ---------- Screen wake lock (GDD §12) ----------
 type WakeLockLike = { release(): Promise<void> };
 let wakeLock: WakeLockLike | null = null;
 async function keepAwake(): Promise<void> {
