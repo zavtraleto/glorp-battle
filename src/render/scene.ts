@@ -3,9 +3,11 @@ import { tuning } from '../config/tuning';
 import type { SimEvent } from '../sim/events';
 import type { World } from '../sim/world';
 import { EnemyView, PlayerView } from './actors';
-import { FieldCamera } from './camera';
 import { FieldView, cellToWorld } from './field';
 import { FxView } from './fx';
+import { cellKey } from './cellStates';
+import { fitView } from './viewCamera';
+import { COLS } from '../sim/grid';
 
 export interface ScreenPoint {
   x: number;
@@ -14,7 +16,8 @@ export interface ScreenPoint {
 
 const tmp = new THREE.Vector3();
 
-export const BATTLE_CLEAR_COLOR = 0x0b0e14;
+/** Signal black: the palette pass turns it into the background colour. */
+export const BATTLE_CLEAR_COLOR = 0x000000;
 
 export interface SceneRendererOptions {
   renderer: THREE.WebGLRenderer;
@@ -24,34 +27,39 @@ export class SceneRenderer {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
   readonly field: FieldView;
-  readonly fieldCamera: FieldCamera;
+  readonly camera = new THREE.PerspectiveCamera();
   readonly playerView = new PlayerView();
   readonly fx = new FxView();
   private readonly enemyViews = new Map<number, EnemyView>();
-  private readonly target = new THREE.Vector3(0, 0, 0);
+  private readonly corners: THREE.Vector3[] = [];
+  private readonly spawns = new Map<number, number>();
   private lastCameraKey = '';
 
   constructor(opts: SceneRendererOptions) {
     this.renderer = opts.renderer;
 
-    this.field = new FieldView(tuning.render.PANEL_GAP);
+    this.field = new FieldView();
     this.scene.add(this.field.group);
-    this.fieldCamera = new FieldCamera(this.field.bounds);
+    // Fit the floor of the field plus headroom above the far edge for enemy sprites;
+    // raised near corners would only widen the frame.
+    const { min, max } = this.field.bounds;
+    for (const x of [min.x, max.x]) {
+      this.corners.push(new THREE.Vector3(x, 0, min.z), new THREE.Vector3(x, 0, max.z), new THREE.Vector3(x, max.y, min.z));
+    }
     this.scene.add(this.playerView.sprite, this.fx.group);
   }
 
   private fitCamera(w: number, h: number): void {
-    const tilt = tuning.render.CAMERA_TILT_DEG;
-    const key = `${tilt}|${w}|${h}`;
+    const v = tuning.battleVisual;
+    const key = `${v.VIEW_PITCH}|${v.VIEW_FOV}|${v.VIEW_FILL}|${w}|${h}`;
     if (key === this.lastCameraKey) return;
     this.lastCameraKey = key;
-    this.fieldCamera.setTilt(tilt, this.target);
-    this.fieldCamera.fit({ width: w, height: h, top: 0, regionHeight: h, fill: 0.94 });
+    fitView(this.camera, this.corners, { pitchDeg: v.VIEW_PITCH, fovDeg: v.VIEW_FOV, aspect: w / h, fill: v.VIEW_FILL });
   }
 
   /** Normalized point (0..1, top-left origin) in the last render target for a world point. */
   projectToTarget(v: THREE.Vector3): ScreenPoint {
-    tmp.copy(v).project(this.fieldCamera.camera);
+    tmp.copy(v).project(this.camera);
     return { x: (tmp.x + 1) / 2, y: (1 - tmp.y) / 2 };
   }
 
@@ -74,6 +82,10 @@ export class SceneRenderer {
 
   handleEvent(e: SimEvent, world: World): void {
     this.fx.handleEvent(e, world);
+    const tick = world.tick;
+    if (e.type === 'chipEffect') this.field.markAttack(e.cells, tick, 'accent');
+    else if (e.type === 'explosion') this.field.markAttack(e.cells, tick, 'accent');
+    else if (e.type === 'enemyShot') this.field.markAttack([{ x: e.x, y: e.toY }], tick, 'red');
   }
 
   /** Drops all per-battle views (called when a new World is created). */
@@ -84,6 +96,7 @@ export class SceneRenderer {
     }
     this.enemyViews.clear();
     this.fx.clear();
+    this.field.clear();
   }
 
   private syncEnemies(world: World, alpha: number, dt: number): void {
@@ -110,8 +123,19 @@ export class SceneRenderer {
     this.playerView.update(world.player, world.tick, alpha, dt, world.activeChip !== null);
     this.syncEnemies(world, alpha, dt);
     this.fx.update(world, alpha);
-    const pulse = 0.5 + 0.5 * Math.sin((world.tick + alpha) * 0.5);
-    this.field.setDanger(world.state === 'ACTION' ? world.dangerCells() : [], pulse);
+    // Moving enemy attacks light up the cell they are in.
+    for (const a of world.attacks) {
+      if (a.kind === 'shockwave' || a.kind === 'heatshot') {
+        const m = a as unknown as { x: number; y: number };
+        this.field.markAttack([{ x: m.x, y: m.y }], world.tick, 'red');
+      }
+    }
+    // Spawn markers under enemies during the battle intro (clock: ui ticks).
+    this.spawns.clear();
+    if (world.state === 'BATTLE_INTRO') {
+      for (const e of world.enemies) this.spawns.set(cellKey(e.x, e.y, COLS), world.stateElapsed);
+    }
+    this.field.update(world, alpha, this.spawns);
   }
 
   /** Renders the battle into a render target (the CRT), field fitted to the whole target. */
@@ -122,7 +146,7 @@ export class SceneRenderer {
     this.prepare(world, alpha, dt);
     this.renderer.setRenderTarget(target);
     this.renderer.setClearColor(BATTLE_CLEAR_COLOR, 1);
-    this.renderer.render(this.scene, this.fieldCamera.camera);
+    this.renderer.render(this.scene, this.camera);
     this.renderer.setRenderTarget(null);
   }
 }

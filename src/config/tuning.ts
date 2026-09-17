@@ -86,9 +86,29 @@ export const DEFAULT_TUNING = {
     /** Interval between further repeated steps while the direction stays held. */
     HOLD_REPEAT: 0.2,
   },
-  render: {
-    CAMERA_TILT_DEG: 45,
-    PANEL_GAP: 0.06,
+  /** Battle field look, "CRT Occult Vector" (docs/BATTLE_VISUAL.md §9). */
+  battleVisual: {
+    /** Camera pitch below the horizon and vertical field of view, degrees. */
+    VIEW_PITCH: 38,
+    VIEW_FOV: 50,
+    /** Share of the CRT frame the field may fill. */
+    VIEW_FILL: 0.92,
+    /** Gap between cell outlines (share of a cell). */
+    CELL_GAP: 0.08,
+    /** Brightness of idle grid lines (dithered below 1). */
+    GRID_DIM: 0.75,
+    /** Fill brightness of the player's cell. */
+    ACTIVE_FILL: 0.25,
+    /** Wanted texel size of creature sprites, CRT pixels (rounded to a whole number). */
+    SPRITE_TEXEL_TARGET: 1.4,
+    DANGER_PULSE_HZ: 6,
+    /** Hit stripe, then the flickering afterglow, seconds. */
+    ATTACK_CELL_TIME: 0.15,
+    AFTER_TIME: 0.2,
+    /** Spawn markers at the battle intro, seconds. */
+    SPAWN_TIME: 0.6,
+    HP_SEGMENTS: 8,
+    DAMAGE_SCALE: 3,
   },
   /** Physical terminal NET-01 (docs/TERMINAL.md §17). */
   terminal: {
@@ -114,12 +134,13 @@ export const DEFAULT_TUNING = {
     PAUSE_ZONE_W: 0.16,
     /** Vertical field of view, degrees. */
     CAMERA_FOV: 22,
-    CRT_SCANLINES: 0.35,
-    CRT_CURVATURE: 0.08,
-    CRT_BLEED: 0.5,
+    /** Glass effects are post-processing on top of the base look; off by default (BATTLE_VISUAL.md §2). */
+    CRT_SCANLINES: 0,
+    CRT_CURVATURE: 0,
+    CRT_BLEED: 0,
     /** Previous-frame persistence; 0 disables the ghosting pass entirely. */
-    CRT_GHOSTING: 0.25,
-    CRT_FLASH_TIME: 0.12,
+    CRT_GHOSTING: 0,
+    CRT_FLASH_TIME: 0,
     /** Button travel when pressed, world units. */
     BUTTON_PRESS_DEPTH: 0.12,
     /** Trackball rotation per CSS px of drag, radians. */
