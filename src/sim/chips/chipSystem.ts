@@ -108,14 +108,30 @@ export class ChipSystem {
   }
 
   select(slot: number): boolean {
+    return this.selectAt(slot, this.selection.length);
+  }
+
+  /**
+   * Inserts a hand chip at a selection position; later chips move right
+   * (TERMINAL.md §6.4). Order never affects validity.
+   */
+  selectAt(slot: number, index: number): boolean {
     if (!this.canSelect(slot)) return false;
-    this.selection.push(slot);
+    const at = Math.max(0, Math.min(this.selection.length, Math.floor(index)));
+    this.selection.splice(at, 0, slot);
+    return true;
+  }
+
+  /** Removes any selected chip; a subset of a valid selection stays valid. */
+  unselect(index: number): boolean {
+    if (index < 0 || index >= this.selection.length) return false;
+    this.selection.splice(index, 1);
     return true;
   }
 
   /** Removes the last selected chip (MMBN1: B cancels the last choice). */
   cancelLast(): boolean {
-    return this.selection.pop() !== undefined;
+    return this.unselect(this.selection.length - 1);
   }
 
   /** OK: selected chips become the queue, in selection order (GDD §7.4). */

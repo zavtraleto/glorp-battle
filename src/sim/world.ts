@@ -170,6 +170,15 @@ export class World implements EnemyContext, AttackContext {
     return this.state === 'CUSTOM' && this.chips.select(slot);
   }
 
+  /** Inserts a hand chip at a selection position (physical chip rail, TERMINAL.md §6.4). */
+  customSelectAt(slot: number, index: number): boolean {
+    return this.state === 'CUSTOM' && this.chips.selectAt(slot, index);
+  }
+
+  customUnselect(index: number): boolean {
+    return this.state === 'CUSTOM' && this.chips.unselect(index);
+  }
+
   customCancel(): boolean {
     return this.state === 'CUSTOM' && this.chips.cancelLast();
   }

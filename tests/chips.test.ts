@@ -102,6 +102,43 @@ describe('ChipSystem', () => {
     expect(s.selection).toEqual([2]);
   });
 
+  it('inserts a chip at a position; later chips shift right (TERMINAL.md §6.4)', () => {
+    const s = make();
+    s.openTurn();
+    s.hand = s.chips.filter((c) => c.defId === 'cannon').slice(0, 5);
+    expect(s.selectAt(3, 0)).toBe(true);
+    expect(s.selectAt(1, 0)).toBe(true);
+    expect(s.selectAt(4, 1)).toBe(true);
+    expect(s.selection).toEqual([1, 4, 3]);
+    // Past the end → appended; already selected → refused.
+    expect(s.selectAt(0, 9)).toBe(true);
+    expect(s.selection).toEqual([1, 4, 3, 0]);
+    expect(s.selectAt(0, 0)).toBe(false);
+  });
+
+  it('insertion keeps the compatibility rule and the 5-chip limit', () => {
+    const s = make();
+    s.openTurn();
+    const cannon = s.chips.find((c) => c.defId === 'cannon')!;
+    const sword = s.chips.find((c) => c.defId === 'sword')!;
+    s.hand = [cannon, sword, null, null, null];
+    expect(s.selectAt(0, 0)).toBe(true);
+    expect(s.selectAt(1, 0)).toBe(false);
+    expect(s.selection).toEqual([0]);
+  });
+
+  it('removes any selected chip; later chips shift left', () => {
+    const s = make();
+    s.openTurn();
+    s.hand = s.chips.filter((c) => c.defId === 'cannon').slice(0, 5);
+    for (const i of [2, 0, 4]) s.select(i);
+    expect(s.unselect(1)).toBe(true);
+    expect(s.selection).toEqual([2, 4]);
+    expect(s.unselect(5)).toBe(false);
+    expect(s.unselect(-1)).toBe(false);
+    expect(s.canSelect(0)).toBe(true);
+  });
+
   it('confirm queues chips in selection order and keeps the rest of the hand in place', () => {
     const s = make();
     s.openTurn();
@@ -277,5 +314,19 @@ describe('battle flow and gauge', () => {
     w.customAdd();
     expect(w.chips.queue).toHaveLength(0);
     expect(w.state).toBe('BATTLE_START');
+  });
+
+  it('inserting and removing chips works only on the Custom Screen', () => {
+    const w = new World({ seed: 1, battleIndex: 1 });
+    expect(w.customSelectAt(0, 0)).toBe(false);
+    run(w, T(tuning.fx.INTRO_TIME));
+    expect(w.state).toBe('CUSTOM');
+    w.chips.hand = w.chips.chips.filter((c) => c.defId === 'cannon').slice(0, 5);
+    expect(w.customSelectAt(2, 0)).toBe(true);
+    expect(w.customSelectAt(1, 0)).toBe(true);
+    expect(w.customUnselect(1)).toBe(true);
+    w.customConfirm();
+    expect(w.chips.queue.map((c) => c.uid)).toEqual([w.chips.chips.filter((c) => c.defId === 'cannon')[1]!.uid]);
+    expect(w.customUnselect(0)).toBe(false);
   });
 });
