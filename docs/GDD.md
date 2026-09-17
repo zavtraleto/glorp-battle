@@ -159,49 +159,75 @@
 
 ## 6. Чипы и папка
 
-### 6.1. Модель данных
+### 6.1. Модель данных [решение 2026-09-17]
+
+Чип — это данные: куда бьёт (`shape`), что делает попадание (`onHit`), что делает с полем (`field`), лечение и невидимость. Подробно — [спека roguelite §4](superpowers/specs/2026-09-17-roguelite-content-design.md), код — `src/data/chips.ts`.
 
 ```ts
 type ChipCode = 'A'|'B'|...|'Z'|'*';
-interface ChipDef {        // тип чипа (справочник)
-  id: 'cannon'|'hicannon'|'sword'|'widesword'|'longsword'|'shotgun'|'minibomb'|'recov50';
-  name: string;            // отображаемое имя
-  power: number | null;    // урон; null для небоевых
-  kind: 'attack'|'support';
-  pattern: PatternId;      // §6.4
-  useTime: number;         // длительность анимации использования, с
-  description: string;
+interface ChipDef {
+  id: ChipId;
+  power: number | null;          // урон; null — без урона
+  kind: 'attack'|'support'|'field';  // support и field срабатывают сразу
+  useTime: 'CANNON'|'SWORD'|'BOMB'|'RECOVER'|'FIELD';  // CHIP_USE_TIME_<группа>
+  codes: ChipCode[];             // возможные коды (награда выбирает один)
+  rarity: 'common'|'uncommon'|'rare';
+  shape: Shape;                  // §6.4
+  onHit?: { push?: true; paralyze?: true; panel?: 'crack'|'break' };
+  field?: 'crackRow'|'crackAll'|'breakEnemy'|'steal'|'repair'|'rock';
+  heal?: number;
+  invis?: true;
 }
-interface ChipInstance {   // конкретная карта в папке
-  uid: number;             // уникален в пределах боя
-  defId: ChipDef['id'];
+interface ChipInstance {         // конкретная карта в папке
+  uid: number;
+  defId: ChipId;
   code: ChipCode;
-  state: 'folder'|'hand'|'selected'|'queued'|'used';
+  state: 'folder'|'hand'|'queued'|'used';
 }
 ```
 
-**Сравнение «одинаковое имя» идёт по `defId`**, а не по строке имени.
+Имена и описания — в `i18n` (`chip.<id>.name` / `.desc`). **Сравнение «одинаковое имя» идёт по `defId`**, а не по строке имени.
 
-### 6.2. Набор чипов MVP [MMBN1]
+### 6.2. Набор чипов [MMBN1]
 
-| Чип (имя в игре) | Оригинал MMBN1 | Урон | Коды в MMBN1 | Шаблон атаки | Приоритет |
+Коды новых чипов (с M-Cannon и ниже) — [оценка]; урон — MMBN1.
+
+| Чип | Оригинал MMBN1 | Урон | Коды | Форма и эффект | Редкость |
 |---|---|---|---|---|---|
-| Cannon | Cannon (#001) | 40 | A B C D E | `lane_hitscan` | P0 |
-| HiCannon | HiCannon (#002) | 80 | F G H I J | `lane_hitscan` | P0 |
-| Sword | Sword (#013) | 80 | B K L P S | `melee_1` | P0 |
-| WideSword | WideSwrd (#014) | 80 | C K M N S | `melee_wide` | P0 |
-| Recover50 | Recov50 (#071) | — (+50 HP) | A C E G L | `self_heal` | P0 |
-| LongSword | LongSwrd (#015) | 80 | D E N O S | `melee_long` | P1 |
-| Shotgun | Shotgun (#004) | 30 | K M N Q R | `lane_hitscan_pierce1` | P1 |
-| MiniBomb | MiniBomb (#009) | 50 | C E J L P | `lob_3` | P1 |
+| Cannon | Cannon (#001) | 40 | A B C D E | `lane` | common |
+| HiCannon | HiCannon (#002) | 80 | F G H I J | `lane` | uncommon |
+| Sword | Sword (#013) | 80 | B K L P S | `near` 1 клетка | common |
+| WideSword | WideSwrd (#014) | 80 | C K M N S | `near` ряд из 3 | uncommon |
+| LongSword | LongSwrd (#015) | 80 | D E N O S | `near` 2 клетки | uncommon |
+| Shotgun | Shotgun (#004) | 30 | K M N Q R | `lane` + клетка за целью | common |
+| MiniBomb | MiniBomb (#009) | 50 | C E J L P | `lob` 3, одна клетка | common |
+| Recover50 | Recov50 (#071) | +50 HP | A C E G L | `self`, лечение | uncommon |
+| M-Cannon | M-Cannon (#003) | 120 | K L M N O | `lane` | rare |
+| AirShot | AirShot | 20 | * | `lane`, отталкивание | common |
+| V-Gun | V-Gun | 30 | D E L M S | `lane` + 2 клетки за целью по диагонали | common |
+| SideGun | SideGun | 30 | A G H R S | `lane` + клетки слева и справа от цели | common |
+| Spreader | Spreader | 30 | M N O P Q | `lane` + 3×3 вокруг цели | uncommon |
+| LilBomb | LilBomb | 50 | B G L O T | `lob` 3, ряд из 3 | common |
+| CrosBomb | CrosBomb | 60 | B G L O V | `lob` 3, крест | uncommon |
+| ShockWave | ShockWav | 60 | C D J L M | `wave` | common |
+| Quake1 | Quake1 | 90 | A B Q R S | `lob` 3, клетка трескается | uncommon |
+| ZapRing | ZapRing1 | 20 | A B C D E | `lane`, паралич `PARALYZE_TIME` | common |
+| Recov10 | Recov10 | +10 HP | A C E G L | `self` | common |
+| Recov80 | Recov80 | +80 HP | A C E G L | `self` | rare |
+| Invis | Invis1 | — | * | `self`, невидимость `INVIS_TIME` | uncommon |
+| Crack | Crack1–3 | — | A B C * | трещины на ближнем вражеском ряду | common |
+| Geddon1 | Geddon1 | — | F H J L N | трещины на всех свободных клетках поля, свои тоже | uncommon |
+| Geddon2 | Geddon2 | — | E G I K M | дыры на свободных клетках врага (в MMBN1 — на всём поле) [решение 2026-09-17] | rare |
+| Steal | Steal | — | A L S * | захват свободных клеток ближнего вражеского ряда | uncommon |
+| Repair | Repair | — | A B C D * | все свои клетки → `NORMAL` | common |
+| RockCube | RockCube | — | * | камень на свою свободную клетку впереди | common |
 
-Исправления относительно v1:
+Заметки:
 
 - **HiCannon** в MMBN1 имеет урон 80, но **кода B у него нет**, поэтому в папке используется код F.
 - «Bomb 60» из v1 заменена на MiniBomb (50 урона): в MMBN1 это одна из стартовых бомб.
-- У Shotgun и MiniBomb в MMBN1 нет кода A, поэтому коды взяты из MMBN1.
-- AreaGrab удалён из MVP [решение].
-- Код `*` (подходит к любому коду) **поддерживается в логике**, но в папке MVP его нет.
+- Steal (аналог AreaGrab) добавлен [решение 2026-09-17].
+- Код `*` подходит к любому коду.
 
 ### 6.3. Папка MVP
 
@@ -221,19 +247,21 @@ interface ChipInstance {   // конкретная карта в папке
 **Отладочная папка P1** (переключается в отладочной панели) — добавляет P1-чипы, общий размер по-прежнему 30:
 Cannon A ×6, HiCannon F ×3, Sword S ×4, WideSword S ×4, LongSword S ×4, Shotgun N ×3, MiniBomb L ×3, Recover50 A ×3.
 
-### 6.4. Шаблоны атак
+**Отладочная папка P2** (`?folder=p2`) — новые чипы roguelite-этапа, 30 штук (состав — `src/data/folders.ts`).
 
-Игрок стоит в клетке `(px, py)`; «вперёд» означает `−y`. Клетки за пределами поля отбрасываются.
+### 6.4. Формы атак
 
-| Шаблон | Какие клетки поражает | Особенности |
+Игрок стоит в клетке `(px, py)`; «вперёд» означает `−y`. Смещения заданы относительно игрока или цели; клетки за пределами поля отбрасываются.
+
+| Форма | Какие клетки поражает | Особенности |
 |---|---|---|
-| `lane_hitscan` | Первый враг в `(px, py−1)…(px, 0)` | Мгновенно; бьёт только одного врага |
-| `lane_hitscan_pierce1` | Первый враг в линии **и** клетка сразу за ним `(px, ey−1)` | Мгновенно; MMBN1: «Hits enemy and keeps going 1pnl» |
-| `melee_1` | `(px, py−1)` | Мгновенно в момент удара; MMBN1: Range=1 |
-| `melee_wide` | `(px−1, py−1)`, `(px, py−1)`, `(px+1, py−1)` | MMBN1: «Cut down column» (в нашей ориентации это горизонтальный ряд) |
-| `melee_long` | `(px, py−1)`, `(px, py−2)` | MMBN1: Range=2 |
-| `lob_3` | `(px, py−3)`, одна клетка | Бомба летит по дуге `BOMB_FLIGHT_TIME` = 0,5 с [оценка]; урон проверяется в момент приземления. MMBN1: «Depth=3» |
-| `self_heal` | игрок | `hp = min(maxHp, hp + 50)` |
+| `lane` | Первая цель (враг или объект) в `(px, py−1)…(px, 0)`, плюс клетки `around` вокруг неё | Мгновенно в момент удара `CHIP_HIT_FRAME` |
+| `near` | Клетки `cells` относительно игрока | Мечи: Sword `(0,−1)`, WideSword ряд перед игроком, LongSword 2 клетки. MMBN1: Range=1/2 |
+| `lob` | Клетка `(px, py−depth)` и область `area` вокруг неё | Бомба летит `BOMB_FLIGHT_TIME` = 0,5 с [оценка]; урон — в момент приземления по всей области. MMBN1: «Depth=3» |
+| `wave` | Колонка игрока вперёд, начиная с `(px, py−1)` | Волна идёт по клетке за `PLAYER_WAVE_STEP`, бьёт каждого врага один раз, обрывается на дыре, краю поля и объекте (объект получает урон) |
+| `self` | игрок | Лечение `heal`, невидимость `INVIS_TIME` |
+
+Эффекты попадания (`onHit`): `push` — враг отходит на ряд назад, если клетка своя и свободна; `paralyze` — враг стоит `PARALYZE_TIME`, его таймеры тоже стоят; `panel` — каждая клетка области трескается или ломается (под персонажем — только трещина).
 
 Важные следствия, как в MMBN:
 
@@ -732,10 +760,12 @@ glorp-battle/
 | `GAUGE_FILL_TIME` | 8.0 | с | [MMBN] |
 | `HAND_BASE` / `HAND_ADD_STEP` / `HAND_MAX` | 5 / 5 / 15 | | [MMBN1] |
 | `SELECT_MAX` | 5 | | [MMBN1] |
-| `CHIP_USE_TIME.*` | 0.4–0.5 | с | [оценка] |
+| `CHIP_USE_TIME.*` (CANNON, SWORD, BOMB, RECOVER, FIELD) | 0.4–0.5 | с | [оценка] |
 | `CHIP_HIT_FRAME` | 0.1 | с | [оценка] |
 | `BOMB_FLIGHT_TIME` | 0.5 | с | [оценка] |
-| `RECOVER_AMOUNT` | 50 | HP | [MMBN1] |
+| `PARALYZE_TIME` | 1.5 | с | [оценка] |
+| `INVIS_TIME` | 3.0 | с | [оценка] |
+| `PLAYER_WAVE_STEP` | 0.15 | с | [оценка] |
 | `MET_HP` / `MET_DMG` | 40 / 10 | | [MMBN1] |
 | `MET_MOVE_INTERVAL` | 0.5 | с | [оценка] |
 | `MET_TELEGRAPH` | 0.5 | с | [v1] |
