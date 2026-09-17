@@ -4,6 +4,7 @@ import type { EntityId, Occupancy } from '../occupancy';
 import type { Player } from '../player';
 import type { Rng } from '../../core/rng';
 import type { Attack } from '../attacks/attack';
+import type { Field } from '../field';
 import type { SimEvent } from '../events';
 
 // Common enemy state machine (GDD §8.1):
@@ -18,6 +19,7 @@ export interface EnemyContext {
   readonly tick: number;
   readonly player: Player;
   readonly occupancy: Occupancy;
+  readonly field: Field;
   /** Deterministic AI randomness (GDD §15.4). */
   readonly rngAi: Rng;
   spawnAttack(attack: Attack): void;
@@ -106,10 +108,11 @@ export abstract class Enemy {
 
   /** Instant relocation (Spiker warp): no slide animation. */
   protected warpTo(ctx: EnemyContext, nx: number, ny: number): boolean {
-    if (ny > 2 || !ctx.occupancy.isFree(nx, ny)) return false;
+    if (!ctx.field.canStand('enemy', nx, ny) || !ctx.occupancy.isFree(nx, ny)) return false;
     const fromX = this.x;
     const fromY = this.y;
     ctx.occupancy.move(this.id, this.x, this.y, nx, ny);
+    ctx.field.onLeave(fromX, fromY, ctx.tick);
     this.x = this.prevX = nx;
     this.y = this.prevY = ny;
     ctx.emit({ type: 'enemyWarped', id: this.id, fromX, fromY, x: nx, y: ny });
@@ -117,8 +120,9 @@ export abstract class Enemy {
   }
 
   protected tryStep(ctx: EnemyContext, nx: number, ny: number): boolean {
-    if (ny > 2 || !ctx.occupancy.isFree(nx, ny)) return false;
+    if (!ctx.field.canStand('enemy', nx, ny) || !ctx.occupancy.isFree(nx, ny)) return false;
     ctx.occupancy.move(this.id, this.x, this.y, nx, ny);
+    ctx.field.onLeave(this.x, this.y, ctx.tick);
     this.prevX = this.x;
     this.prevY = this.y;
     this.x = nx;

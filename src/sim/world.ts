@@ -8,6 +8,7 @@ import type { FolderId } from '../data/folders';
 import type { Attack, AttackContext } from './attacks/attack';
 import { PlayerBomb } from './attacks/bomb';
 import { Buster } from './buster';
+import { Field } from './field';
 import { ChipSystem, type ChipInstance } from './chips/chipSystem';
 import { startChip, type ActiveChip } from './chips/executor';
 import { hitscanCells, lobTarget, meleeCells } from './chips/patterns';
@@ -91,6 +92,7 @@ export class World implements EnemyContext, AttackContext {
   readonly rngFolder: Rng;
   readonly rngAi: Rng;
   readonly occupancy = new Occupancy();
+  readonly field: Field = new Field((e) => this.events.push(e));
   readonly player: Player;
   readonly cheats: Cheats;
   enemies: Enemy[] = [];
@@ -114,7 +116,7 @@ export class World implements EnemyContext, AttackContext {
     const root = new Rng(options.seed);
     this.rngFolder = root.fork('folder');
     this.rngAi = root.fork('ai');
-    this.player = new Player(this.occupancy, options.playerHp);
+    this.player = new Player(this.occupancy, this.field, options.playerHp);
     this.chips = new ChipSystem(options.folder ?? 'mvp', this.rngFolder);
     this.spawnBattle();
     if (options.skipIntro) {
@@ -475,6 +477,7 @@ export class World implements EnemyContext, AttackContext {
     this.time += dt;
     this.removeDeletedEnemies();
     this.gauge.tick();
+    this.field.update(this.tick, (x, y) => this.occupancy.isFree(x, y));
 
     const p = this.player;
     p.updateTimers();
@@ -516,6 +519,7 @@ export class World implements EnemyContext, AttackContext {
     this.enemies = this.enemies.filter((e) => {
       if (!e.isRemovable(this.tick)) return true;
       this.occupancy.remove(e.id, e.x, e.y);
+      this.field.onLeave(e.x, e.y, this.tick);
       this.events.push({ type: 'enemyRemoved', id: e.id });
       return false;
     });

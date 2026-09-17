@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_TUNING, mergeTuning, secondsToTicks, tuning } from '../src/config/tuning';
 import type { SimEvent } from '../src/sim/events';
+import { Shockwave } from '../src/sim/attacks/shockwave';
 import { Field } from '../src/sim/field';
+import { World } from '../src/sim/world';
 
 const T = (s: number) => secondsToTicks(s);
 beforeEach(() => mergeTuning(tuning, JSON.parse(JSON.stringify(DEFAULT_TUNING))));
@@ -71,5 +73,65 @@ describe('Field', () => {
     expect(f.repair(1, 5)).toBe(true);
     expect(f.panel(1, 5)).toBe('NORMAL');
     expect(f.repair(1, 5)).toBe(false);
+  });
+});
+
+const DT = 1 / 60;
+function battle(): World {
+  return new World({ seed: 7, battleIndex: 1, cheats: { god: true, aiEnabled: false, buster: false }, skipIntro: true });
+}
+const stepMove = (w: World, dir: 'up' | 'down' | 'left' | 'right') =>
+  w.step(DT, { commands: [{ type: 'move', dir }], held: null });
+const wait = (w: World, n: number) => {
+  for (let i = 0; i < n; i++) w.step(DT);
+};
+
+describe('panels in battle', () => {
+  it('blocks steps onto holes and breaks cracked panels behind the player', () => {
+    const w = battle();
+    w.field.breakPanel(0, 4, w.tick, false);
+    stepMove(w, 'left');
+    expect(w.player.x).toBe(1);
+    w.field.crack(1, 4);
+    stepMove(w, 'right');
+    expect(w.player.x).toBe(2);
+    expect(w.field.panel(1, 4)).toBe('BROKEN');
+  });
+
+  it('lets the player walk on a stolen panel', () => {
+    const w = battle();
+    w.field.setOwner(1, 2, 'player', w.tick);
+    stepMove(w, 'up');
+    wait(w, T(tuning.player.MOVE_COOLDOWN));
+    stepMove(w, 'up');
+    expect(w.player.y).toBe(2);
+  });
+
+  it('keeps enemies off holes', () => {
+    const w = new World({ seed: 7, battleIndex: 1, cheats: { god: true, aiEnabled: true, buster: false }, skipIntro: true });
+    const met = w.enemies[0]!; // (1,1), steps toward the player's column
+    w.occupancy.move(met.id, met.x, met.y, 2, 1);
+    met.x = 2;
+    w.field.breakPanel(1, 1, w.tick, false);
+    wait(w, T(tuning.mettik.MET_MOVE_INTERVAL) + 1);
+    expect(met.x).toBe(2);
+  });
+
+  it('restores holes during the battle', () => {
+    const w = battle();
+    w.field.breakPanel(0, 5, w.tick, false);
+    wait(w, T(tuning.field.PANEL_RESTORE_TIME) + 1);
+    expect(w.field.panel(0, 5)).toBe('NORMAL');
+  });
+
+  it('stops a wave at a hole', () => {
+    const w = battle();
+    w.player.iframeTicks = 0;
+    w.field.breakPanel(1, 3, w.tick, false);
+    const wave = new Shockwave(w.nextAttackId(), 1, 2, w.tick);
+    w.spawnAttack(wave);
+    wait(w, T(tuning.mettik.MET_WAVE_STEP) * 4);
+    expect(wave.done).toBe(true);
+    expect(w.player.hitsTaken).toBe(0);
   });
 });

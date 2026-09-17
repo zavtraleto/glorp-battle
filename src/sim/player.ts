@@ -1,6 +1,6 @@
 import { secondsToTicks, tuning } from '../config/tuning';
 import { DIR_VECTORS, type Dir } from '../core/input/commands';
-import { inTerritory } from './grid';
+import type { Field } from './field';
 import type { EntityId, Occupancy } from './occupancy';
 
 // Player (GDD §3): one-cell steps inside the player territory, instant logical
@@ -34,7 +34,11 @@ export class Player {
   /** True once a held direction has produced a step; switches to the shorter repeat interval. */
   private repeating = false;
 
-  constructor(private occupancy: Occupancy, hp?: number) {
+  constructor(
+    private occupancy: Occupancy,
+    private field: Field,
+    hp?: number,
+  ) {
     this.x = this.prevX = tuning.player.PLAYER_START_X;
     this.y = this.prevY = tuning.player.PLAYER_START_Y;
     this.maxHp = tuning.player.PLAYER_MAX_HP;
@@ -58,7 +62,7 @@ export class Player {
     const v = DIR_VECTORS[dir];
     const nx = this.x + v.dx;
     const ny = this.y + v.dy;
-    return inTerritory('player', nx, ny) && this.occupancy.isFree(nx, ny);
+    return this.field.canStand('player', nx, ny) && this.occupancy.isFree(nx, ny);
   }
 
   /** Applies a hit. Callers must check `invulnerable` first. */
@@ -85,6 +89,7 @@ export class Player {
     this.occupancy.move(this.id, this.x, this.y, this.x + v.dx, this.y + v.dy);
     this.x += v.dx;
     this.y += v.dy;
+    this.field.onLeave(this.prevX, this.prevY, tick);
     this.lastMoveTick = tick;
     this.moves++;
     return true;

@@ -33,7 +33,7 @@ export class Spiker extends Enemy {
       for (let x = 0; x < COLS; x++) {
         if (lane !== null && x !== lane) continue;
         if (x === this.x && y === this.y) continue;
-        if (ctx.occupancy.isFree(x, y)) cells.push({ x, y });
+        if (ctx.occupancy.isFree(x, y) && ctx.field.canStand('enemy', x, y)) cells.push({ x, y });
       }
     }
     return cells;

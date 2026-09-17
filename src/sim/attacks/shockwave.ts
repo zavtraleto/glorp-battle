@@ -41,6 +41,11 @@ export class Shockwave implements LaneMover {
         this.done = true;
         return;
       }
+      // Waves need a floor (roguelite spec §3.2).
+      if (ctx.field.panel(this.x, this.y) === 'BROKEN') {
+        this.done = true;
+        return;
+      }
     }
     ctx.hitPlayerAt(this, this.x, this.y, this.damage);
   }
