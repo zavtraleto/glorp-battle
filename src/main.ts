@@ -122,6 +122,7 @@ const terminal = terminalMode
   ? new Terminal({
       renderer,
       container: stage,
+      session,
       sceneRenderer,
       perf,
       handlers: {

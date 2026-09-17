@@ -59,7 +59,8 @@ export function plasticTexture(seed: number, base: THREE.ColorRepresentation, si
   const ctx = context(canvas);
   const img = ctx.createImageData(size, size);
   const shades = plasticPattern(seed, size, size);
-  const c = new THREE.Color(base);
+  // Canvas pixels are sRGB; Color stores linear components.
+  const c = new THREE.Color(base).getRGB(new THREE.Color(), THREE.SRGBColorSpace);
   const r = c.r * 255;
   const g = c.g * 255;
   const b = c.b * 255;

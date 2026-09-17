@@ -94,7 +94,7 @@ export const DEFAULT_TUNING = {
   },
   /** Physical terminal NET-01 (docs/TERMINAL.md §17). */
   terminal: {
-    /** Backing-store short side of the terminal canvas, upscaled without smoothing. */
+    /** Render pixels across the terminal body's short side; the canvas is upscaled without smoothing. */
     RENDER_SCALE_SHORT: 400,
     /** Battle render target shown on the CRT. */
     CRT_RES_W: 240,

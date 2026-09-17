@@ -29,6 +29,8 @@ vec2 curve(vec2 uv) {
   return uv * 0.5 + 0.5;
 }
 
+const float HUD_SCAN = 0.3;
+
 float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
 
 void main() {
@@ -41,10 +43,11 @@ void main() {
     vec3 blur = (texture2D(uScreen, uv - vec2(px.x, 0.0)).rgb + c + texture2D(uScreen, uv + vec2(px.x, 0.0)).rgb) / 3.0;
     vec3 bled = luma(c) + (blur - luma(blur));
     c = mix(c, bled, uBleed);
-    vec4 hud = texture2D(uHud, uv);
-    c = mix(c, hud.rgb, hud.a * uHudOn);
     float scan = 0.5 + 0.5 * cos(uv.y * uRes.y * 6.2831853);
     c *= 1.0 - uScan * (1.0 - scan);
+    // The HUD gets a lighter scanline so thin pixel-font strokes stay solid.
+    vec4 hud = texture2D(uHud, uv);
+    c = mix(c, hud.rgb * (1.0 - HUD_SCAN * uScan * (1.0 - scan)), hud.a * uHudOn);
     vec2 v = uv * (1.0 - uv);
     c *= pow(clamp(v.x * v.y * 16.0, 0.0, 1.0), 0.15);
     c = c * 1.15 + uFlash * 0.35;

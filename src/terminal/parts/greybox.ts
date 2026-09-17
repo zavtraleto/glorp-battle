@@ -1,21 +1,17 @@
 import * as THREE from 'three';
 import { tuning } from '../../config/tuning';
-import type { CrtMaterial } from '../crt/crtMaterial';
 import { rectToWorld, type Rect, type TerminalLayout, type ZoneId } from '../layout';
 
-// T1.1 greybox (TERMINAL.md §11): low-poly stand-ins with roughly final counts,
-// enough to measure the budget and to feel the controls. Replaced part by part in T1.2+.
+// Greybox controls and chip rail (TERMINAL.md §11): low-poly stand-ins with roughly
+// final counts. Replaced by real parts in T1.3 (controls) and T1.4 (chip rail).
 
 const GAUGE_LEDS = 12;
-const HP_LEDS = 10;
 const RAIL_SLOTS = 5;
 /** Approach rate of pressed controls, 1/s. */
 const PRESS_RATE = 40;
 
 const mat = {
-  body: new THREE.MeshLambertMaterial({ color: 0x5b5a55, flatShading: true }),
   dark: new THREE.MeshLambertMaterial({ color: 0x1c1d1f, flatShading: true }),
-  bezel: new THREE.MeshLambertMaterial({ color: 0x0c0c0e, flatShading: true }),
   chip: new THREE.MeshLambertMaterial({ color: 0x9a8b62, flatShading: true }),
   execute: new THREE.MeshLambertMaterial({ color: 0xb8322a, flatShading: true }),
   select: new THREE.MeshLambertMaterial({ color: 0xc99a2e, flatShading: true }),
@@ -36,14 +32,12 @@ interface Pressable {
 
 export class Greybox {
   readonly group = new THREE.Group();
-  readonly glass: THREE.Mesh;
   private readonly parts = new THREE.Group();
   private readonly hitGroup = new THREE.Group();
   private readonly pressables = new Map<ZoneId, Pressable>();
   private ball: THREE.Mesh | null = null;
   private readonly spin = new THREE.Vector2();
   private gaugeLeds: THREE.InstancedMesh | null = null;
-  private hpLeds: THREE.InstancedMesh | null = null;
   private chips: THREE.Mesh[] = [];
   private readonly ledGeo = new THREE.BoxGeometry(1, 1, 1);
   private readonly tmpM = new THREE.Matrix4();
@@ -51,8 +45,7 @@ export class Greybox {
   private readonly tmpS = new THREE.Vector3();
   private readonly noRot = new THREE.Quaternion();
 
-  constructor(crt: CrtMaterial) {
-    this.glass = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), crt);
+  constructor() {
     this.group.add(this.parts, this.hitGroup);
     this.hitGroup.visible = false;
   }
@@ -64,25 +57,7 @@ export class Greybox {
     this.chips = [];
     const W = (r: Rect) => rectToWorld(layout, r);
 
-    const body = W(layout.body);
-    this.box(body.cx, body.cy, -0.3, body.w, body.h, 0.6, mat.body);
-
-    // CRT bezel and glass (glass keeps the render target's aspect).
-    const crt = W(layout.crt);
-    this.box(crt.cx, crt.cy, 0.05, crt.w * 1.02, crt.h * 0.98, 0.3, mat.bezel);
-    const glassH = crt.h * 0.9;
-    const glassW = Math.min(crt.w * 0.94, glassH * (tuning.terminal.CRT_RES_W / tuning.terminal.CRT_RES_H));
-    this.glass.scale.set(glassW, glassH, 1);
-    this.glass.position.set(crt.cx, crt.cy, 0.21);
-    this.parts.add(this.glass);
-
-    // HP LEDs on the top bar.
     const top = W(layout.top);
-    const hpStep = (top.w * 0.55) / HP_LEDS;
-    this.hpLeds = this.leds(HP_LEDS, (i) => {
-      this.tmpP.set(top.cx - top.w * 0.4 + hpStep * (i + 0.5), top.cy - top.h * 0.15, 0.05);
-      this.tmpS.set(hpStep * 0.5, top.h * 0.3, 0.1);
-    });
 
     // Pause key.
     const pause = W(layout.zones.pause);
@@ -153,10 +128,6 @@ export class Greybox {
     this.setLeds(this.gaugeLeds, lit, GAUGE_LEDS);
   }
 
-  setHpLeds(lit: number): void {
-    this.setLeds(this.hpLeds, lit, HP_LEDS);
-  }
-
   /** Shows `count` chips in the rail; the first one is raised (active). */
   setChips(count: number): void {
     this.chips.forEach((c, i) => {
@@ -215,7 +186,7 @@ export class Greybox {
 
   private disposeParts(): void {
     for (const o of [...this.parts.children, ...this.hitGroup.children]) {
-      if (o !== this.glass && o instanceof THREE.Mesh && o.geometry !== this.ledGeo) o.geometry.dispose();
+      if (o instanceof THREE.Mesh && o.geometry !== this.ledGeo) o.geometry.dispose();
     }
     this.parts.clear();
     this.hitGroup.clear();

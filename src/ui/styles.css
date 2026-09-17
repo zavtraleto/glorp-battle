@@ -67,7 +67,8 @@ body {
 /* T1.1–T1.5: the terminal replaces the HUD, controls and world labels. */
 #app.ui-terminal .hud-top,
 #app.ui-terminal .controls,
-#app.ui-terminal .world-labels {
+#app.ui-terminal .world-labels,
+#app.ui-terminal .banner {
   display: none;
 }
 
