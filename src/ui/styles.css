@@ -56,6 +56,21 @@ body {
   height: 100%;
 }
 
+#terminal-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  touch-action: none;
+}
+
+/* T1.1–T1.5: the terminal replaces the HUD, controls and world labels. */
+#app.ui-terminal .hud-top,
+#app.ui-terminal .controls,
+#app.ui-terminal .world-labels {
+  display: none;
+}
+
 #ui {
   pointer-events: none;
 }

@@ -7,12 +7,15 @@ import { InputState } from './core/input/commands';
 import { attachKeyboard, attachSwipe, blockBrowserGestures, trapBackNavigation } from './core/input/devices';
 import { GameLoop } from './core/loop';
 import { randomSeed } from './core/rng';
+import { BenchAutopilot, formatBench } from './debug/bench';
 import { DebugOverlay } from './debug/overlay';
 import { DebugPanel } from './debug/debugPanel';
 import { parseDebugParams } from './debug/params';
+import { PerfProbe } from './debug/perfProbe';
 import { t } from './i18n';
 import { SceneRenderer } from './render/scene';
 import type { Cheats } from './sim/world';
+import { Terminal } from './terminal/terminal';
 import { Banner } from './ui/banner';
 import { Controls } from './ui/controls';
 import { CustomScreen } from './ui/customScreen';
@@ -30,6 +33,11 @@ loadTuningOverrides();
 const params = parseDebugParams(window.location.search);
 const query = new URLSearchParams(window.location.search);
 if (params.timescale !== 1) tuning.sim.TIME_SCALE = params.timescale;
+if (params.rscale !== null) tuning.terminal.RENDER_SCALE_SHORT = params.rscale;
+if (params.crtres) [tuning.terminal.CRT_RES_W, tuning.terminal.CRT_RES_H] = params.crtres;
+// The physical terminal is the default UI; ?ui=css keeps the legacy HTML UI until T2.
+const terminalMode = params.ui === 'terminal';
+document.getElementById('app')?.classList.toggle('ui-terminal', terminalMode);
 
 const stage = byId('stage');
 const ui = byId('ui');
@@ -39,8 +47,17 @@ const session = new Session({ seed: params.seed ?? randomSeed(), cheats, folder:
 // ?battle=N skips the title and jumps straight into that battle (debug).
 if (query.has('battle')) session.debugJump(params.battle);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-const sceneRenderer = new SceneRenderer({ renderer, container: stage });
+// ?bench=1: autopilot on battle 1 for the frame budget check (TERMINAL.md §10).
+const perf = new PerfProbe();
+const bench = params.bench ? new BenchAutopilot(params.seed ?? 1) : null;
+let benchReport = '';
+if (bench) {
+  cheats.god = true;
+  session.debugJump(1);
+}
+
+const renderer = new THREE.WebGLRenderer({ antialias: !terminalMode, powerPreference: 'high-performance' });
+const sceneRenderer = new SceneRenderer(terminalMode ? { renderer } : { renderer, container: stage });
 const hud = new Hud(ui);
 const labels = new WorldLabels(ui, sceneRenderer);
 const input = new InputState();
@@ -48,7 +65,7 @@ const controls = new Controls(ui, input);
 const customScreen = new CustomScreen(ui, () => session.world);
 const banner = new Banner(ui);
 attachKeyboard(input);
-attachSwipe(input);
+if (!terminalMode) attachSwipe(input);
 blockBrowserGestures();
 // A back gesture / button pauses the battle instead of leaving the game.
 trapBackNavigation(() => session.pause());
@@ -99,6 +116,45 @@ function togglePause(): void {
   else session.pause();
 }
 hud.pauseButton.addEventListener('click', togglePause);
+
+const terminal = terminalMode
+  ? new Terminal({
+      renderer,
+      container: stage,
+      sceneRenderer,
+      perf,
+      handlers: {
+        move: (dir) => input.push({ type: 'move', dir }),
+        execute: () => input.push({ type: 'useChip' }),
+        chipSelect: () => input.push({ type: 'openCustom' }),
+        pause: () => {
+          if (session.screen === 'BATTLE' || session.screen === 'PAUSED') togglePause();
+        },
+      },
+    })
+  : null;
+terminal?.setHitZonesVisible(params.hitzones);
+
+/** Keeps the bench battle running: confirms Custom Screens and restarts finished battles. */
+function driveBench(frameSeconds: number): void {
+  if (!bench || bench.done) return;
+  const w = session.world;
+  if (session.screen === 'RESULT' || session.screen === 'DEFEAT') {
+    session.debugJump(1);
+    return;
+  }
+  if (w.state === 'CUSTOM') {
+    for (let i = 0; i < w.chips.hand.length; i++) w.customSelect(i);
+    w.customConfirm();
+  }
+  if (w.gauge.full) input.push({ type: 'openCustom' });
+  for (const c of bench.frame(frameSeconds)) input.push(c);
+  if (bench.done) {
+    benchReport = formatBench({ seconds: bench.duration, snapshot: perf.snapshot() });
+    console.info(benchReport);
+    setDebugVisible(true);
+  }
+}
 hud.gauge.addEventListener('pointerdown', (e) => {
   e.preventDefault();
   input.push({ type: 'openCustom' });
@@ -145,6 +201,7 @@ const loop = new GameLoop(
       world.step(dt, { commands: input.drain(), held: input.heldDir });
       for (const e of world.drainEvents()) {
         sceneRenderer.handleEvent(e, world);
+        terminal?.onEvent(e);
         labels.handleEvent(e, world);
         if (events.logEnabled) console.debug('[sim]', world.tick, e);
       }
@@ -156,8 +213,14 @@ const loop = new GameLoop(
       const dt = loop.clock.dt;
       // A frozen simulation must not be extrapolated between ticks.
       const simAlpha = world.simFrozen ? 0 : alpha;
-      sceneRenderer.render(world, simAlpha, dt);
-      labels.update(world, simAlpha);
+      driveBench(frameSeconds);
+      if (terminal) terminal.render(world, simAlpha, dt);
+      else {
+        sceneRenderer.render(world, simAlpha, dt);
+        labels.update(world, simAlpha);
+      }
+      // frameMs is the previous frame's tick + render time (written after this callback).
+      perf.record(frameSeconds * 1000, loop.stats.frameMs);
       hud.setHp(world.player.hp, world.player.maxHp);
       hud.setGauge(world.gauge.value, world.gauge.full);
       controls.update(world);
@@ -173,7 +236,10 @@ const loop = new GameLoop(
         timeScale: loop.clock.timeScale,
         paused: loop.clock.paused,
         simTime: world.time,
+        perf: terminal && overlay.visible ? perf.snapshot() : undefined,
         extra:
+          (benchReport ? `${benchReport}
+` : '') +
           `player ${p.x},${p.y} hp ${p.hp} hits ${p.hitsTaken} ${p.flinched ? 'FLINCH ' : ''}${p.invulnerable ? 'IFR' : ''}\n` +
           `gauge ${(world.gauge.value * 100).toFixed(0)}%  turn ${world.chips.turns}  add ${world.chips.addStreak}\n` +
           `folder ${world.chips.folderRemaining} hand ${world.chips.hand.filter(Boolean).length}/${world.chips.hand.length}` +
@@ -240,7 +306,8 @@ window.addEventListener('keydown', (e) => {
 
 // ---------- Layout ----------
 function layout(): void {
-  sceneRenderer.setInsets({ top: hud.occupiedTop });
+  if (terminal) terminal.resize();
+  else sceneRenderer.setInsets({ top: hud.occupiedTop });
 }
 window.addEventListener('resize', layout);
 window.addEventListener('orientationchange', layout);
@@ -271,6 +338,8 @@ if (import.meta.env.DEV) {
       input,
       loop,
       sceneRenderer,
+      terminal,
+      perf,
       tuning,
       cheats,
       startBattle: (opts: { battle?: number } = {}) => {

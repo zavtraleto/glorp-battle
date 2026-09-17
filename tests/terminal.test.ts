@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_TUNING, mergeTuning, tuning } from '../src/config/tuning';
 import type { Dir } from '../src/core/input/commands';
+import { BenchAutopilot, formatBench } from '../src/debug/bench';
 import { parseDebugParams } from '../src/debug/params';
 import { PerfProbe, percentile } from '../src/debug/perfProbe';
 import { PointerRouter, type RouterHandlers } from '../src/terminal/interaction/pointerRouter';
@@ -232,5 +233,43 @@ describe('PerfProbe', () => {
     expect(p.snapshot()).toMatchObject({ calls: 42, triangles: 1234, textureBytes: 1_000_000, renderW: 400, renderH: 866 });
     p.reset();
     expect(p.snapshot().frames).toBe(0);
+  });
+});
+
+describe('BenchAutopilot', () => {
+  it('issues moves and chip uses deterministically and stops after the duration', () => {
+    const a = new BenchAutopilot(7, 2);
+    const b = new BenchAutopilot(7, 2);
+    const out: string[] = [];
+    for (let i = 0; i < 180; i++) {
+      const ca = a.frame(1 / 60);
+      const cb = b.frame(1 / 60);
+      expect(ca).toEqual(cb);
+      for (const c of ca) out.push(c.type);
+    }
+    expect(out).toContain('move');
+    expect(out).toContain('useChip');
+    expect(a.done).toBe(true);
+    expect(a.frame(1 / 60)).toEqual([]);
+  });
+
+  it('formats a readable report', () => {
+    const s = formatBench({
+      seconds: 20,
+      snapshot: {
+        frames: 1200,
+        intervalP50: 16.6,
+        intervalP95: 17.4,
+        cpuP50: 2.1,
+        cpuP95: 3.4,
+        calls: 61,
+        triangles: 4210,
+        textureBytes: 1_075_200,
+        renderW: 400,
+        renderH: 866,
+      },
+    });
+    expect(s).toContain('cpu p95 3.40 ms');
+    expect(s).toContain('calls 61');
   });
 });
