@@ -273,3 +273,40 @@ describe('BenchAutopilot', () => {
     expect(s).toContain('calls 61');
   });
 });
+
+describe('PointerRouter hover and gate', () => {
+  it('ignores presses on refused zones', () => {
+    const layout = computeLayout(390, 844);
+    const log: string[] = [];
+    const router = new PointerRouter(() => layout, {
+      press: (z) => log.push(`press:${z}`),
+      release: () => {},
+      move: () => {},
+      roll: () => {},
+      action: (z) => log.push(`action:${z}`),
+      accepts: (z) => z === 'pause',
+    });
+    const ex = layout.zones.execute;
+    expect(router.down(1, ex.x + 5, ex.y + 5)).toBe(false);
+    const p = layout.zones.pause;
+    expect(router.down(2, p.x + 5, p.y + 5)).toBe(true);
+    expect(log).toEqual(['press:pause', 'action:pause']);
+  });
+
+  it('reports the hovered zone', () => {
+    const layout = computeLayout(390, 844);
+    const seen: (string | null)[] = [];
+    const router = new PointerRouter(() => layout, {
+      press: () => {},
+      release: () => {},
+      move: () => {},
+      roll: () => {},
+      action: () => {},
+      hover: (z) => seen.push(z),
+    });
+    const tb = layout.zones.trackball;
+    router.hoverAt(tb.x + 5, tb.y + 5);
+    router.hoverAt(layout.crt.x + 5, layout.crt.y + 100);
+    expect(seen).toEqual(['trackball', null]);
+  });
+});

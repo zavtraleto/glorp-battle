@@ -28,8 +28,6 @@ const BANNER_COLOR: Record<BannerTone, string> = {
 const GAUGE_W = 0.38;
 /** Vertical centre of the banner band as a share of the CRT height. */
 const BANNER_Y = 0.45;
-/** Vertical centre of the notice line as a share of the CRT height. */
-const NOTICE_Y = 0.7;
 
 export class CrtCanvas {
   readonly texture: THREE.CanvasTexture;
@@ -102,8 +100,16 @@ export class CrtCanvas {
     ctx.strokeStyle = COLOR.gauge;
     ctx.strokeRect(barX + s / 2, barY + s / 2, barW - s, barH - s);
 
-    // Next chip, bottom-left.
-    if (m.chip) drawText(sink, m.chip, M, H - M - 7 * s, s, COLOR.chip);
+    // Next chip, bottom-left; a notice (NO CHIP) takes the same line.
+    const bottomY = H - M - 7 * s;
+    if (m.notice) {
+      const tw = measureText(m.notice, s);
+      ctx.fillStyle = COLOR.band;
+      ctx.fillRect(M - s, bottomY - 2 * s, tw + 2 * s, 11 * s);
+      drawText(sink, m.notice, M, bottomY, s, COLOR.notice);
+    } else if (m.chip) {
+      drawText(sink, m.chip, M, bottomY, s, COLOR.chip);
+    }
 
     // Banner across the middle.
     if (m.banner) {
@@ -114,12 +120,6 @@ export class CrtCanvas {
       ctx.fillRect(0, bandY, W, bandH);
       const tw = measureText(m.banner.text, big);
       drawText(sink, m.banner.text, Math.round((W - tw) / 2), bandY + 4 * s, big, BANNER_COLOR[m.banner.tone]);
-    } else if (m.notice) {
-      const tw = measureText(m.notice, s);
-      const y = Math.round(H * NOTICE_Y - (7 * s) / 2);
-      ctx.fillStyle = COLOR.band;
-      ctx.fillRect(Math.round((W - tw) / 2) - 2 * s, y - 2 * s, tw + 4 * s, 11 * s);
-      drawText(sink, m.notice, Math.round((W - tw) / 2), y, s, COLOR.notice);
     }
 
     this.texture.needsUpdate = true;

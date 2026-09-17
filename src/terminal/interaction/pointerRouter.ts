@@ -17,6 +17,10 @@ export interface RouterHandlers {
   roll(dx: number, dy: number): void;
   /** Action controls fire on press. */
   action(zone: 'execute' | 'chipSelect' | 'pause'): void;
+  /** Mouse hover (no button held): the zone under the pointer, and the pointer position. */
+  hover?(zone: ZoneId | null, x: number, y: number): void;
+  /** Presses on zones that return false are ignored (not captured). */
+  accepts?(zone: ZoneId): boolean;
 }
 
 interface Capture {
@@ -38,7 +42,7 @@ export class PointerRouter {
   down(id: number, x: number, y: number): boolean {
     if (this.captures.has(id)) return true;
     const zone = zoneAt(this.getLayout(), x, y);
-    if (!zone) return false;
+    if (!zone || this.handlers.accepts?.(zone) === false) return false;
     let swipe: SwipeRecognizer | null = null;
     if (zone === 'trackball') {
       swipe = new SwipeRecognizer(tuning.input.SWIPE_MIN_PX);
@@ -59,6 +63,15 @@ export class PointerRouter {
     c.swipe.threshold = tuning.input.SWIPE_MIN_PX;
     const dir = c.swipe.move(x, y);
     if (dir) this.handlers.move(dir);
+  }
+
+  /** Reports the zone under a free (not captured) mouse pointer. */
+  hoverAt(x: number, y: number): void {
+    this.handlers.hover?.(zoneAt(this.getLayout(), x, y), x, y);
+  }
+
+  get anyCaptured(): boolean {
+    return this.captures.size > 0;
   }
 
   up(id: number): void {
@@ -90,7 +103,10 @@ export class PointerRouter {
       }
     };
     const onMove = (e: PointerEvent) => {
-      if (!this.captures.has(e.pointerId)) return;
+      if (!this.captures.has(e.pointerId)) {
+        if (e.pointerType === 'mouse') this.hoverAt(...local(e));
+        return;
+      }
       const events = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [];
       for (const ce of events.length > 0 ? events : [e]) {
         const [x, y] = local(ce);
@@ -99,12 +115,17 @@ export class PointerRouter {
     };
     const onUp = (e: PointerEvent) => this.up(e.pointerId);
     const onBlur = () => this.cancelAll();
+    const onLeave = (e: PointerEvent) => {
+      if (e.pointerType === 'mouse' && !this.captures.has(e.pointerId)) this.handlers.hover?.(null, -1, -1);
+    };
     el.addEventListener('pointerdown', onDown);
     el.addEventListener('pointermove', onMove);
     el.addEventListener('pointerup', onUp);
     el.addEventListener('pointercancel', onUp);
+    el.addEventListener('pointerleave', onLeave);
     window.addEventListener('blur', onBlur);
     return () => {
+      el.removeEventListener('pointerleave', onLeave);
       el.removeEventListener('pointerdown', onDown);
       el.removeEventListener('pointermove', onMove);
       el.removeEventListener('pointerup', onUp);

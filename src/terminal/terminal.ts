@@ -3,18 +3,23 @@ import type { Session } from '../app/session';
 import { tuning } from '../config/tuning';
 import type { Dir } from '../core/input/commands';
 import type { PerfProbe } from '../debug/perfProbe';
+import { t } from '../i18n';
 import type { SceneRenderer } from '../render/scene';
 import type { SimEvent } from '../sim/events';
 import type { World } from '../sim/world';
+import { acceptsPress, chipSelectAvailability, cursorKind, executeAvailability, organForKey } from './controlRules';
 import { BattleTarget } from './crt/battleTarget';
 import { CrtCanvas } from './crt/crtCanvas';
 import { CrtMaterial } from './crt/crtMaterial';
 import { gaugeLedCount, hpLedCount, hudModel } from './crt/hudModel';
+import { cursorCss } from './interaction/cursor';
 import { PointerRouter } from './interaction/pointerRouter';
-import { computeLayout, type TerminalLayout } from './layout';
+import { computeLayout, type TerminalLayout, type ZoneId } from './layout';
+import { DeckControls } from './parts/deckControls';
 import { Environment } from './parts/environment';
 import { Greybox } from './parts/greybox';
 import { Housing } from './parts/housing';
+import { Trackball } from './parts/trackball';
 import { lampStates, terminalMode } from './terminalMode';
 
 // NET-01 terminal (TERMINAL.md §13). Owns the terminal scene and camera, draws
@@ -25,6 +30,8 @@ const TERMINAL_CLEAR_COLOR = 0x07080a;
 const GAUGE_LEDS = 12;
 const HP_LEDS = 10;
 const RAIL_SLOTS = 5;
+/** Parallax follow rate, 1/s. */
+const PARALLAX_RATE = 6;
 
 export interface TerminalHandlers {
   move(dir: Dir): void;
@@ -50,12 +57,21 @@ export class Terminal {
   private readonly hud = new CrtCanvas(tuning.terminal.CRT_RES_W, tuning.terminal.CRT_RES_H);
   private readonly housing = new Housing(this.crt);
   private readonly greybox = new Greybox();
+  private readonly deck = new DeckControls();
+  private readonly trackball = new Trackball();
   private readonly environment = new Environment();
   private readonly battle: BattleTarget;
-  private readonly detach: () => void;
+  private readonly router: PointerRouter;
+  private readonly cleanups: (() => void)[] = [];
   private readonly size = new THREE.Vector2();
+  private readonly fineCursor = window.matchMedia?.('(pointer: fine)').matches ?? false;
+  private readonly camBase = new THREE.Vector3();
+  private readonly parallax = { x: 0, y: 0, tx: 0, ty: 0 };
+  private hovered: ZoneId | null = null;
+  private cursor = '';
   private time = 0;
-  private shown = { gauge: -1, hp: -1, chips: -1, lamps: '' };
+  private noticeLeft = 0;
+  private shown = { gauge: -1, full: false, hp: -1, chips: -1, lamps: '' };
   private layoutKey = '';
 
   constructor(private opts: TerminalOptions) {
@@ -67,25 +83,26 @@ export class Terminal {
     this.battle = new BattleTarget(renderer);
     this.crt.setHud(this.hud.texture);
 
-    this.scene.add(this.environment.group, this.housing.group, this.greybox.group);
+    this.scene.add(this.environment.group, this.housing.group, this.greybox.group, this.deck.group, this.trackball.group);
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.55));
     const key = new THREE.DirectionalLight(0xfff1dd, 1.6);
     key.position.set(-4, 6, 10);
     this.scene.add(key);
 
     this.layout = computeLayout(container.clientWidth, container.clientHeight);
-    const router = new PointerRouter(() => this.layout, {
-      press: (z) => this.greybox.press(z, true),
-      release: (z) => this.greybox.press(z, false),
-      move: (d) => opts.handlers.move(d),
-      roll: (dx, dy) => this.greybox.roll(dx, dy),
-      action: (z) => {
-        if (z === 'execute') opts.handlers.execute();
-        else if (z === 'chipSelect') opts.handlers.chipSelect();
-        else opts.handlers.pause();
+    this.router = new PointerRouter(() => this.layout, {
+      press: (z) => this.press(z, true),
+      release: (z) => this.release(z),
+      move: (d) => {
+        this.trackball.step(d);
+        opts.handlers.move(d);
       },
+      roll: (dx, dy) => this.trackball.roll(dx, dy),
+      action: () => {},
+      accepts: (z) => acceptsPress(this.mode(), z),
+      hover: (z, x, y) => this.hover(z, x, y),
     });
-    this.detach = router.attach(renderer.domElement);
+    this.cleanups.push(this.router.attach(renderer.domElement), this.attachKeyVisuals());
     this.resize();
   }
 
@@ -98,7 +115,7 @@ export class Terminal {
     const key = [
       vw, vh, t.RENDER_SCALE_SHORT, t.CAMERA_FOV, t.LAYOUT_TOP, t.LAYOUT_CRT, t.LAYOUT_RAIL, t.LAYOUT_DECK,
       t.CRT_MARGIN_X, t.DECK_SPLIT_LEFT, t.DECK_SPLIT_RIGHT, t.PAUSE_ZONE_W, t.CRT_RES_W, t.CRT_RES_H,
-      t.TERMINAL_ASPECT_MIN, t.TERMINAL_ASPECT_MAX,
+      t.TERMINAL_ASPECT_MIN, t.TERMINAL_ASPECT_MAX, t.BUTTON_PRESS_DEPTH,
     ].join('|');
     if (key === this.layoutKey) return;
     this.layoutKey = key;
@@ -115,14 +132,12 @@ export class Terminal {
     const dist = (vh * k) / 2 / Math.tan(THREE.MathUtils.degToRad(t.CAMERA_FOV) / 2);
     const bodyCx = this.layout.body.x + this.layout.body.w / 2;
     const bodyCy = this.layout.body.y + this.layout.body.h / 2;
-    const camX = (vw / 2 - bodyCx) * k;
-    const camY = -(vh / 2 - bodyCy) * k;
+    this.camBase.set((vw / 2 - bodyCx) * k, -(vh / 2 - bodyCy) * k, dist);
     this.camera.fov = t.CAMERA_FOV;
     this.camera.aspect = vw / vh;
     this.camera.near = Math.max(0.1, dist - 10);
     this.camera.far = dist + 10;
-    this.camera.position.set(camX, camY, dist);
-    this.camera.lookAt(camX, camY, 0);
+    this.placeCamera();
     this.camera.updateProjectionMatrix();
 
     this.battle.setSize(t.CRT_RES_W, t.CRT_RES_H);
@@ -130,13 +145,19 @@ export class Terminal {
     const texel = k / scale; // world size of one render pixel
     this.housing.build(this.layout, texel, t.CRT_RES_W / t.CRT_RES_H);
     this.greybox.build(this.layout);
+    this.deck.build(this.layout);
+    const tb = this.layout.zones.trackball;
+    const tbWorld = { cx: (tb.x + tb.w / 2 - bodyCx) * k, cy: -(tb.y + tb.h / 2 - bodyCy) * k };
+    this.trackball.build(tbWorld.cx, tbWorld.cy, Math.min(tb.w, tb.h) * k * 0.28);
+    const cx = this.camBase.x;
+    const cy = this.camBase.y;
     this.environment.build(this.layout, {
-      left: camX - (vw * k) / 2,
-      right: camX + (vw * k) / 2,
-      top: camY + (vh * k) / 2,
-      bottom: camY - (vh * k) / 2,
+      left: cx - (vw * k) / 2,
+      right: cx + (vw * k) / 2,
+      top: cy + (vh * k) / 2,
+      bottom: cy - (vh * k) / 2,
     });
-    this.shown = { gauge: -1, hp: -1, chips: -1, lamps: '' };
+    this.shown = { gauge: -1, full: false, hp: -1, chips: -1, lamps: '' };
   }
 
   onEvent(e: SimEvent): void {
@@ -151,15 +172,18 @@ export class Terminal {
     const { renderer, sceneRenderer, perf, session } = this.opts;
     this.resize();
     this.time += dt;
+    this.noticeLeft = Math.max(0, this.noticeLeft - dt);
     renderer.info.reset();
 
     const screen = this.battle.render(sceneRenderer, world, alpha, dt);
     this.crt.setScreen(screen, this.battle.width, this.battle.height);
     this.crt.update(dt);
-    this.hud.draw(hudModel(session, world), this.time);
+    this.hud.draw(hudModel(session, world, this.noticeLeft > 0 ? t('hud.noChip') : null), this.time);
 
     this.syncIndicators(world);
-    this.greybox.update(dt);
+    this.deck.update(dt, this.time);
+    this.trackball.update(dt);
+    this.updateParallax(dt);
 
     renderer.setRenderTarget(null);
     renderer.setClearColor(TERMINAL_CLEAR_COLOR, 1);
@@ -167,6 +191,134 @@ export class Terminal {
 
     renderer.getSize(this.size);
     perf.setGpu(renderer.info.render.calls, renderer.info.render.triangles, this.battle.bytes, this.size.x, this.size.y);
+  }
+
+  dispose(): void {
+    for (const c of this.cleanups) c();
+    this.battle.dispose();
+  }
+
+  private mode() {
+    return terminalMode(this.opts.session.screen, this.opts.session.world.state);
+  }
+
+  /**
+   * A control goes down. `send` is false for keyboard presses: the keyboard
+   * device already sends the command, the terminal only shows it.
+   */
+  private press(zone: ZoneId, send: boolean): void {
+    const world = this.opts.session.world;
+    const { handlers } = this.opts;
+    switch (zone) {
+      case 'trackball':
+        this.trackball.press();
+        break;
+      case 'execute': {
+        const a = executeAvailability(world);
+        this.deck.key('execute').press(a.press === 'dull');
+        if (a.press === 'ok') {
+          if (send) handlers.execute();
+        } else {
+          this.deck.deny('execute');
+          if (a.notice === 'noChip') this.noticeLeft = tuning.terminal.NO_CHIP_TIME;
+        }
+        break;
+      }
+      case 'chipSelect': {
+        const ok = chipSelectAvailability(world) === 'ok';
+        this.deck.key('chipSelect').press(!ok);
+        if (ok) {
+          if (send) handlers.chipSelect();
+        } else {
+          this.deck.deny('chipSelect');
+        }
+        break;
+      }
+      case 'pause':
+        this.deck.key('pause').press(false);
+        if (send) handlers.pause();
+        break;
+    }
+    this.updateCursor();
+  }
+
+  private release(zone: ZoneId): void {
+    if (zone === 'trackball') this.trackball.release();
+    else this.deck.key(zone).release();
+    this.updateCursor();
+  }
+
+  private hover(zone: ZoneId | null, x: number, y: number): void {
+    if (zone !== this.hovered) {
+      if (this.hovered) this.hoverVisual(this.hovered, false);
+      this.hovered = zone;
+      if (zone && acceptsPress(this.mode(), zone)) this.hoverVisual(zone, true);
+      this.updateCursor();
+    }
+    if (this.fineCursor && x >= 0) {
+      const { w, h } = this.layout.viewport;
+      this.parallax.tx = (x / w - 0.5) * 2;
+      this.parallax.ty = (y / h - 0.5) * 2;
+    } else {
+      this.parallax.tx = 0;
+      this.parallax.ty = 0;
+    }
+  }
+
+  private hoverVisual(zone: ZoneId, on: boolean): void {
+    if (zone === 'trackball') this.trackball.hover(on);
+    else this.deck.key(zone).hover(on);
+  }
+
+  private updateCursor(): void {
+    if (!this.fineCursor) return;
+    const zone = this.hovered && acceptsPress(this.mode(), this.hovered) ? this.hovered : null;
+    const css = cursorCss(cursorKind(zone, this.router.anyCaptured));
+    if (css !== this.cursor) {
+      this.cursor = css;
+      this.opts.renderer.domElement.style.cursor = css;
+    }
+  }
+
+  private updateParallax(dt: number): void {
+    const p = this.parallax;
+    const k = 1 - Math.exp(-dt * PARALLAX_RATE);
+    p.x += (p.tx - p.x) * k;
+    p.y += (p.ty - p.y) * k;
+    this.placeCamera();
+  }
+
+  /** Base straight-on camera, tilted toward the mouse by up to PARALLAX_DEG. */
+  private placeCamera(): void {
+    const b = this.camBase;
+    const deg = this.fineCursor ? tuning.terminal.PARALLAX_DEG : 0;
+    const off = b.z * Math.tan(THREE.MathUtils.degToRad(deg));
+    this.camera.position.set(b.x + this.parallax.x * off, b.y - this.parallax.y * off, b.z);
+    this.camera.lookAt(b.x, b.y, 0);
+  }
+
+  /** Keyboard keys press the same controls (visual only). */
+  private attachKeyVisuals(): () => void {
+    const held = new Set<string>();
+    const onDown = (e: KeyboardEvent) => {
+      if (e.repeat || held.has(e.code) || e.target instanceof HTMLInputElement) return;
+      const organ = organForKey(e.code);
+      if (!organ || !acceptsPress(this.mode(), organ.zone)) return;
+      held.add(e.code);
+      this.press(organ.zone, false);
+      if (organ.dir) this.trackball.step(organ.dir);
+    };
+    const onUp = (e: KeyboardEvent) => {
+      if (!held.delete(e.code)) return;
+      const organ = organForKey(e.code);
+      if (organ) this.release(organ.zone);
+    };
+    window.addEventListener('keydown', onDown);
+    window.addEventListener('keyup', onUp);
+    return () => {
+      window.removeEventListener('keydown', onDown);
+      window.removeEventListener('keyup', onUp);
+    };
   }
 
   /** Pushes LED, lamp and counter state to the meshes when it changes. */
@@ -178,7 +330,11 @@ export class Terminal {
     const lamps = lampStates(terminalMode(session.screen, world.state), session.screen, world.gauge.full, this.time);
     const lampKey = `${+lamps.power}${+lamps.sync}${+lamps.link}${+lamps.battle}`;
     const s = this.shown;
-    if (gauge !== s.gauge) this.greybox.setGaugeLeds((s.gauge = gauge));
+    if (gauge !== s.gauge || world.gauge.full !== s.full) {
+      s.gauge = gauge;
+      s.full = world.gauge.full;
+      this.deck.setGauge(gauge, s.full);
+    }
     if (hp !== s.hp) this.housing.setHpLeds((s.hp = hp));
     if (chips !== s.chips) {
       s.chips = chips;
@@ -189,10 +345,5 @@ export class Terminal {
       s.lamps = lampKey;
       this.housing.setLamps(lamps);
     }
-  }
-
-  dispose(): void {
-    this.detach();
-    this.battle.dispose();
   }
 }
