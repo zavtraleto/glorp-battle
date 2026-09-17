@@ -135,3 +135,40 @@ describe('panels in battle', () => {
     expect(w.player.hitsTaken).toBe(0);
   });
 });
+
+describe('field objects', () => {
+  it('places a rock only on a free standable cell', () => {
+    const w = battle();
+    expect(w.placeObject('rock', 1, 4, 'player')).toBeNull(); // the player stands there
+    const rock = w.placeObject('rock', 1, 3, 'player')!;
+    expect(rock.hp).toBe(tuning.field.ROCK_HP);
+    expect(w.occupancy.isFree(1, 3)).toBe(false);
+    w.field.breakPanel(0, 3, w.tick, false);
+    expect(w.placeObject('rock', 0, 3, 'player')).toBeNull();
+  });
+
+  it('stops the Buster and enemy shots, and breaks at 0 HP', () => {
+    const w = new World({ seed: 7, battleIndex: 1, cheats: { god: true, aiEnabled: false }, skipIntro: true });
+    const rock = w.placeObject('rock', 1, 3, 'player')!;
+    const met = w.enemies[0]!;
+    wait(w, T(tuning.buster.BUSTER_INTERVAL));
+    expect(met.hp).toBe(tuning.mettik.MET_HP);
+    expect(rock.hp).toBe(tuning.field.ROCK_HP - tuning.buster.BUSTER_DAMAGE);
+    expect(w.shootLane(1, 2, 500)).toBe(3);
+    expect(rock.alive).toBe(false);
+    expect(w.objects).toHaveLength(0);
+    expect(w.occupancy.isFree(1, 3)).toBe(true);
+    expect(w.drainEvents().some((e) => e.type === 'objectBroken')).toBe(true);
+  });
+
+  it('stops a wave on a rock', () => {
+    const w = battle();
+    const rock = w.placeObject('rock', 1, 3, 'player')!;
+    const wave = new Shockwave(w.nextAttackId(), 1, 2, w.tick);
+    w.spawnAttack(wave);
+    wait(w, T(tuning.mettik.MET_WAVE_STEP) * 4);
+    expect(wave.done).toBe(true);
+    expect(rock.hp).toBe(tuning.field.ROCK_HP - tuning.mettik.MET_DMG);
+    expect(w.player.hitsTaken).toBe(0);
+  });
+});

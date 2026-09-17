@@ -36,7 +36,8 @@ export class HeatShot implements LaneMover {
         return;
       }
     }
-    if (ctx.hitPlayerAt(this, this.x, this.y, this.damage)) {
+    // A fireball bursts on an object too (roguelite spec §3.4).
+    if (ctx.hitObjectAt(this, this.x, this.y, this.damage) || ctx.hitPlayerAt(this, this.x, this.y, this.damage)) {
       const cells: Cell[] = [{ x: this.x, y: this.y }];
       if (inField(this.x, this.y + 1)) cells.push({ x: this.x, y: this.y + 1 });
       ctx.emit({ type: 'explosion', cells });

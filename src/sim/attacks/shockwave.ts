@@ -47,6 +47,10 @@ export class Shockwave implements LaneMover {
         return;
       }
     }
+    if (ctx.hitObjectAt(this, this.x, this.y, this.damage)) {
+      this.done = true;
+      return;
+    }
     ctx.hitPlayerAt(this, this.x, this.y, this.damage);
   }
 }

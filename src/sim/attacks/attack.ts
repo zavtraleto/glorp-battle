@@ -9,6 +9,8 @@ export interface AttackContext {
   readonly field: Field;
   /** Damages the player if standing on (x, y), not invulnerable and not yet hit by this attack. */
   hitPlayerAt(attack: Attack, x: number, y: number, damage: number): boolean;
+  /** Damages an object on (x, y) once per attack; true if there was one. */
+  hitObjectAt(attack: Attack, x: number, y: number, damage: number): boolean;
   emit(event: SimEvent): void;
 }
 

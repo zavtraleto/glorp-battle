@@ -1,5 +1,6 @@
 import type { ChipId, PatternId } from '../data/chips';
 import type { Panel } from './field';
+import type { ObjectKind } from './fieldObject';
 import type { Cell, Side } from './grid';
 import type { EntityId } from './occupancy';
 
@@ -22,6 +23,8 @@ export type SimEvent =
   /** Instant enemy shot along a lane (Canodron); toY = row where it stopped, or ROWS if it left the field. */
   | { type: 'enemyShot'; x: number; fromY: number; toY: number }
   | { type: 'panelChanged'; x: number; y: number; panel: Panel; owner: Side }
+  | { type: 'objectPlaced'; id: EntityId; kind: ObjectKind; x: number; y: number }
+  | { type: 'objectBroken'; id: EntityId; x: number; y: number }
   /** Auto Buster shot down lane x; toY = row of the target hit, or -1 on a miss. */
   | { type: 'busterShot'; x: number; fromY: number; toY: number }
   | { type: 'enemyWarped'; id: EntityId; fromX: number; fromY: number; x: number; y: number }

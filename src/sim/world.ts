@@ -9,6 +9,7 @@ import type { Attack, AttackContext } from './attacks/attack';
 import { PlayerBomb } from './attacks/bomb';
 import { Buster } from './buster';
 import { Field } from './field';
+import { FieldObject, type ObjectKind } from './fieldObject';
 import { ChipSystem, type ChipInstance } from './chips/chipSystem';
 import { startChip, type ActiveChip } from './chips/executor';
 import { hitscanCells, lobTarget, meleeCells } from './chips/patterns';
@@ -16,7 +17,7 @@ import type { Enemy, EnemyContext } from './enemies/enemyBase';
 import { createEnemy } from './enemies/factory';
 import type { SimEvent } from './events';
 import { Gauge } from './gauge';
-import { ROWS, type Cell } from './grid';
+import { ROWS, type Cell, type Side } from './grid';
 import { Occupancy } from './occupancy';
 import { Player } from './player';
 
@@ -96,6 +97,7 @@ export class World implements EnemyContext, AttackContext {
   readonly player: Player;
   readonly cheats: Cheats;
   enemies: Enemy[] = [];
+  objects: FieldObject[] = [];
   attacks: Attack[] = [];
   /** Player bombs in flight. */
   bombs: PlayerBomb[] = [];
@@ -260,6 +262,12 @@ export class World implements EnemyContext, AttackContext {
   shootLane(x: number, fromY: number, damage: number): number {
     const p = this.player;
     for (let y = Math.max(0, fromY); y < ROWS; y++) {
+      if (this.objectAt(x, y)) {
+        this.hitObjectAt(ONE_SHOT, x, y, damage);
+        ONE_SHOT.hitIds.clear();
+        this.events.push({ type: 'enemyShot', x, fromY, toY: y });
+        return y;
+      }
       if (p.x === x && p.y === y && p.alive) {
         // An invulnerable player lets the shot pass (GDD §9).
         if (p.invulnerable) continue;
@@ -319,6 +327,44 @@ export class World implements EnemyContext, AttackContext {
     return true;
   }
 
+  // ---------- Objects ----------
+
+  objectAt(x: number, y: number): FieldObject | null {
+    const id = this.occupancy.get(x, y);
+    if (id === null) return null;
+    return this.objects.find((o) => o.id === id) ?? null;
+  }
+
+  placeObject(kind: ObjectKind, x: number, y: number, side: Side): FieldObject | null {
+    if (!this.occupancy.isFree(x, y) || this.field.panel(x, y) === 'BROKEN') return null;
+    const o = new FieldObject(this.nextEnemyId++, kind, x, y, side, tuning.field.ROCK_HP);
+    this.occupancy.place(o.id, x, y);
+    this.objects.push(o);
+    this.events.push({ type: 'objectPlaced', id: o.id, kind, x, y });
+    return o;
+  }
+
+  damageObject(o: FieldObject, amount: number): void {
+    if (!o.alive) return;
+    o.hp = Math.max(0, o.hp - amount);
+    this.events.push({ type: 'damaged', targetId: o.id, amount, x: o.x, y: o.y, hpLeft: o.hp });
+    if (o.alive) return;
+    this.occupancy.remove(o.id, o.x, o.y);
+    this.objects = this.objects.filter((b) => b !== o);
+    this.events.push({ type: 'objectBroken', id: o.id, x: o.x, y: o.y });
+    this.field.onLeave(o.x, o.y, this.tick);
+  }
+
+  hitObjectAt(attack: Attack, x: number, y: number, damage: number): boolean {
+    const o = this.objectAt(x, y);
+    if (!o) return false;
+    if (!attack.hitIds.has(o.id)) {
+      attack.hitIds.add(o.id);
+      this.damageObject(o, damage);
+    }
+    return true;
+  }
+
   // ---------- Combat ----------
 
   damageEnemy(enemy: Enemy, amount: number): void {
@@ -335,7 +381,7 @@ export class World implements EnemyContext, AttackContext {
   firstTargetRow = (x: number, py: number): number => {
     for (let y = py - 1; y >= 0; y--) {
       const e = this.enemyAt(x, y);
-      if (e && e.alive) return y;
+      if ((e && e.alive) || this.objectAt(x, y)) return y;
     }
     return -1;
   };
@@ -343,6 +389,14 @@ export class World implements EnemyContext, AttackContext {
   private damageCells(cells: readonly { x: number; y: number }[], damage: number): void {
     const hit = new Set<number>();
     for (const c of cells) {
+      const o = this.objectAt(c.x, c.y);
+      if (o) {
+        if (!hit.has(o.id)) {
+          hit.add(o.id);
+          this.damageObject(o, damage);
+        }
+        continue;
+      }
       const e = this.enemyAt(c.x, c.y);
       if (!e || !e.alive || hit.has(e.id)) continue;
       hit.add(e.id);
@@ -426,6 +480,10 @@ export class World implements EnemyContext, AttackContext {
     this.events.push({ type: 'busterShot', x: p.x, fromY: p.y, toY: y });
     const e = y >= 0 ? this.enemyAt(p.x, y) : null;
     if (e) this.damageEnemy(e, tuning.buster.BUSTER_DAMAGE);
+    else if (y >= 0) {
+      const o = this.objectAt(p.x, y);
+      if (o) this.damageObject(o, tuning.buster.BUSTER_DAMAGE);
+    }
   }
 
   private updateBombs(): void {
