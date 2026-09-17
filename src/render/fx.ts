@@ -81,6 +81,9 @@ export class FxView {
         // Enemy fire bursting on the player's side.
         for (const c of e.cells) this.push('enemyBlast', tick, fx.EXPLOSION_TIME, c.x, c.y);
         break;
+      case 'busterShot':
+        this.push('tracer', tick, fx.BUSTER_TRACER_TIME, e.x, e.fromY, e.toY);
+        break;
       case 'enemyShot':
         this.push('enemyTracer', tick, fx.CANNON_TRACER_TIME, e.x, e.fromY, e.toY);
         break;

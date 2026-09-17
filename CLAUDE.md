@@ -28,7 +28,7 @@ Before every commit: `npm test` and `npm run build` must pass. Pushing to `main`
 
 - **MMBN1 is the source of truth** for anything the GDD leaves open. If MMBN1 lacks it, use MMBN2–3 and say so.
 - **Deliberate deviations — do not undo them:**
-  - The Buster is removed. Only chips deal damage. Do not reintroduce buster code, commands or tuning.
+  - The Buster is automatic: one weak shot per `BUSTER_INTERVAL` down the player's column (GDD §4). There is no Buster button or command.
   - One trackball gesture = exactly one panel. No hold-to-repeat on gestures (keyboard keeps it).
   - A `DBG` button (bottom-left) toggles debug tools in every build.
   - Working names replace Capcom names: Mettik, Canodron, Spiker (see GDD §0.1).

@@ -17,6 +17,11 @@ export const DEFAULT_TUNING = {
     PLAYER_FLINCH_TIME: 0.4,
     PLAYER_IFRAMES: 2.0,
   },
+  /** Auto Buster (roguelite spec §2): a weak instant shot down the player's column. */
+  buster: {
+    BUSTER_INTERVAL: 1.0,
+    BUSTER_DAMAGE: 1,
+  },
   gauge: {
     GAUGE_FILL_TIME: 8.0,
   },
@@ -65,6 +70,7 @@ export const DEFAULT_TUNING = {
     HIT_FLASH: 0.1,
     IFRAME_BLINK_HZ: 15,
     CANNON_TRACER_TIME: 0.18,
+    BUSTER_TRACER_TIME: 0.08,
     SLASH_TIME: 0.15,
     EXPLOSION_TIME: 0.3,
     HEAL_FX_TIME: 0.5,

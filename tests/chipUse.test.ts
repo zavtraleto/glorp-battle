@@ -18,6 +18,8 @@ const events: SimEvent[] = [];
 
 beforeEach(() => {
   mergeTuning(tuning, JSON.parse(JSON.stringify(DEFAULT_TUNING)));
+  // Isolate chip damage from the auto Buster.
+  tuning.buster.BUSTER_INTERVAL = 1e6;
   events.length = 0;
 });
 

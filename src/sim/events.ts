@@ -20,6 +20,8 @@ export type SimEvent =
   | { type: 'bombLanded'; id: number; x: number; y: number }
   /** Instant enemy shot along a lane (Canodron); toY = row where it stopped, or ROWS if it left the field. */
   | { type: 'enemyShot'; x: number; fromY: number; toY: number }
+  /** Auto Buster shot down lane x; toY = row of the target hit, or -1 on a miss. */
+  | { type: 'busterShot'; x: number; fromY: number; toY: number }
   | { type: 'enemyWarped'; id: EntityId; fromX: number; fromY: number; x: number; y: number }
   /** HeatShot burst: the hit panel plus the panel behind it. */
   | { type: 'explosion'; cells: Cell[] };

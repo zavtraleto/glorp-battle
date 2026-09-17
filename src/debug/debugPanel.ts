@@ -126,6 +126,7 @@ export class DebugPanel {
     const hp = { value: 100 };
     cf.add(a.cheats, 'god').name('god mode (no damage)');
     cf.add(a.cheats, 'aiEnabled').name('enemy AI');
+    cf.add(a.cheats, 'buster').name('auto buster');
     cf.add({ kill: () => a.killAll() }, 'kill').name('kill all enemies');
     cf.add({ force: () => a.forceAttack() }, 'force').name('force enemy attack');
     cf.add({ fill: () => a.fillGauge() }, 'fill').name('fill custom gauge');

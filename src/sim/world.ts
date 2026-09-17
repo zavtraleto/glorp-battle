@@ -7,6 +7,7 @@ import { getBattle } from '../data/battles';
 import type { FolderId } from '../data/folders';
 import type { Attack, AttackContext } from './attacks/attack';
 import { PlayerBomb } from './attacks/bomb';
+import { Buster } from './buster';
 import { ChipSystem, type ChipInstance } from './chips/chipSystem';
 import { startChip, type ActiveChip } from './chips/executor';
 import { hitscanCells, lobTarget, meleeCells } from './chips/patterns';
@@ -36,6 +37,8 @@ export type GameState =
 export interface Cheats {
   god: boolean;
   aiEnabled: boolean;
+  /** Auto Buster; on unless false. */
+  buster?: boolean;
 }
 
 export interface WorldOptions {
@@ -73,6 +76,7 @@ export class World implements EnemyContext, AttackContext {
   /** uiTick when the current state was entered. */
   stateTick = 0;
   readonly gauge = new Gauge();
+  readonly buster = new Buster();
   readonly chips: ChipSystem;
   /** OPEN CUSTOM was pressed while busy; opens as soon as the player is free. */
   private pendingOpenCustom = false;
@@ -325,8 +329,8 @@ export class World implements EnemyContext, AttackContext {
     }
   }
 
-  /** First living enemy in lane `x` in front of row `py`; -1 if none. */
-  private firstEnemyRow = (x: number, py: number): number => {
+  /** Row of the first target in lane `x` in front of row `py`; -1 if none. */
+  firstTargetRow = (x: number, py: number): number => {
     for (let y = py - 1; y >= 0; y--) {
       const e = this.enemyAt(x, y);
       if (e && e.alive) return y;
@@ -382,7 +386,7 @@ export class World implements EnemyContext, AttackContext {
     switch (def.pattern) {
       case 'lane_hitscan':
       case 'lane_hitscan_pierce1': {
-        const cells = hitscanCells(def.pattern, p.x, p.y, this.firstEnemyRow);
+        const cells = hitscanCells(def.pattern, p.x, p.y, this.firstTargetRow);
         effect(cells, cells[0]?.y ?? -1);
         this.damageCells(cells, power);
         return;
@@ -412,6 +416,14 @@ export class World implements EnemyContext, AttackContext {
         return;
       }
     }
+  }
+
+  private fireBuster(): void {
+    const p = this.player;
+    const y = this.firstTargetRow(p.x, p.y);
+    this.events.push({ type: 'busterShot', x: p.x, fromY: p.y, toY: y });
+    const e = y >= 0 ? this.enemyAt(p.x, y) : null;
+    if (e) this.damageEnemy(e, tuning.buster.BUSTER_DAMAGE);
   }
 
   private updateBombs(): void {
@@ -476,6 +488,8 @@ export class World implements EnemyContext, AttackContext {
     p.updateMovement(this.tick, moves, input.held);
     this.updateActiveChip();
     this.updateBombs();
+    const busy = p.flinched || p.actionTicks > 0 || this.activeChip !== null;
+    if (this.buster.tick(busy || this.cheats.buster === false)) this.fireBuster();
 
     if (this.cheats.aiEnabled) {
       for (const e of this.enemies) if (e.alive) e.update(this);

@@ -37,7 +37,7 @@ if (params.crtres) [tuning.terminal.CRT_RES_W, tuning.terminal.CRT_RES_H] = para
 const stage = byId('stage');
 const ui = byId('ui');
 
-const cheats: Cheats = { god: params.god, aiEnabled: true };
+const cheats: Cheats = { god: params.god, aiEnabled: true, buster: true };
 const session = new Session({ seed: params.seed ?? randomSeed(), cheats, folder: params.folder });
 // ?battle=N skips the title and jumps straight into that battle (debug).
 if (query.has('battle')) session.debugJump(params.battle);
