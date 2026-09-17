@@ -143,6 +143,15 @@ export const DEFAULT_TUNING = {
     PARALLAX_DEG: 1.5,
     /** CHIP SELECT glow pulse when the gauge is full. */
     GLOW_PULSE_HZ: 1.5,
+    /** Chip rail (TERMINAL.md §6.3): active chip lift (world units) and animation times (s). */
+    CHIP_ACTIVE_LIFT: 0.18,
+    EJECT_LIFT_TIME: 0.06,
+    EJECT_TIME: 0.34,
+    BURN_STAGGER: 0.04,
+    BURN_TIME: 0.6,
+    LOAD_TIME: 0.18,
+    LOAD_STAGGER: 0.05,
+    CONTACT_FLASH_TIME: 0.2,
   },
 };
 

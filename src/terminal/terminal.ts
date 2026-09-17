@@ -17,7 +17,8 @@ import { PointerRouter } from './interaction/pointerRouter';
 import { computeLayout, type TerminalLayout, type ZoneId } from './layout';
 import { DeckControls } from './parts/deckControls';
 import { Environment } from './parts/environment';
-import { Greybox } from './parts/greybox';
+import { ChipRail, RAIL_SLOTS } from './parts/chipRail';
+import { HitZones } from './parts/hitZones';
 import { Housing } from './parts/housing';
 import { Trackball } from './parts/trackball';
 import { lampStates, terminalMode } from './terminalMode';
@@ -29,7 +30,6 @@ import { lampStates, terminalMode } from './terminalMode';
 const TERMINAL_CLEAR_COLOR = 0x07080a;
 const GAUGE_LEDS = 12;
 const HP_LEDS = 10;
-const RAIL_SLOTS = 5;
 /** Parallax follow rate, 1/s. */
 const PARALLAX_RATE = 6;
 
@@ -56,7 +56,8 @@ export class Terminal {
   private readonly crt = new CrtMaterial();
   private readonly hud = new CrtCanvas(tuning.terminal.CRT_RES_W, tuning.terminal.CRT_RES_H);
   private readonly housing = new Housing(this.crt);
-  private readonly greybox = new Greybox();
+  private readonly rail = new ChipRail();
+  private readonly hitZones = new HitZones();
   private readonly deck = new DeckControls();
   private readonly trackball = new Trackball();
   private readonly environment = new Environment();
@@ -83,7 +84,7 @@ export class Terminal {
     this.battle = new BattleTarget(renderer);
     this.crt.setHud(this.hud.texture);
 
-    this.scene.add(this.environment.group, this.housing.group, this.greybox.group, this.deck.group, this.trackball.group);
+    this.scene.add(this.environment.group, this.housing.group, this.rail.group, this.hitZones.group, this.deck.group, this.trackball.group);
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.55));
     const key = new THREE.DirectionalLight(0xfff1dd, 1.6);
     key.position.set(-4, 6, 10);
@@ -144,7 +145,8 @@ export class Terminal {
     this.hud.setSize(t.CRT_RES_W, t.CRT_RES_H);
     const texel = k / scale; // world size of one render pixel
     this.housing.build(this.layout, texel, t.CRT_RES_W / t.CRT_RES_H);
-    this.greybox.build(this.layout);
+    this.rail.build(this.layout, texel);
+    this.hitZones.build(this.layout);
     this.deck.build(this.layout);
     const tb = this.layout.zones.trackball;
     const tbWorld = { cx: (tb.x + tb.w / 2 - bodyCx) * k, cy: -(tb.y + tb.h / 2 - bodyCy) * k };
@@ -165,7 +167,12 @@ export class Terminal {
   }
 
   setHitZonesVisible(v: boolean): void {
-    this.greybox.setHitZonesVisible(v);
+    this.hitZones.group.visible = v;
+  }
+
+  /** A new World started: cartridges of the old one vanish without animation. */
+  resetWorld(): void {
+    this.rail.reset();
   }
 
   render(world: World, alpha: number, dt: number): void {
@@ -181,6 +188,7 @@ export class Terminal {
     this.hud.draw(hudModel(session, world, this.noticeLeft > 0 ? t('hud.noChip') : null), this.time);
 
     this.syncIndicators(world);
+    this.rail.update(dt);
     this.deck.update(dt, this.time);
     this.trackball.update(dt);
     this.updateParallax(dt);
@@ -336,9 +344,9 @@ export class Terminal {
       this.deck.setGauge(gauge, s.full);
     }
     if (hp !== s.hp) this.housing.setHpLeds((s.hp = hp));
+    this.rail.sync(world.chips.queue, world.state === 'CUSTOM');
     if (chips !== s.chips) {
       s.chips = chips;
-      this.greybox.setChips(chips);
       this.housing.setChipCount(chips, RAIL_SLOTS);
     }
     if (lampKey !== s.lamps) {

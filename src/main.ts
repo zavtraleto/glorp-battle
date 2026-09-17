@@ -88,6 +88,7 @@ async function keepAwake(): Promise<void> {
 function afterWorldChange(): void {
   input.clear();
   sceneRenderer.reset();
+  terminal?.resetWorld();
   labels.reset();
   banner.hide();
   panel.syncSeed(session.seed, session.battleIndex);
