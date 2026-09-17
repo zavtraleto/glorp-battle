@@ -1,6 +1,6 @@
 // URL debug parameters (GDD §15.5, TERMINAL.md §14):
 // ?debug=1&seed=123&battle=3&folder=p1&god=1&timescale=0.5
-// ?ui=css&rscale=300&crtres=160x240&bench=1&hitzones=1
+// ?rscale=300&crtres=160x240&bench=1&hitzones=1
 
 export interface DebugParams {
   debug: boolean;
@@ -9,8 +9,6 @@ export interface DebugParams {
   folder: 'mvp' | 'p1';
   god: boolean;
   timescale: number;
-  /** `css` = legacy HTML UI (kept until T2). */
-  ui: 'terminal' | 'css';
   /** Overrides `tuning.terminal.RENDER_SCALE_SHORT`. */
   rscale: number | null;
   /** Overrides the CRT render target size `[w, h]`. */
@@ -44,7 +42,6 @@ export function parseDebugParams(search: string): DebugParams {
     folder: q.get('folder') === 'p1' ? 'p1' : 'mvp',
     god: flag('god'),
     timescale: timescale === null ? 1 : Math.min(4, Math.max(0.05, timescale)),
-    ui: q.get('ui') === 'css' ? 'css' : 'terminal',
     rscale: rscale === null ? null : Math.min(2160, Math.max(120, Math.round(rscale))),
     crtres: crtW > 0 && crtH > 0 ? [crtW, crtH] : null,
     bench: flag('bench'),

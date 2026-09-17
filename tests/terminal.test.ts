@@ -23,18 +23,16 @@ describe('terminal tuning', () => {
 });
 
 describe('terminal URL params', () => {
-  it('defaults to the terminal UI', () => {
+  it('has no terminal overrides by default', () => {
     const p = parseDebugParams('');
-    expect(p.ui).toBe('terminal');
     expect(p.rscale).toBeNull();
     expect(p.crtres).toBeNull();
     expect(p.bench).toBe(false);
     expect(p.hitzones).toBe(false);
   });
 
-  it('parses ui, rscale, crtres, bench and hitzones', () => {
-    const p = parseDebugParams('?ui=css&rscale=300&crtres=160x240&bench=1&hitzones=1');
-    expect(p.ui).toBe('css');
+  it('parses rscale, crtres, bench and hitzones', () => {
+    const p = parseDebugParams('?rscale=300&crtres=160x240&bench=1&hitzones=1');
     expect(p.rscale).toBe(300);
     expect(p.crtres).toEqual([160, 240]);
     expect(p.bench).toBe(true);

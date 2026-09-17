@@ -7,7 +7,15 @@ import { t } from '../i18n';
 import type { SceneRenderer } from '../render/scene';
 import type { SimEvent } from '../sim/events';
 import type { World } from '../sim/world';
-import { acceptsPress, chipSelectAvailability, cursorKind, executeAvailability, organForKey } from './controlRules';
+import {
+  acceptsPress,
+  chipSelectAvailability,
+  cursorKind,
+  executeAvailability,
+  organForKey,
+  stepFocus,
+  trayKeyAction,
+} from './controlRules';
 import { BattleTarget } from './crt/battleTarget';
 import { CrtCanvas } from './crt/crtCanvas';
 import { CrtMaterial } from './crt/crtMaterial';
@@ -40,6 +48,8 @@ const HP_LEDS = 10;
 const PARALLAX_RATE = 6;
 /** The tray takes input once it is this far open. */
 const TRAY_READY = 0.95;
+/** Hand cartridges per tray row (keyboard up/down step). */
+const TRAY_COLUMNS = 5;
 /** Label anchors above the panel (world units): enemy HP, damage numbers start and rise. */
 const ENEMY_HP_HEIGHT = -0.12;
 const FLOATER_HEIGHT = 0.9;
@@ -519,6 +529,34 @@ export class Terminal {
     return out;
   }
 
+  /** Keyboard on the chip tray; returns true if the key was used. */
+  private trayKey(code: string): boolean {
+    const action = trayKeyAction(code, TRAY_COLUMNS);
+    if (!action || !this.trayReady()) return false;
+    const w = this.opts.session.world;
+    const hand = w.chips.hand;
+    switch (action.kind) {
+      case 'focus':
+        this.focusSlot = stepFocus(Math.max(0, this.focusSlot), action.delta, hand.map((c) => c !== null));
+        break;
+      case 'pick':
+        if (!w.customSelect(this.focusSlot)) this.tray.refuse(this.focusSlot);
+        break;
+      case 'removeLast':
+        w.customCancel();
+        break;
+      case 'ok':
+        this.tray.keys.ok.press(false);
+        w.customConfirm();
+        break;
+      case 'add':
+        this.tray.keys.add.press(false);
+        w.customAdd();
+        break;
+    }
+    return true;
+  }
+
   /** Session menu for the current screen; a new menu starts at its first item. */
   private syncMenu(): void {
     const spec = menuFor(this.opts.session);
@@ -569,6 +607,10 @@ export class Terminal {
     const held = new Set<string>();
     const onDown = (e: KeyboardEvent) => {
       if (e.repeat || held.has(e.code) || e.target instanceof HTMLInputElement) return;
+      if (this.mode() === 'CHIP_SELECT') {
+        if (this.trayKey(e.code)) e.preventDefault();
+        return;
+      }
       const code = e.code === 'Enter' && this.mode() === 'MENU' ? 'Space' : e.code;
       const organ = organForKey(code);
       if (!organ || !acceptsPress(this.mode(), organ.zone)) return;
@@ -579,6 +621,8 @@ export class Terminal {
       if (code === 'Space') e.preventDefault();
     };
     const onUp = (e: KeyboardEvent) => {
+      if (e.code === 'Enter') this.tray.keys.ok.release();
+      if (e.code === 'KeyR') this.tray.keys.add.release();
       if (!held.delete(e.code)) return;
       const organ = organForKey(e.code === 'Enter' ? 'Space' : e.code);
       if (organ) this.release(organ.zone);

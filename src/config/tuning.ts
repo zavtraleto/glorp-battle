@@ -89,8 +89,6 @@ export const DEFAULT_TUNING = {
   render: {
     CAMERA_TILT_DEG: 45,
     PANEL_GAP: 0.06,
-    FIELD_SCREEN_SHARE: 0.6,
-    MAX_PIXEL_RATIO: 2,
   },
   /** Physical terminal NET-01 (docs/TERMINAL.md §17). */
   terminal: {
