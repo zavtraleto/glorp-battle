@@ -11,6 +11,7 @@ import {
 } from '../src/terminal/crt/hudModel';
 import { drawText, glyphRows, measureText, GLYPH_H } from '../src/terminal/crt/pixelFont';
 import { lampStates, terminalMode } from '../src/terminal/terminalMode';
+import { plasticPattern } from '../src/terminal/textures/procedural';
 import type { GameState } from '../src/sim/world';
 
 const session = (screen: Screen = 'BATTLE'): HudSession => ({ screen, battleIndex: 2, battleCount: 4 });
@@ -117,5 +118,19 @@ describe('pixelFont', () => {
     expect(rects).toHaveLength(lit);
     expect(sink.fillStyle).toBe('#fff');
     expect(rects[0]).toEqual([10 + 1 * 2, 20, 2, 2]); // first row ".###."
+  });
+});
+
+describe('plasticPattern', () => {
+  it('is deterministic, sized and within range', () => {
+    const a = plasticPattern(1, 64, 64);
+    expect(a).toHaveLength(64 * 64);
+    expect(plasticPattern(1, 64, 64)).toEqual(a);
+    expect(plasticPattern(2, 64, 64)).not.toEqual(a);
+    const mean = a.reduce((s, v) => s + v, 0) / a.length;
+    expect(mean).toBeGreaterThan(100);
+    expect(mean).toBeLessThan(156);
+    expect(Math.min(...a)).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...a)).toBeLessThanOrEqual(255);
   });
 });
