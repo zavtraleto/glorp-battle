@@ -6,6 +6,7 @@ import { Rng } from '../core/rng';
 import { debugEncounter, type Encounter } from '../data/encounters';
 import type { ChipDef, FieldAction } from '../data/chips';
 import type { FolderId } from '../data/folders';
+import type { FolderChip } from './chips/chipSystem';
 import type { Attack, AttackContext } from './attacks/attack';
 import { PlayerBomb } from './attacks/bomb';
 import { Shockwave } from './attacks/shockwave';
@@ -52,7 +53,7 @@ export interface WorldOptions {
   encounter?: Encounter;
   playerHp?: number;
   cheats?: Cheats;
-  folder?: FolderId;
+  folder?: FolderId | readonly FolderChip[];
   /** Skip intro and the first Custom Screen (tests). */
   skipIntro?: boolean;
 }

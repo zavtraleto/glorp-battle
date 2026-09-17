@@ -13,6 +13,20 @@ export interface ChipInstance {
   readonly defId: ChipId;
   readonly code: ChipCode;
   state: ChipState;
+  /** Generation of the player who left this chip (roguelite spec §6.4). */
+  readonly legacyGen?: number;
+}
+
+/** A chip in a run's folder (roguelite spec §6.1). */
+export interface FolderChip {
+  defId: ChipId;
+  code: ChipCode;
+  legacyGen?: number;
+}
+
+/** A debug folder as a flat chip list. */
+export function folderChips(id: FolderId): FolderChip[] {
+  return FOLDERS[id].flatMap((e) => Array.from({ length: e.count }, () => ({ defId: e.chip, code: e.code })));
 }
 
 export function chipDef(chip: ChipInstance): ChipDef {
@@ -36,12 +50,11 @@ export class ChipSystem {
   /** Number of completed Custom Screen turns. */
   turns = 0;
 
-  constructor(folder: FolderId, rng: Rng) {
+  constructor(folder: FolderId | readonly FolderChip[], rng: Rng) {
+    const list = typeof folder === 'string' ? folderChips(folder) : folder;
     let uid = 1;
-    for (const entry of FOLDERS[folder]) {
-      for (let i = 0; i < entry.count; i++) {
-        this.chips.push({ uid: uid++, defId: entry.chip, code: entry.code, state: 'folder' });
-      }
+    for (const c of list) {
+      this.chips.push({ uid: uid++, defId: c.defId, code: c.code, state: 'folder', legacyGen: c.legacyGen });
     }
     this.drawPile = rng.shuffle([...this.chips]);
   }
