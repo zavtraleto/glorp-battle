@@ -1,4 +1,5 @@
 import type { LoopStats } from '../core/loop';
+import type { PerfSnapshot } from './perfProbe';
 
 export interface OverlayInfo {
   stats: LoopStats;
@@ -9,6 +10,7 @@ export interface OverlayInfo {
   paused: boolean;
   simTime: number;
   extra?: string;
+  perf?: PerfSnapshot;
 }
 
 /** Text overlay with FPS and simulation info (GDD §15.5). Updated a few times per second. */
@@ -51,6 +53,12 @@ export class DebugOverlay {
     this.el.innerHTML =
       `<span class="${fpsClass}">FPS ${s.fps.toFixed(0)} (min5s ${minFps})</span>\n` +
       `frame ${s.frameMs.toFixed(2)} ms  ticks/f ${s.ticksLastFrame}\n` +
+      (info.perf
+        ? `cpu p50 ${info.perf.cpuP50.toFixed(2)} p95 ${info.perf.cpuP95.toFixed(2)} ms  ` +
+          `gap p95 ${info.perf.intervalP95.toFixed(1)} ms\n` +
+          `calls ${info.perf.calls}  tris ${info.perf.triangles}  rt ${(info.perf.textureBytes / 1048576).toFixed(1)} MB  ` +
+          `canvas ${info.perf.renderW}×${info.perf.renderH}\n`
+        : '') +
       `ticks ${s.totalTicks}  sim ${info.simTime.toFixed(2)} s\n` +
       `state ${info.state}${info.paused ? ' [PAUSED]' : ''}  x${info.timeScale}\n` +
       `battle ${info.battle}  seed ${info.seed}\n` +
