@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { tuning } from '../config/tuning';
 import type { SimEvent } from '../sim/events';
 import type { World } from '../sim/world';
-import { EnemyView, PlayerView } from './actors';
+import { EnemyView, PlayerView, type SpriteFrame } from './actors';
 import { FieldView, cellToWorld } from './field';
 import { FxView } from './fx';
 import { cellKey } from './cellStates';
@@ -99,7 +99,7 @@ export class SceneRenderer {
     this.field.clear();
   }
 
-  private syncEnemies(world: World, alpha: number, dt: number): void {
+  private syncEnemies(world: World, alpha: number, dt: number, frame: SpriteFrame): void {
     const live = new Set<number>();
     for (const e of world.enemies) {
       live.add(e.id);
@@ -109,7 +109,7 @@ export class SceneRenderer {
         this.enemyViews.set(e.id, view);
         this.scene.add(view.sprite);
       }
-      view.update(e, world.tick, alpha, dt);
+      view.update(e, world.tick, alpha, dt, frame);
     }
     for (const [id, view] of this.enemyViews) {
       if (live.has(id)) continue;
@@ -119,9 +119,10 @@ export class SceneRenderer {
     }
   }
 
-  private prepare(world: World, alpha: number, dt: number): void {
-    this.playerView.update(world.player, world.tick, alpha, dt, world.activeChip !== null);
-    this.syncEnemies(world, alpha, dt);
+  private prepare(world: World, alpha: number, dt: number, w: number, h: number): void {
+    const frame: SpriteFrame = { camera: this.camera, width: w, height: h };
+    this.playerView.update(world.player, world.tick, alpha, dt, world.activeChip !== null, frame);
+    this.syncEnemies(world, alpha, dt, frame);
     this.fx.update(world, alpha);
     // Moving enemy attacks light up the cell they are in.
     for (const a of world.attacks) {
@@ -143,7 +144,7 @@ export class SceneRenderer {
     const w = target.width;
     const h = target.height;
     this.fitCamera(w, h);
-    this.prepare(world, alpha, dt);
+    this.prepare(world, alpha, dt, w, h);
     this.renderer.setRenderTarget(target);
     this.renderer.setClearColor(BATTLE_CLEAR_COLOR, 1);
     this.renderer.render(this.scene, this.camera);

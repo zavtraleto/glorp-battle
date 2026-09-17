@@ -1,22 +1,37 @@
 import * as THREE from 'three';
 import { secondsToTicks, tuning } from '../config/tuning';
-import { ENEMY_LOOKS } from '../data/enemies';
+import { ENEMY_SEEDS } from '../data/enemies';
 import type { Enemy } from '../sim/enemies/enemyBase';
 import type { Player } from '../sim/player';
-import { cellToWorld } from './field';
-import { makeCharacterSprite } from './sprites';
+import { generateCreature, type CreatureBitmap } from './creatureGen';
+import { CELL_DEPTH, CELL_WIDTH, cellToWorld } from './field';
+import { PixelSprite } from './pixelSprite';
+import { playerBitmap } from './playerSprite';
+
+// Player and enemy sprites (BATTLE_VISUAL.md §5): pixel bitmaps standing in
+// their cells, animated with whole-pixel lifts, flashes and a dissolve.
 
 /** Nearer rows (larger y) draw on top of farther ones. */
 export function rowRenderOrder(y: number): number {
   return 10 + y;
 }
 
+/** Feet sit a bit in front of the cell centre so the figure reads as standing in it. */
+const FOOT_OFFSET = 0.18;
+/** Enemies bob by one texel at this rate. */
+const IDLE_BOB_HZ = 1.2;
+
+export interface SpriteFrame {
+  camera: THREE.PerspectiveCamera;
+  width: number;
+  height: number;
+}
+
 const from = new THREE.Vector3();
 const to = new THREE.Vector3();
-const FLASH = 3; // color multiplier: >1 pushes the placeholder towards white
+const anchor = new THREE.Vector3();
 
-function slide(
-  sprite: THREE.Sprite,
+function slideAnchor(
   prevX: number,
   prevY: number,
   x: number,
@@ -25,80 +40,92 @@ function slide(
   tick: number,
   alpha: number,
   dt: number,
-): void {
+): THREE.Vector3 {
   const elapsed = (tick - lastMoveTick + alpha) * dt;
   const t = Math.min(1, Math.max(0, elapsed / Math.max(1e-6, tuning.player.MOVE_VISUAL_TIME)));
   // Ease-out keeps the "snap" feel of MMBN while still reading as motion.
   const k = 1 - (1 - t) * (1 - t);
   cellToWorld(prevX, prevY, from);
   cellToWorld(x, y, to);
-  sprite.position.lerpVectors(from, to, k);
-  sprite.renderOrder = rowRenderOrder(y);
+  anchor.lerpVectors(from, to, k);
+  anchor.z += FOOT_OFFSET * CELL_DEPTH;
+  return anchor;
 }
 
 function flashing(lastHitTick: number, tick: number): boolean {
   return tick - lastHitTick < secondsToTicks(tuning.fx.HIT_FLASH);
 }
 
-/** Player billboard (GDD §3, §14): slides between cells, flashes and blinks after hits. */
-export class PlayerView {
-  readonly sprite = makeCharacterSprite('G', '#6fd3ff', 0.9);
+function deathProgress(deathTick: number, tick: number, alpha: number, dt: number): number {
+  return Math.min(1, ((tick - deathTick + alpha) * dt) / Math.max(1e-6, tuning.fx.DELETE_ANIM_TIME));
+}
 
-  update(player: Player, tick: number, alpha: number, dt: number, usingChip = false): void {
-    slide(this.sprite, player.prevX, player.prevY, player.x, player.y, player.lastMoveTick, tick, alpha, dt);
-    const mat = this.sprite.material;
-    if (flashing(player.lastHitTick, tick)) mat.color.setScalar(FLASH);
-    else if (usingChip) mat.color.setRGB(1.25, 1.25, 0.9);
-    else mat.color.setScalar(1);
+export class PlayerView {
+  private readonly pixels = new PixelSprite(playerBitmap(), 'phosphor');
+  readonly sprite = this.pixels.sprite;
+
+  update(player: Player, tick: number, alpha: number, dt: number, usingChip: boolean, frame: SpriteFrame): void {
+    const a = slideAnchor(player.prevX, player.prevY, player.x, player.y, player.lastMoveTick, tick, alpha, dt);
+    const width = CELL_WIDTH * tuning.battleVisual.SPRITE_CELL_FRAC * 0.8;
+    this.pixels.place(a, width, frame.camera, frame.width, frame.height, usingChip ? 1 : 0);
+    this.sprite.renderOrder = rowRenderOrder(player.y);
+    this.pixels.setFlash(flashing(player.lastHitTick, tick));
     // Blink while invulnerable.
     const blinkTicks = Math.max(1, Math.round(tuning.sim.SIM_HZ / Math.max(1, tuning.fx.IFRAME_BLINK_HZ) / 2));
     this.sprite.visible = !player.invulnerable || Math.floor(tick / blinkTicks) % 2 === 0;
-    const deadScale = player.alive ? 1 : 0.6;
-    this.sprite.scale.setScalar(0.9 * deadScale * (usingChip ? 1.08 : 1));
-    mat.opacity = player.alive ? 1 : 0.4;
+    this.pixels.setDissolve(player.alive ? 0 : 0.6);
   }
 }
 
-/** Enemy billboard: telegraph tint, hit flash, deletion shrink. */
+const bitmaps = new Map<number, CreatureBitmap>();
+
+function creature(seed: number): CreatureBitmap {
+  let b = bitmaps.get(seed);
+  if (!b) {
+    b = generateCreature(seed);
+    bitmaps.set(seed, b);
+  }
+  return b;
+}
+
 export class EnemyView {
+  private readonly pixels: PixelSprite;
   readonly sprite: THREE.Sprite;
-  private readonly baseColor = new THREE.Color();
+  private readonly phase: number;
 
   constructor(enemy: Enemy) {
-    const look = ENEMY_LOOKS[enemy.kind];
-    this.sprite = makeCharacterSprite(look.letter, look.color, 0.85);
+    this.pixels = new PixelSprite(creature(ENEMY_SEEDS[enemy.kind]), 'red');
+    this.sprite = this.pixels.sprite;
+    this.phase = enemy.id * 1.7;
   }
 
-  update(enemy: Enemy, tick: number, alpha: number, dt: number): void {
-    slide(this.sprite, enemy.prevX, enemy.prevY, enemy.x, enemy.y, enemy.lastMoveTick, tick, alpha, dt);
-    const mat = this.sprite.material;
-    let scale = 0.85;
+  update(enemy: Enemy, tick: number, alpha: number, dt: number, frame: SpriteFrame): void {
+    const a = slideAnchor(enemy.prevX, enemy.prevY, enemy.x, enemy.y, enemy.lastMoveTick, tick, alpha, dt);
+    const time = (tick + alpha) / tuning.sim.SIM_HZ;
+    let lift = Math.sin(time * Math.PI * 2 * IDLE_BOB_HZ + this.phase) > 0.3 ? 1 : 0;
+    let flash = flashing(enemy.lastHitTick, tick);
 
     if (enemy.state === 'TELEGRAPH') {
-      // Warm pulsing tint + slight swell reads as "about to attack".
-      const pulse = 0.5 + 0.5 * Math.sin((tick + alpha) * 0.6);
-      this.baseColor.setRGB(1.4, 0.75 + 0.25 * pulse, 0.5);
-      scale *= 1.08 + 0.04 * pulse;
+      // "Inhale": lifted and pulsing with the danger cells.
+      lift = 2;
+      flash ||= Math.sin(time * Math.PI * 2 * tuning.battleVisual.DANGER_PULSE_HZ) > 0.2;
     } else if (enemy.state === 'ATTACK') {
-      this.baseColor.setRGB(1.6, 0.6, 0.4);
-      scale *= 1.15;
-    } else {
-      this.baseColor.setRGB(1, 1, 1);
+      lift = 1;
+      flash = true;
     }
 
-    if (flashing(enemy.lastHitTick, tick)) this.baseColor.setScalar(FLASH);
-    mat.color.copy(this.baseColor);
-
-    if (!enemy.alive) {
-      const t = Math.min(1, ((tick - enemy.deathTick + alpha) * dt) / Math.max(1e-6, tuning.fx.DELETE_ANIM_TIME));
-      scale *= 1 - t;
-      mat.opacity = 1 - t * 0.5;
-    }
-    this.sprite.scale.setScalar(Math.max(0.001, scale));
+    this.pixels.place(a, CELL_WIDTH * tuning.battleVisual.SPRITE_CELL_FRAC, frame.camera, frame.width, frame.height, lift);
+    this.sprite.renderOrder = rowRenderOrder(enemy.y);
+    this.pixels.setFlash(flash);
+    this.pixels.setDissolve(enemy.alive ? 0 : deathProgress(enemy.deathTick, tick, alpha, dt));
   }
 
   dispose(): void {
-    this.sprite.material.map?.dispose();
-    this.sprite.material.dispose();
+    this.pixels.dispose();
   }
+}
+
+/** Forgets generated bitmaps (after the debug panel changes enemy seeds). */
+export function clearCreatureCache(): void {
+  bitmaps.clear();
 }

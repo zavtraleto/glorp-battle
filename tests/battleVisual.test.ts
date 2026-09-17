@@ -1,8 +1,12 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
+import { ENEMY_SEEDS } from '../src/data/enemies';
+import { generateCreature } from '../src/render/creatureGen';
 import { cellKey, cellStates, type CellInputs } from '../src/render/cellStates';
 import { bayer4, paletteIndex, signal } from '../src/render/palette';
 import { fitView } from '../src/render/viewCamera';
+import { texelScale } from '../src/render/pixelSprite';
+import { PLAYER_ROWS, playerBitmap } from '../src/render/playerSprite';
 
 describe('palette', () => {
   it('has a 4×4 Bayer matrix with 16 distinct steps', () => {
@@ -146,4 +150,47 @@ describe('fitView', () => {
       expect(nearW).toBeGreaterThan(farW * 1.3);
     });
   }
+});
+
+describe('generateCreature', () => {
+  it('is deterministic per seed and varies between seeds', () => {
+    const a = generateCreature(7);
+    expect(generateCreature(7).px).toEqual(a.px);
+    const distinct = new Set(Array.from({ length: 20 }, (_, i) => Array.from(generateCreature(i + 1).px).join('')));
+    expect(distinct.size).toBe(20);
+  });
+
+  it('keeps a large silhouette, few inner elements and 3 pixel values', () => {
+    for (let seed = 1; seed <= 300; seed++) {
+      const c = generateCreature(seed);
+      expect(c.w * c.h).toBe(c.px.length);
+      const filled = c.px.reduce((n, p) => n + (p ? 1 : 0), 0);
+      expect(filled / c.px.length, `seed ${seed}`).toBeGreaterThanOrEqual(0.25);
+      expect(c.elements.length, `seed ${seed}`).toBeGreaterThanOrEqual(1);
+      expect(c.elements.length, `seed ${seed}`).toBeLessThanOrEqual(3);
+      for (const p of c.px) expect(p).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it('gives every enemy kind its own look', () => {
+    const looks = Object.values(ENEMY_SEEDS).map((s) => Array.from(generateCreature(s).px).join(''));
+    expect(new Set(looks).size).toBe(looks.length);
+  });
+});
+
+describe('player sprite and texel scale', () => {
+  it('draws the player as a 24×32 bitmap with feet on the bottom row', () => {
+    for (const row of PLAYER_ROWS) expect(row).toMatch(/^[.ov]{24}$/);
+    const b = playerBitmap();
+    expect([b.w, b.h]).toEqual([24, 32]);
+    const bottom = Array.from(b.px.slice((b.h - 1) * b.w));
+    expect(bottom.some((p) => p === 1)).toBe(true);
+    expect(Array.from(b.px).some((p) => p === 2)).toBe(true);
+  });
+
+  it('rounds texels to whole pixels and never below one', () => {
+    expect(texelScale(1, 40, 32)).toBe(1);
+    expect(texelScale(1, 70, 32)).toBe(2);
+    expect(texelScale(1, 5, 32)).toBe(1);
+  });
 });

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-// Placeholder textures generated in code (GDD §14): no external art files.
+// Text textures for debug overlays (cell coordinates).
 
 export function makeLabelTexture(
   text: string,
@@ -27,20 +27,4 @@ export function makeLabelTexture(
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
   return tex;
-}
-
-/** Camera-facing flat sprite (billboard) with a placeholder letter. */
-export function makeCharacterSprite(letter: string, color: string, height = 1): THREE.Sprite {
-  const material = new THREE.SpriteMaterial({
-    map: makeLabelTexture(letter, { background: color, color: '#10131a' }),
-    transparent: true,
-    // Characters always draw over the field; ordering between them uses renderOrder by row.
-    depthTest: false,
-  });
-  const sprite = new THREE.Sprite(material);
-  sprite.scale.set(height, height, 1);
-  // Anchor below the sprite center so the figure reads as standing on its own cell
-  // under the tilted camera (a bottom anchor makes it look one row further back).
-  sprite.center.set(0.5, 0.3);
-  return sprite;
 }

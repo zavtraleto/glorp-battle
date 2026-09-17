@@ -99,8 +99,8 @@ export const DEFAULT_TUNING = {
     GRID_DIM: 0.75,
     /** Fill brightness of the player's cell. */
     ACTIVE_FILL: 0.25,
-    /** Wanted texel size of creature sprites, CRT pixels (rounded to a whole number). */
-    SPRITE_TEXEL_TARGET: 1.4,
+    /** Creature sprite width as a share of a cell; texels are then rounded to whole CRT pixels. */
+    SPRITE_CELL_FRAC: 0.95,
     DANGER_PULSE_HZ: 6,
     /** Hit stripe, then the flickering afterglow, seconds. */
     ATTACK_CELL_TIME: 0.15,
