@@ -13,6 +13,8 @@ void main() {
 
 const FRAG = /* glsl */ `
 uniform sampler2D uScreen;
+uniform sampler2D uHud;
+uniform float uHudOn;
 uniform vec2 uRes;
 uniform float uScan;
 uniform float uCurv;
@@ -39,6 +41,8 @@ void main() {
     vec3 blur = (texture2D(uScreen, uv - vec2(px.x, 0.0)).rgb + c + texture2D(uScreen, uv + vec2(px.x, 0.0)).rgb) / 3.0;
     vec3 bled = luma(c) + (blur - luma(blur));
     c = mix(c, bled, uBleed);
+    vec4 hud = texture2D(uHud, uv);
+    c = mix(c, hud.rgb, hud.a * uHudOn);
     float scan = 0.5 + 0.5 * cos(uv.y * uRes.y * 6.2831853);
     c *= 1.0 - uScan * (1.0 - scan);
     vec2 v = uv * (1.0 - uv);
@@ -58,6 +62,8 @@ export class CrtMaterial extends THREE.ShaderMaterial {
       fragmentShader: FRAG,
       uniforms: {
         uScreen: { value: null },
+        uHud: { value: null },
+        uHudOn: { value: 0 },
         uRes: { value: new THREE.Vector2(1, 1) },
         uScan: { value: 0 },
         uCurv: { value: 0 },
@@ -70,6 +76,12 @@ export class CrtMaterial extends THREE.ShaderMaterial {
   setScreen(tex: THREE.Texture, w: number, h: number): void {
     this.uniforms.uScreen!.value = tex;
     (this.uniforms.uRes!.value as THREE.Vector2).set(w, h);
+  }
+
+  /** HUD layer drawn over the battle (before scanlines). */
+  setHud(tex: THREE.Texture): void {
+    this.uniforms.uHud!.value = tex;
+    this.uniforms.uHudOn!.value = 1;
   }
 
   /** Starts a CRT_FLASH_TIME brightness flash. */
