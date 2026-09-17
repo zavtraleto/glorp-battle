@@ -26,6 +26,8 @@ export class Player {
   flinchTicks = 0;
   /** Remaining ticks of invulnerability after a hit. */
   iframeTicks = 0;
+  /** Remaining ticks of Invis: enemy attacks pass through. */
+  invisTicks = 0;
   /** Remaining ticks of a chip animation: no movement. */
   actionTicks = 0;
   lastHitTick = -Infinity;
@@ -99,6 +101,7 @@ export class Player {
   updateTimers(): void {
     if (this.flinchTicks > 0) this.flinchTicks--;
     if (this.iframeTicks > 0) this.iframeTicks--;
+    if (this.invisTicks > 0) this.invisTicks--;
     if (this.actionTicks > 0) this.actionTicks--;
   }
 

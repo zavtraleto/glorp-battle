@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_TUNING, mergeTuning, secondsToTicks, tuning } from '../src/config/tuning';
 import type { Command, Dir } from '../src/core/input/commands';
-import type { ChipId } from '../src/data/chips';
+import type { ChipDef, ChipId } from '../src/data/chips';
 import { Shockwave } from '../src/sim/attacks/shockwave';
 import { useTicks } from '../src/sim/chips/executor';
 import { lobArea, lobTarget, shapeCells } from '../src/sim/chips/patterns';
@@ -267,5 +267,96 @@ describe('chip use', () => {
     // The seed-2 hand holds enough cannon damage (≥ 40) to delete the 40 HP Mettik.
     expect(picked).toBeGreaterThan(0);
     expect(w.state).toBe('BATTLE_WON');
+  });
+});
+
+/** Uses a one-off chip definition by swapping it into the catalogue for the call. */
+function withChip(def: ChipDef, fn: () => void): void {
+  const saved = CHIPS[def.id];
+  CHIPS[def.id] = def;
+  try {
+    fn();
+  } finally {
+    CHIPS[def.id] = saved;
+  }
+}
+
+describe('hit effects', () => {
+  it('push moves a hit enemy one row back unless blocked', () => {
+    withChip({ ...CHIPS.cannon, onHit: { push: true } }, () => {
+      const w = makeWorld();
+      const e = addEnemy(w, 1, 2);
+      give(w, 'cannon');
+      use(w);
+      run(w, hitFrame());
+      expect([e.x, e.y]).toEqual([1, 1]);
+      addEnemy(w, 1, 0);
+      run(w, useTicks(CHIPS.cannon));
+      give(w, 'cannon');
+      use(w);
+      run(w, hitFrame());
+      expect([e.x, e.y]).toEqual([1, 1]);
+    });
+  });
+
+  it('paralyze stops an enemy for PARALYZE_TIME', () => {
+    withChip({ ...CHIPS.cannon, onHit: { paralyze: true } }, () => {
+      const w = new World({ seed: 7, battleIndex: 1, cheats: { god: true, aiEnabled: true, buster: false }, skipIntro: true });
+      w.chips.queue = [];
+      const met = w.enemies[0]!; // (1,1), in the player's lane: would attack within a second
+      met.hp = 500;
+      give(w, 'cannon');
+      use(w);
+      run(w, hitFrame());
+      expect(met.paralyzeTicks).toBe(T(tuning.chips.PARALYZE_TIME) - 1);
+      run(w, T(tuning.chips.PARALYZE_TIME) - 2);
+      expect(met.state).toBe('IDLE');
+      expect(w.attacks).toHaveLength(0);
+      run(w, T(tuning.mettik.MET_MOVE_INTERVAL + tuning.mettik.MET_TELEGRAPH) + 2);
+      expect(w.attacks.length + (met.state === 'ATTACK' || met.state === 'RECOVERY' ? 1 : 0)).toBeGreaterThan(0);
+    });
+  });
+
+  it('panel effects crack or break every cell of the area', () => {
+    withChip({ ...CHIPS.widesword, onHit: { panel: 'break' } }, () => {
+      const w = makeWorld();
+      movePlayer(w, 1, 3);
+      const e = addEnemy(w, 1, 2);
+      give(w, 'widesword');
+      use(w);
+      run(w, hitFrame());
+      expect(w.field.panel(0, 2)).toBe('BROKEN');
+      expect(w.field.panel(2, 2)).toBe('BROKEN');
+      expect(w.field.panel(1, 2)).toBe('CRACKED'); // the enemy still stands there
+      expect(e.hp).toBe(120);
+    });
+  });
+});
+
+describe('player wave and invis', () => {
+  it('a player wave pierces enemies up the lane and stops at a hole', () => {
+    const w = makeWorld();
+    const a = addEnemy(w, 1, 2);
+    const b = addEnemy(w, 1, 0);
+    w.field.breakPanel(1, 1, w.tick, false);
+    w.spawnAttack(new Shockwave(w.nextAttackId(), 1, 3, w.tick, {
+      dir: -1,
+      damage: 60,
+      stepTicks: T(tuning.chips.PLAYER_WAVE_STEP),
+      owner: 'player',
+    }));
+    run(w, T(tuning.chips.PLAYER_WAVE_STEP) * 6);
+    expect(a.hp).toBe(140);
+    expect(b.hp).toBe(200);
+    expect(w.attacks).toHaveLength(0);
+  });
+
+  it('enemy attacks pass through an invisible player', () => {
+    const w = makeWorld();
+    w.player.invisTicks = T(1);
+    w.spawnAttack(new Shockwave(w.nextAttackId(), 1, 3, w.tick));
+    expect(w.shootLane(1, 0, 10)).toBe(6);
+    run(w, T(0.6));
+    expect(w.player.hitsTaken).toBe(0);
   });
 });

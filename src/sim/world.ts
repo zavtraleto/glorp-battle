@@ -8,6 +8,7 @@ import type { ChipDef } from '../data/chips';
 import type { FolderId } from '../data/folders';
 import type { Attack, AttackContext } from './attacks/attack';
 import { PlayerBomb } from './attacks/bomb';
+import { Shockwave } from './attacks/shockwave';
 import { Buster } from './buster';
 import { Field } from './field';
 import { FieldObject, type ObjectKind } from './fieldObject';
@@ -271,7 +272,7 @@ export class World implements EnemyContext, AttackContext {
       }
       if (p.x === x && p.y === y && p.alive) {
         // An invulnerable player lets the shot pass (GDD §9).
-        if (p.invulnerable) continue;
+        if (p.invulnerable || p.invisTicks > 0) continue;
         this.hitPlayerAt(ONE_SHOT, x, y, damage);
         ONE_SHOT.hitIds.clear();
         this.events.push({ type: 'enemyShot', x, fromY, toY: y });
@@ -315,7 +316,7 @@ export class World implements EnemyContext, AttackContext {
     if (p.x !== x || p.y !== y || !p.alive) return false;
     if (attack.hitIds.has(p.id)) return false;
     // Hits on an invulnerable player are ignored entirely (GDD §9).
-    if (p.invulnerable) return false;
+    if (p.invulnerable || p.invisTicks > 0) return false;
     attack.hitIds.add(p.id);
     const amount = this.cheats.god ? 0 : damage;
     p.takeHit(amount, this.tick);
@@ -368,6 +369,15 @@ export class World implements EnemyContext, AttackContext {
 
   // ---------- Combat ----------
 
+  hitEnemyAt(attack: Attack, x: number, y: number, damage: number): boolean {
+    const e = this.enemyAt(x, y);
+    if (!e || !e.alive || attack.hitIds.has(e.id)) return false;
+    attack.hitIds.add(e.id);
+    this.damageEnemy(e, damage);
+    return true;
+  }
+
+
   damageEnemy(enemy: Enemy, amount: number): void {
     if (!enemy.alive) return;
     const died = enemy.applyDamage(amount, this.tick);
@@ -409,8 +419,21 @@ export class World implements EnemyContext, AttackContext {
   }
 
   /** Damage plus the chip's on-hit effects (roguelite spec §4.2). */
-  private hitCells(cells: readonly Cell[], damage: number, _def: ChipDef): void {
-    this.damageCells(cells, damage);
+  private hitCells(cells: readonly Cell[], damage: number, def: ChipDef): void {
+    const hit = this.damageCells(cells, damage);
+    const on = def.onHit;
+    if (!on) return;
+    for (const e of hit) {
+      if (!e.alive) continue;
+      if (on.paralyze) e.paralyze(secondsToTicks(tuning.chips.PARALYZE_TIME));
+      if (on.push) e.pushBack(this);
+    }
+    if (on.panel) {
+      for (const c of cells) {
+        if (on.panel === 'crack') this.field.crack(c.x, c.y);
+        else this.field.breakPanel(c.x, c.y, this.tick, !this.occupancy.isFree(c.x, c.y));
+      }
+    }
   }
 
   /** Starts the next queued chip if the player is free (no buffering, GDD §6.5). */
@@ -467,6 +490,16 @@ export class World implements EnemyContext, AttackContext {
         break;
       }
       case 'wave':
+        this.spawnAttack(
+          new Shockwave(this.attackIdCounter++, p.x, p.y - 1, this.tick, {
+            dir: -1,
+            damage: power,
+            stepTicks: secondsToTicks(tuning.chips.PLAYER_WAVE_STEP),
+            owner: 'player',
+          }),
+        );
+        effect([]);
+        break;
       case 'self':
         effect([]);
         break;
@@ -476,6 +509,7 @@ export class World implements EnemyContext, AttackContext {
       p.hp = Math.min(p.maxHp, p.hp + def.heal);
       this.events.push({ type: 'healed', amount: p.hp - before, x: p.x, y: p.y });
     }
+    if (def.invis) p.invisTicks = secondsToTicks(tuning.chips.INVIS_TIME);
   }
 
   private fireBuster(): void {
@@ -558,8 +592,15 @@ export class World implements EnemyContext, AttackContext {
     const busy = p.flinched || p.actionTicks > 0 || this.activeChip !== null;
     if (this.buster.tick(busy || this.cheats.buster === false)) this.fireBuster();
 
-    if (this.cheats.aiEnabled) {
-      for (const e of this.enemies) if (e.alive) e.update(this);
+    for (const e of this.enemies) {
+      if (!e.alive) continue;
+      if (e.paralyzeTicks > 0) {
+        // Paralysis freezes the enemy's state timer too.
+        e.paralyzeTicks--;
+        e.stateTick++;
+        continue;
+      }
+      if (this.cheats.aiEnabled) e.update(this);
     }
 
     for (const a of this.attacks) a.update(this);

@@ -47,6 +47,8 @@ export abstract class Enemy {
   stateTick: number;
   lastHitTick = -Infinity;
   deathTick = -Infinity;
+  /** Ticks left of paralysis: no actions, state timers stand still. */
+  paralyzeTicks = 0;
 
   constructor(
     readonly id: EntityId,
@@ -129,6 +131,15 @@ export abstract class Enemy {
     this.y = ny;
     this.lastMoveTick = ctx.tick;
     return true;
+  }
+
+  paralyze(ticks: number): void {
+    if (this.alive) this.paralyzeTicks = Math.max(this.paralyzeTicks, ticks);
+  }
+
+  /** Knock-back: one row away from the player if the panel allows it. */
+  pushBack(ctx: EnemyContext): boolean {
+    return this.alive && this.tryStep(ctx, this.x, this.y - 1);
   }
 
   abstract update(ctx: EnemyContext): void;

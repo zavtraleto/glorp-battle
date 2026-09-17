@@ -73,7 +73,7 @@ export class PlayerView {
     // Blink while invulnerable.
     const blinkTicks = Math.max(1, Math.round(tuning.sim.SIM_HZ / Math.max(1, tuning.fx.IFRAME_BLINK_HZ) / 2));
     this.sprite.visible = !player.invulnerable || Math.floor(tick / blinkTicks) % 2 === 0;
-    this.pixels.setDissolve(player.alive ? 0 : 0.6);
+    this.pixels.setDissolve(!player.alive ? 0.6 : player.invisTicks > 0 ? 0.5 : 0);
   }
 }
 
@@ -116,6 +116,8 @@ export class EnemyView {
 
     this.pixels.place(a, CELL_WIDTH * tuning.battleVisual.SPRITE_CELL_FRAC, frame.camera, frame.width, frame.height, lift);
     this.sprite.renderOrder = rowRenderOrder(enemy.y);
+    // Paralysis: a steady flicker.
+    if (enemy.paralyzeTicks > 0 && Math.floor(tick / 4) % 2 === 0) flash = true;
     this.pixels.setFlash(flash);
     this.pixels.setDissolve(enemy.alive ? 0 : deathProgress(enemy.deathTick, tick, alpha, dt));
   }

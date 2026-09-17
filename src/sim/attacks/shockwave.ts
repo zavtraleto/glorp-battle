@@ -2,42 +2,67 @@ import { secondsToTicks, tuning } from '../../config/tuning';
 import { ROWS } from '../grid';
 import type { Attack, AttackContext } from './attack';
 
-// Mettik ground wave (GDD §8.2, §8.5): starts in front of the Mettik and
-// travels down its lane one cell per MET_WAVE_STEP, piercing through.
-
-/** An attack that walks down a lane one panel per `stepTicks` (render interpolation uses this). */
+/** An attack that walks along a lane one panel per `stepTicks` (render interpolation uses this). */
 export interface LaneMover extends Attack {
   readonly x: number;
   y: number;
   lastStepTick: number;
   readonly stepTicks: number;
+  /** +1 moves toward the player's side, −1 toward the enemy's. */
+  readonly dir: 1 | -1;
 }
 
+export interface WaveOptions {
+  dir: 1 | -1;
+  damage: number;
+  stepTicks: number;
+  owner: 'enemy' | 'player';
+}
+
+function mettikWave(): WaveOptions {
+  return {
+    dir: 1,
+    damage: tuning.mettik.MET_DMG,
+    stepTicks: Math.max(1, secondsToTicks(tuning.mettik.MET_WAVE_STEP)),
+    owner: 'enemy',
+  };
+}
+
+/**
+ * Ground wave (GDD §8.2 Mettik, roguelite spec §4.2 ShockWave): travels one
+ * panel per step, pierces its targets, stops at the field edge, a hole or an object.
+ */
 export class Shockwave implements LaneMover {
-  readonly kind = 'shockwave';
+  readonly kind: string;
   readonly hitIds = new Set<number>();
   done = false;
   lastStepTick: number;
   readonly stepTicks: number;
   readonly damage: number;
+  readonly dir: 1 | -1;
+  private readonly owner: 'enemy' | 'player';
 
   constructor(
     readonly id: number,
     readonly x: number,
     public y: number,
     spawnTick: number,
+    opts: WaveOptions = mettikWave(),
   ) {
     this.lastStepTick = spawnTick;
-    this.stepTicks = Math.max(1, secondsToTicks(tuning.mettik.MET_WAVE_STEP));
-    this.damage = tuning.mettik.MET_DMG;
+    this.stepTicks = Math.max(1, opts.stepTicks);
+    this.damage = opts.damage;
+    this.dir = opts.dir;
+    this.owner = opts.owner;
+    this.kind = opts.owner === 'player' ? 'playerWave' : 'shockwave';
   }
 
   update(ctx: AttackContext): void {
     if (this.done) return;
     if (ctx.tick - this.lastStepTick >= this.stepTicks) {
-      this.y++;
+      this.y += this.dir;
       this.lastStepTick = ctx.tick;
-      if (this.y >= ROWS) {
+      if (this.y < 0 || this.y >= ROWS) {
         this.done = true;
         return;
       }
@@ -51,6 +76,7 @@ export class Shockwave implements LaneMover {
       this.done = true;
       return;
     }
-    ctx.hitPlayerAt(this, this.x, this.y, this.damage);
+    if (this.owner === 'player') ctx.hitEnemyAt(this, this.x, this.y, this.damage);
+    else ctx.hitPlayerAt(this, this.x, this.y, this.damage);
   }
 }

@@ -11,6 +11,8 @@ export interface AttackContext {
   hitPlayerAt(attack: Attack, x: number, y: number, damage: number): boolean;
   /** Damages an object on (x, y) once per attack; true if there was one. */
   hitObjectAt(attack: Attack, x: number, y: number, damage: number): boolean;
+  /** Damages a living enemy on (x, y) once per attack; true if it was hit now. */
+  hitEnemyAt(attack: Attack, x: number, y: number, damage: number): boolean;
   emit(event: SimEvent): void;
 }
 

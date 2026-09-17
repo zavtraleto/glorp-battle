@@ -14,6 +14,7 @@ export class HeatShot implements LaneMover {
   lastStepTick: number;
   readonly stepTicks: number;
   readonly damage: number;
+  readonly dir = 1 as const;
 
   constructor(
     readonly id: number,

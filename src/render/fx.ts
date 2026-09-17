@@ -106,7 +106,8 @@ export class FxView {
     this.airFill.begin();
 
     for (const a of world.attacks) {
-      if (a.kind === 'shockwave') this.wave(a as unknown as LaneMover, tick, alpha);
+      if (a.kind === 'shockwave' || a.kind === 'playerWave')
+        this.wave(a as unknown as LaneMover, tick, alpha, a.kind === 'playerWave' ? col.accent : col.red);
       else if (a.kind === 'heatshot') this.fireball(a as unknown as LaneMover, tick, alpha);
     }
     for (const b of world.bombs) this.bomb(b, tick, alpha);
@@ -241,27 +242,27 @@ export class FxView {
     batch.line(p.x - s, AIR_Y + s, p.z, p.x + s, AIR_Y - s, p.z, color);
   }
 
-  /** Mettik shockwave: a red chevron strip sliding through the cell toward the player. */
-  private wave(m: LaneMover, tick: number, alpha: number): void {
+  /** Ground wave: a chevron strip sliding through the cell (red from enemies, accent from the player). */
+  private wave(m: LaneMover, tick: number, alpha: number, color: THREE.Color): void {
     const progress = Math.min(1, Math.max(0, (tick - m.lastStepTick + alpha) / m.stepTicks));
     cellToWorld(m.x, m.y, p);
-    const z = p.z + (progress - 0.5) * CELL_DEPTH;
+    const z = p.z + (progress - 0.5) * CELL_DEPTH * m.dir;
     const hw = CELL_WIDTH * 0.4;
     const tip = CELL_DEPTH * 0.3;
     const h = 0.18 + 0.06 * Math.sin((tick + alpha) * 0.9);
     // Filled wedge on the floor.
-    A.set(p.x - hw, FLOOR_Y, z - tip * 0.3);
-    B.set(p.x + hw, FLOOR_Y, z - tip * 0.3);
-    C.set(p.x, FLOOR_Y, z + tip);
-    D.set(p.x, FLOOR_Y, z + tip);
-    this.floorFill.quad(A, B, C, D, col.red);
+    A.set(p.x - hw, FLOOR_Y, z - tip * 0.3 * m.dir);
+    B.set(p.x + hw, FLOOR_Y, z - tip * 0.3 * m.dir);
+    C.set(p.x, FLOOR_Y, z + tip * m.dir);
+    D.set(p.x, FLOOR_Y, z + tip * m.dir);
+    this.floorFill.quad(A, B, C, D, color);
     // Upright crest.
     for (let i = 0; i <= 4; i++) {
       const x = p.x - hw + (hw * 2 * i) / 4;
-      this.air.line(x, 0, z, x, h * (1 - Math.abs(i - 2) * 0.2), z, col.red);
+      this.air.line(x, 0, z, x, h * (1 - Math.abs(i - 2) * 0.2), z, color);
     }
-    this.air.line(p.x - hw, h * 0.6, z, p.x, h, z, col.red);
-    this.air.line(p.x, h, z, p.x + hw, h * 0.6, z, col.red);
+    this.air.line(p.x - hw, h * 0.6, z, p.x, h, z, color);
+    this.air.line(p.x, h, z, p.x + hw, h * 0.6, z, color);
   }
 
   /** Spiker fire: a pulsing red diamond moving down the lane. */
