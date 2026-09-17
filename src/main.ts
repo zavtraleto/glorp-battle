@@ -15,6 +15,7 @@ import { PerfProbe } from './debug/perfProbe';
 import { t } from './i18n';
 import { SceneRenderer } from './render/scene';
 import type { Cheats } from './sim/world';
+import { bannerFor } from './terminal/crt/hudModel';
 import { Terminal } from './terminal/terminal';
 import { Banner } from './ui/banner';
 import { Controls } from './ui/controls';
@@ -176,20 +177,9 @@ window.addEventListener(
 );
 
 function updateBanner(): void {
-  const w = session.world;
-  if (session.screen !== 'BATTLE') {
-    banner.hide();
-  } else if (w.state === 'BATTLE_INTRO') {
-    banner.show(`intro-${session.battleIndex}`, t('banner.battle', { n: session.battleIndex, total: session.battleCount }), 'info');
-  } else if (w.state === 'BATTLE_START' && w.firstStart) {
-    banner.show('battle-start', t('banner.battleStart'), 'info');
-  } else if (w.state === 'BATTLE_WON') {
-    banner.show('won', t('banner.enemyDeleted'), 'win');
-  } else if (w.state === 'PLAYER_DEAD') {
-    banner.show('dead', t('banner.gameOver'), 'lose');
-  } else {
-    banner.hide();
-  }
+  const b = bannerFor(session, session.world);
+  if (b) banner.show(b.key, b.text, b.tone);
+  else banner.hide();
 }
 
 const loop = new GameLoop(
