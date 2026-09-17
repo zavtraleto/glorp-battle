@@ -5,7 +5,7 @@ import { BenchAutopilot, formatBench } from '../src/debug/bench';
 import { parseDebugParams } from '../src/debug/params';
 import { PerfProbe, percentile } from '../src/debug/perfProbe';
 import { PointerRouter, type RouterHandlers } from '../src/terminal/interaction/pointerRouter';
-import { computeLayout, rectContains, rectToWorld, zoneAt, TERMINAL_WORLD_WIDTH } from '../src/terminal/layout';
+import { computeLayout, cssToWorld, rectContains, rectToWorld, zoneAt, TERMINAL_WORLD_WIDTH } from '../src/terminal/layout';
 
 beforeEach(() => {
   mergeTuning(tuning, JSON.parse(JSON.stringify(DEFAULT_TUNING)));
@@ -308,5 +308,16 @@ describe('PointerRouter hover and gate', () => {
     router.hoverAt(tb.x + 5, tb.y + 5);
     router.hoverAt(layout.crt.x + 5, layout.crt.y + 100);
     expect(seen).toEqual(['trackball', null]);
+  });
+});
+
+describe('cssToWorld', () => {
+  it('inverts rectToWorld for points', () => {
+    const l = computeLayout(390, 844);
+    const r = l.zones.execute;
+    const w = rectToWorld(l, r);
+    const p = cssToWorld(l, r.x + r.w / 2, r.y + r.h / 2);
+    expect(p.x).toBeCloseTo(w.cx, 6);
+    expect(p.y).toBeCloseTo(w.cy, 6);
   });
 });

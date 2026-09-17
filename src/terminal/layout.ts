@@ -106,3 +106,12 @@ export function rectToWorld(layout: TerminalLayout, r: Rect): { cx: number; cy: 
     h: r.h * k,
   };
 }
+
+/** CSS px point → world point on the z=0 face (inverse of rectToWorld). */
+export function cssToWorld(layout: TerminalLayout, x: number, y: number): { x: number; y: number } {
+  const k = layout.worldWidth / layout.body.w;
+  return {
+    x: (x - (layout.body.x + layout.body.w / 2)) * k,
+    y: -(y - (layout.body.y + layout.body.h / 2)) * k,
+  };
+}

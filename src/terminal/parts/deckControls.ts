@@ -75,6 +75,8 @@ function pauseIcon(): THREE.CanvasTexture {
 
 export class DeckControls {
   readonly group = new THREE.Group();
+  /** EXECUTE, CHIP SELECT and their frames: slides away when the chip tray opens. */
+  readonly slide = new THREE.Group();
   private readonly keys: Record<DeckKey, PressKey>;
   private readonly executeMat = new THREE.MeshLambertMaterial({ color: COLOR.execute.clone() });
   private readonly selectMat = new THREE.MeshLambertMaterial({ color: COLOR.select.clone(), emissive: 0x000000 });
@@ -91,6 +93,7 @@ export class DeckControls {
   private readonly ledMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
   private readonly screwMat = new THREE.MeshLambertMaterial({ color: COLOR.screw, flatShading: true });
   private readonly statics = new THREE.Group();
+  private readonly topStatics = new THREE.Group();
   private ring: THREE.InstancedMesh | null = null;
   private lit = 0;
   private full = false;
@@ -108,11 +111,13 @@ export class DeckControls {
       chipSelect: new PressKey(tuning.terminal.BUTTON_PRESS_DEPTH),
       pause: new PressKey(tuning.terminal.BUTTON_PRESS_DEPTH / 2),
     };
-    this.group.add(this.statics, this.keys.execute.object, this.keys.chipSelect.object, this.keys.pause.object);
+    this.slide.add(this.statics, this.keys.execute.object, this.keys.chipSelect.object);
+    this.group.add(this.slide, this.topStatics, this.keys.pause.object);
   }
 
   build(layout: TerminalLayout): void {
     this.statics.clear();
+    this.topStatics.clear();
     for (const k of Object.values(this.keys)) k.object.clear();
     const screws: THREE.Vector3[] = [];
 
@@ -151,7 +156,7 @@ export class DeckControls {
     const top = rectToWorld(layout, layout.top);
     const pz = rectToWorld(layout, layout.zones.pause);
     const pSize = Math.min(pz.w * 0.5, top.h * 0.62);
-    this.addStatic(this.frameMat, pz.cx, top.cy, 0.02, pSize * 1.2, pSize * 1.2, 0.06);
+    this.addStatic(this.frameMat, pz.cx, top.cy, 0.02, pSize * 1.2, pSize * 1.2, 0.06, this.topStatics);
     this.addCap(this.keys.pause, this.capGeo, this.pauseMat, pz.cx, top.cy, pSize, pSize * 0.3, 0.08, 0.05);
     const pIcon = new THREE.Mesh(this.unitPlane, this.pauseIconMat);
     pIcon.scale.set(pSize * 0.6, pSize * 0.6, 1);
@@ -212,11 +217,20 @@ export class DeckControls {
     if (ring.instanceColor) ring.instanceColor.needsUpdate = true;
   }
 
-  private addStatic(m: THREE.Material, x: number, y: number, z: number, w: number, h: number, d: number): void {
+  private addStatic(
+    m: THREE.Material,
+    x: number,
+    y: number,
+    z: number,
+    w: number,
+    h: number,
+    d: number,
+    parent: THREE.Group = this.statics,
+  ): void {
     const mesh = new THREE.Mesh(this.unitBox, m);
     mesh.position.set(x, y, z);
     mesh.scale.set(w, h, d);
-    this.statics.add(mesh);
+    parent.add(mesh);
   }
 
   private addCap(

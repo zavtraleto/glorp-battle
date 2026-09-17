@@ -89,9 +89,9 @@ describe('control rules', () => {
   });
 
   it('picks the cursor', () => {
-    expect(cursorKind(null, false)).toBe('default');
-    expect(cursorKind('execute', false)).toBe('point');
-    expect(cursorKind('execute', true)).toBe('press');
-    expect(cursorKind(null, true)).toBe('press');
+    expect(cursorKind(false, false)).toBe('default');
+    expect(cursorKind(true, false)).toBe('point');
+    expect(cursorKind(true, true)).toBe('press');
+    expect(cursorKind(false, true)).toBe('press');
   });
 });

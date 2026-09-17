@@ -1,5 +1,7 @@
 import * as THREE from 'three';
-import { t } from '../../i18n';
+import { CHIPS } from '../../data/chips';
+import { chipDesc, chipName, t } from '../../i18n';
+import { CHIP_ICONS, ICON_PALETTE } from '../chips/chipIcons';
 import { blinkPhase } from '../terminalMode';
 import { hudKey, type BannerTone, type HudModel } from './hudModel';
 import { drawText, measureText, type PixelSink } from './pixelFont';
@@ -16,6 +18,10 @@ const COLOR = {
   chip: '#ffe066',
   band: 'rgba(0, 0, 0, 0.6)',
   notice: '#ffb347',
+  shade: 'rgba(4, 8, 12, 0.9)',
+  infoName: '#e8dfc4',
+  infoText: '#9fe8ff',
+  infoPower: '#ffd166',
 };
 
 const BANNER_COLOR: Record<BannerTone, string> = {
@@ -100,6 +106,8 @@ export class CrtCanvas {
     ctx.strokeStyle = COLOR.gauge;
     ctx.strokeRect(barX + s / 2, barY + s / 2, barW - s, barH - s);
 
+    if (m.info) this.drawInfo(ctx, sink, m.info, W, H, s, M);
+
     // Next chip, bottom-left; a notice (NO CHIP) takes the same line.
     const bottomY = H - M - 7 * s;
     if (m.notice) {
@@ -124,4 +132,66 @@ export class CrtCanvas {
 
     this.texture.needsUpdate = true;
   }
+
+  /** Custom Screen: the focused chip, large, over the dimmed field (TERMINAL.md §6.4). */
+  private drawInfo(
+    ctx: CanvasRenderingContext2D,
+    sink: PixelSink,
+    info: NonNullable<HudModel['info']>,
+    W: number,
+    H: number,
+    s: number,
+    M: number,
+  ): void {
+    const top = M + 18 * s;
+    ctx.fillStyle = COLOR.shade;
+    ctx.fillRect(0, top - 2 * s, W, H - top + 2 * s);
+
+    const icon = CHIP_ICONS[info.defId];
+    const scale = 3 * s;
+    const ix = Math.round((W - 16 * scale) / 2);
+    const iy = top + 6 * s;
+    icon.forEach((row, y) => {
+      for (let x = 0; x < row.length; x++) {
+        const color = ICON_PALETTE[row[x] as string];
+        if (!color) continue;
+        ctx.fillStyle = color;
+        ctx.fillRect(ix + x * scale, iy + y * scale, scale, scale);
+      }
+    });
+
+    let y = iy + 16 * scale + 6 * s;
+    const name = `${chipName(info.defId).toUpperCase()} ${info.code}`;
+    const nameScale = measureText(name, s + 1) <= W - 2 * M ? s + 1 : s;
+    drawText(sink, name, Math.round((W - measureText(name, nameScale)) / 2), y, nameScale, COLOR.infoName);
+    y += 7 * nameScale + 4 * s;
+    const power = CHIPS[info.defId].power;
+    if (power !== null) {
+      const p = String(power);
+      drawText(sink, p, Math.round((W - measureText(p, s)) / 2), y, s, COLOR.infoPower);
+      y += 11 * s;
+    }
+    for (const line of wrap(chipDesc(info.defId).toUpperCase(), Math.floor((W - 2 * M) / (6 * s)))) {
+      drawText(sink, line, M, y, s, COLOR.infoText);
+      y += 9 * s;
+    }
+  }
+}
+
+/** Greedy word wrap to `cols` characters. */
+function wrap(text: string, cols: number): string[] {
+  const lines: string[] = [];
+  let line = '';
+  for (const word of text.split(/\s+/)) {
+    if (!word) continue;
+    const next = line ? `${line} ${word}` : word;
+    if (next.length > cols && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = next;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
 }

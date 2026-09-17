@@ -38,6 +38,8 @@ const LAMPS = [
 
 export class Housing {
   readonly group = new THREE.Group();
+  /** Labels under the deck controls; they slide away with the deck. */
+  readonly controlLabels = new THREE.Group();
   private readonly glass: THREE.Mesh;
   private readonly bodyTexture = plasticTexture(1, COLOR.body);
   private readonly bodyMat = new THREE.MeshLambertMaterial({ map: this.bodyTexture });
@@ -136,7 +138,7 @@ export class Housing {
       ['trackball', 'term.navigation'],
       ['execute', 'term.execute'],
     ] as const) {
-      this.addLabel(t(key), COLOR.label, 1, texel, W(layout.zones[zone]).cx, labelY);
+      this.addLabel(t(key), COLOR.label, 1, texel, W(layout.zones[zone]).cx, labelY, this.controlLabels);
     }
   }
 
@@ -164,7 +166,15 @@ export class Housing {
     return mesh;
   }
 
-  private addLabel(text: string, color: string, scale: number, texel: number, x: number, y: number): { mesh: THREE.Mesh; w: number } {
+  private addLabel(
+    text: string,
+    color: string,
+    scale: number,
+    texel: number,
+    x: number,
+    y: number,
+    parent: THREE.Group = this.group,
+  ): { mesh: THREE.Mesh; w: number } {
     const label = labelTexture(text, color, scale);
     const w = label.width * texel;
     const mat = new THREE.MeshBasicMaterial({ map: label.texture, transparent: true, depthWrite: false });
@@ -172,7 +182,7 @@ export class Housing {
     this.owned.push(label.texture, mat, geo);
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(x, y, 0.01);
-    this.group.add(mesh);
+    parent.add(mesh);
     return { mesh, w };
   }
 
@@ -180,6 +190,7 @@ export class Housing {
     for (const o of this.owned) o.dispose();
     this.owned.length = 0;
     this.group.clear();
+    this.controlLabels.clear();
     this.hpLeds = null;
     this.lamps = [];
   }

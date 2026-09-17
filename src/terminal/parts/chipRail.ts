@@ -1,17 +1,17 @@
 import * as THREE from 'three';
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { tuning } from '../../config/tuning';
 import type { ChipCode, ChipId } from '../../data/chips';
 import { Spring } from '../anim/spring';
-import { chipFaceTexture, FACE_H, FACE_W } from '../chips/chipFace';
+import { Cartridge, cartridgeGlow } from '../chips/cartridge';
 import { activeSlot, planRail } from '../chips/railPlan';
+import { CHIP_TEXELS_H, CHIP_TEXELS_W, RAIL_LEFT, RAIL_SLOTS, RAIL_SPAN } from '../chips/trayLayout';
 import { rectToWorld, type TerminalLayout } from '../layout';
 
-// Chip rail (TERMINAL.md §6.3, §6.5): five slots with contacts and chip
-// cartridges. Used chips eject toward the camera, unused ones are thrown out
-// when the Custom Screen opens, confirmed ones drop into place.
+// Chip rail (TERMINAL.md §6.3–6.5): five slots with contacts and chip
+// cartridges. In battle it mirrors the chip queue (used chips eject, slots stay
+// empty); on the Custom Screen it mirrors the selection, packed from the left.
 
-export const RAIL_SLOTS = 5;
+export { RAIL_SLOTS };
 
 export interface RailChip {
   uid: number;
@@ -19,18 +19,28 @@ export interface RailChip {
   code: ChipCode;
 }
 
-type Phase = 'load' | 'idle' | 'eject' | 'burn';
+export interface RailSyncOptions {
+  /** `queue`: battle; `select`: Custom Screen selection (packed). */
+  mode: 'queue' | 'select';
+  /** The Custom Screen is open: chips leaving the queue burn. */
+  burning: boolean;
+  /** A chip that is (back) in the hand returns to the tray instead of ejecting. */
+  inHand(uid: number): boolean;
+  /** Where a newly selected chip flies in from (its tray cartridge), if anywhere. */
+  spawnFrom(uid: number): THREE.Vector3 | null;
+}
+
+type Phase = 'load' | 'fly' | 'idle' | 'drag' | 'eject' | 'burn' | 'return';
 
 interface Cart {
   uid: number;
-  object: THREE.Group;
-  faceMat: THREE.MeshBasicMaterial;
-  glow: THREE.Mesh;
+  cart: Cartridge;
   slot: number;
   phase: Phase;
   t: number;
   delay: number;
   lift: Spring;
+  pos: THREE.Vector3;
   origin: THREE.Vector3;
   drift: number;
   spin: number;
@@ -38,8 +48,6 @@ interface Cart {
 
 const COLOR = {
   frame: 0x1c1d1f,
-  body: 0x3a3833,
-  clip: 0x8a8578,
   glow: new THREE.Color(0x55ff66),
   contactOff: new THREE.Color(0x8a7a4a),
   contactOn: new THREE.Color(0xffe9a8),
@@ -48,22 +56,23 @@ const COLOR = {
   faceBurnt: new THREE.Color(0x2a1a14),
 };
 
-/** Slots span this share of the rail width, starting at RAIL_LEFT from its centre. */
-const RAIL_SPAN = 0.82;
-const RAIL_LEFT = 0.475;
-const BODY_DEPTH = 0.22;
 const REST_Z = 0.14;
-/** Eject: height of the pop and how far the chip flies (world units). */
+/** Eject: height of the pop, flight toward the camera and drop (world units), tilt (radians). */
 const EJECT_POP = 0.25;
 const EJECT_TOWARD = 5;
 const EJECT_DROP = 2.5;
-/** Eject: forward tilt at the end of the flight (radians); the face stays readable. */
 const EJECT_TILT = 0.8;
 /** Burn: launch speed and gravity (world units per s / s²). */
 const BURN_UP = 3;
 const BURN_GRAVITY = 30;
 const LOAD_HEIGHT = 1.2;
 const GLOW_PULSE_HZ = 2;
+/** Cartridges slide to a new slot at this rate (1/s). */
+const SLIDE_RATE = 22;
+/** Height of a flying / dragged cartridge above the rail. */
+const CARRY_Z = 0.9;
+const FLY_TIME = 0.16;
+const RETURN_TIME = 0.12;
 
 function contactTexture(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
@@ -88,17 +97,13 @@ export class ChipRail {
   private carts: Cart[] = [];
   private slotPos: THREE.Vector3[] = [];
   private contacts: { mat: THREE.MeshBasicMaterial; left: number }[] = [];
-  private chipW = 1;
-  private chipH = 1;
+  private mode: RailSyncOptions['mode'] = 'queue';
   private texel = 0.02;
+  private maxH = Infinity;
   private time = 0;
   private readonly unitBox = new THREE.BoxGeometry(1, 1, 1);
-  private readonly bodyGeo = new RoundedBoxGeometry(1, 1, 1, 1, 0.08);
   private readonly unitPlane = new THREE.PlaneGeometry(1, 1);
   private readonly frameMat = new THREE.MeshLambertMaterial({ color: COLOR.frame, flatShading: true });
-  private readonly bodyMat = new THREE.MeshLambertMaterial({ color: COLOR.body, flatShading: true });
-  private readonly clipMat = new THREE.MeshLambertMaterial({ color: COLOR.clip, flatShading: true });
-  private readonly glowMat = new THREE.MeshBasicMaterial({ color: COLOR.glow.clone() });
   private readonly contactTex = contactTexture();
 
   constructor() {
@@ -111,62 +116,60 @@ export class ChipRail {
     this.contacts = [];
     this.texel = texel;
     const rail = rectToWorld(layout, layout.rail);
-    const slotW = (rail.w * RAIL_SPAN) / RAIL_SLOTS;
-    this.chipW = (FACE_W + 2) * texel;
-    this.chipH = Math.min((FACE_H + 6) * texel, rail.h * 0.86);
+    const pitch = (rail.w * RAIL_SPAN) / RAIL_SLOTS;
+    this.maxH = rail.h * 0.86;
+    const w = CHIP_TEXELS_W * texel;
+    const h = Math.min(CHIP_TEXELS_H * texel, this.maxH);
     this.slotPos = [];
     for (let i = 0; i < RAIL_SLOTS; i++) {
-      const x = rail.cx - rail.w * RAIL_LEFT + slotW * (i + 0.5);
-      const pos = new THREE.Vector3(x, rail.cy, REST_Z);
-      this.slotPos.push(pos);
+      const x = rail.cx - rail.w * RAIL_LEFT + pitch * (i + 0.5);
+      this.slotPos.push(new THREE.Vector3(x, rail.cy, REST_Z));
       const frame = new THREE.Mesh(this.unitBox, this.frameMat);
       frame.position.set(x, rail.cy, 0.02);
-      frame.scale.set(this.chipW + 4 * texel, this.chipH + 4 * texel, 0.1);
+      frame.scale.set(w + 4 * texel, h + 4 * texel, 0.1);
       this.statics.add(frame);
       const mat = new THREE.MeshBasicMaterial({ map: this.contactTex, color: COLOR.contactOff.clone(), transparent: true });
       const pad = new THREE.Mesh(this.unitPlane, mat);
-      pad.position.set(x, rail.cy - this.chipH * 0.3, 0.075);
-      pad.scale.set(this.chipW * 0.8, 10 * texel, 1);
+      pad.position.set(x, rail.cy - h * 0.3, 0.075);
+      pad.scale.set(w * 0.8, 10 * texel, 1);
       this.statics.add(pad);
       this.contacts.push({ mat, left: 0 });
     }
-    for (const c of this.carts) this.shape(c);
+    for (const c of this.carts) c.cart.shape(texel, this.maxH);
   }
 
-  /** Brings the rail in line with the queue. `burning`: the Custom Screen is open. */
-  sync(queue: readonly RailChip[], burning: boolean): void {
-    const plan = planRail(
-      this.slots,
-      queue.map((c) => c.uid),
-      burning,
-    );
-    if (plan.remove.length === 0 && plan.add.length === 0) return;
-    let burnIndex = 0;
-    for (const r of plan.remove) {
-      const cart = this.carts.find((c) => c.slot === r.slot);
-      this.slots[r.slot] = null;
-      if (!cart) continue;
-      cart.origin.copy(cart.object.position);
-      cart.slot = -1;
-      cart.t = 0;
-      cart.phase = r.how;
-      cart.drift = (r.slot - 2) * 0.15;
-      cart.spin = r.how === 'burn' ? (burnIndex % 2 === 0 ? 1 : -1) * (1 + burnIndex * 0.3) : 0.4;
-      cart.delay = r.how === 'burn' ? burnIndex++ * tuning.terminal.BURN_STAGGER : 0;
-      cart.glow.visible = false;
-      if (r.how === 'eject') this.flashContacts(r.slot);
+  slotWorld(i: number): THREE.Vector3 {
+    return (this.slotPos[i] ?? new THREE.Vector3()).clone();
+  }
+
+  cartPosition(uid: number): THREE.Vector3 | null {
+    const c = this.carts.find((x) => x.uid === uid && x.slot >= 0);
+    return c ? c.cart.object.position.clone() : null;
+  }
+
+  /** Brings the rail in line with the queue (battle) or the selection (Custom Screen). */
+  sync(list: readonly RailChip[], o: RailSyncOptions): void {
+    this.mode = o.mode;
+    if (o.mode === 'select') this.syncSelect(list, o);
+    else this.syncQueue(list, o);
+  }
+
+  /** Makes a rail chip follow the pointer (null releases it back to its slot). */
+  setDrag(uid: number | null, at: THREE.Vector3 | null): void {
+    for (const c of this.carts) {
+      if (c.slot < 0) continue;
+      if (c.uid === uid && at) {
+        c.phase = 'drag';
+        c.pos.set(at.x, at.y, REST_Z + CARRY_Z);
+      } else if (c.phase === 'drag') {
+        c.phase = 'idle';
+      }
     }
-    plan.add.forEach((a, i) => {
-      const chip = queue.find((c) => c.uid === a.uid);
-      if (!chip) return;
-      this.slots[a.slot] = a.uid;
-      this.carts.push(this.makeCart(chip, a.slot, i * tuning.terminal.LOAD_STAGGER));
-    });
   }
 
   /** Drops every cartridge instantly (a new World started). */
   reset(): void {
-    for (const c of this.carts) this.removeCart(c);
+    for (const c of this.carts) this.detach(c);
     this.carts = [];
     this.slots = new Array<number | null>(RAIL_SLOTS).fill(null);
   }
@@ -174,36 +177,53 @@ export class ChipRail {
   update(dt: number): void {
     const t = tuning.terminal;
     this.time += dt;
-    const active = activeSlot(this.slots);
+    const active = this.mode === 'queue' ? activeSlot(this.slots) : -1;
     const pulse = 0.75 + 0.25 * Math.sin(this.time * Math.PI * 2 * GLOW_PULSE_HZ);
-    this.glowMat.color.copy(COLOR.glow).multiplyScalar(pulse);
+    cartridgeGlow.color.copy(COLOR.glow).multiplyScalar(pulse);
+    const slide = 1 - Math.exp(-dt * SLIDE_RATE);
 
     for (const c of [...this.carts]) {
       c.t += dt;
-      const o = c.object;
+      const o = c.cart.object;
+      const face = c.cart.faceMat.color;
+      const rest = this.slotPos[c.slot];
       switch (c.phase) {
         case 'load': {
-          const rest = this.slotPos[c.slot] as THREE.Vector3;
+          if (!rest) break;
           o.visible = c.t >= c.delay;
           const k = t.LOAD_TIME > 0 ? Math.min(1, Math.max(0, (c.t - c.delay) / t.LOAD_TIME)) : 1;
-          o.position.set(rest.x, rest.y, rest.z + (1 - k) * (1 - k) * LOAD_HEIGHT);
+          c.pos.set(rest.x, rest.y, rest.z + (1 - k) * (1 - k) * LOAD_HEIGHT);
+          o.position.copy(c.pos);
           o.scale.setScalar(0.7 + 0.3 * k);
-          if (k >= 1) {
-            c.phase = 'idle';
-            c.lift.snap(0);
-            this.flashContacts(c.slot);
-          }
+          if (k >= 1) this.land(c);
           break;
         }
+        case 'fly': {
+          if (!rest) break;
+          const k = Math.min(1, c.t / FLY_TIME);
+          o.position.lerpVectors(c.origin, rest, k);
+          o.position.z += Math.sin(k * Math.PI) * CARRY_Z;
+          c.pos.copy(o.position);
+          if (k >= 1) this.land(c);
+          break;
+        }
+        case 'drag':
+          o.position.lerp(c.pos, slide);
+          o.rotation.set(0, 0, 0);
+          face.copy(COLOR.faceActive);
+          c.cart.glow.visible = false;
+          break;
         case 'idle': {
-          const rest = this.slotPos[c.slot] as THREE.Vector3;
+          if (!rest) break;
           const isActive = c.slot === active;
           c.lift.target = isActive ? t.CHIP_ACTIVE_LIFT : 0;
           c.lift.step(dt, t.SPRING_STIFFNESS, t.SPRING_DAMPING);
-          o.position.set(rest.x, rest.y + c.lift.value * 0.4, rest.z + c.lift.value);
+          c.pos.set(rest.x, rest.y + c.lift.value * 0.4, rest.z + c.lift.value);
+          o.position.lerp(c.pos, slide);
           o.scale.setScalar(1);
-          c.glow.visible = isActive;
-          c.faceMat.color.copy(isActive ? COLOR.faceActive : COLOR.faceIdle);
+          o.visible = true;
+          c.cart.glow.visible = isActive;
+          face.copy(isActive || this.mode === 'select' ? COLOR.faceActive : COLOR.faceIdle);
           break;
         }
         case 'eject': {
@@ -214,7 +234,7 @@ export class ChipRail {
           }
           const p = t.EJECT_TIME > 0 ? (c.t - lt) / t.EJECT_TIME : 1;
           if (p >= 1) {
-            this.dropCart(c);
+            this.drop(c);
             break;
           }
           o.position.set(
@@ -224,14 +244,14 @@ export class ChipRail {
           );
           o.rotation.set(-EJECT_TILT * p, 0, c.spin * p);
           o.scale.setScalar(1 + 0.8 * p);
-          c.faceMat.color.copy(COLOR.faceActive);
+          face.copy(COLOR.faceActive);
           break;
         }
         case 'burn': {
           const tt = c.t - c.delay;
           if (tt < 0) break;
           if (tt >= t.BURN_TIME) {
-            this.dropCart(c);
+            this.drop(c);
             break;
           }
           o.position.set(
@@ -240,7 +260,13 @@ export class ChipRail {
             c.origin.z + Math.min(1, tt * 5) * 0.4,
           );
           o.rotation.set(0, 0, c.spin * tt * 4);
-          c.faceMat.color.copy(COLOR.faceIdle).lerp(COLOR.faceBurnt, Math.min(1, tt / t.BURN_TIME));
+          face.copy(COLOR.faceIdle).lerp(COLOR.faceBurnt, Math.min(1, tt / t.BURN_TIME));
+          break;
+        }
+        case 'return': {
+          const k = Math.min(1, c.t / RETURN_TIME);
+          o.scale.setScalar(1 - k);
+          if (k >= 1) this.drop(c);
           break;
         }
       }
@@ -253,77 +279,107 @@ export class ChipRail {
     }
   }
 
+  private syncQueue(list: readonly RailChip[], o: RailSyncOptions): void {
+    // Coming from the Custom Screen the selection was packed from slot 0 — same as the queue.
+    const plan = planRail(
+      this.slots,
+      list.map((c) => c.uid),
+      o.burning,
+    );
+    if (plan.remove.length === 0 && plan.add.length === 0) return;
+    let burnIndex = 0;
+    for (const r of plan.remove) {
+      const c = this.carts.find((x) => x.slot === r.slot);
+      this.slots[r.slot] = null;
+      if (!c) continue;
+      if (o.inHand(c.uid)) this.startLeave(c, 'return', 0);
+      else this.startLeave(c, r.how, r.how === 'burn' ? burnIndex++ : 0);
+    }
+    plan.add.forEach((a, i) => {
+      const chip = list.find((c) => c.uid === a.uid);
+      if (!chip) return;
+      this.slots[a.slot] = a.uid;
+      this.carts.push(this.makeCart(chip, a.slot, 'load', i * tuning.terminal.LOAD_STAGGER, null));
+    });
+  }
+
+  private syncSelect(list: readonly RailChip[], o: RailSyncOptions): void {
+    const uids = list.map((c) => c.uid);
+    const occupied = this.slots.filter((s) => s !== null).length;
+    if (uids.length === occupied && uids.every((u, i) => this.slots[i] === u)) return;
+    let burnIndex = 0;
+    for (const c of this.carts) {
+      if (c.slot < 0 || uids.includes(c.uid)) continue;
+      if (o.inHand(c.uid)) this.startLeave(c, 'return', 0);
+      else this.startLeave(c, o.burning ? 'burn' : 'eject', burnIndex++);
+    }
+    list.forEach((chip, i) => {
+      const c = this.carts.find((x) => x.uid === chip.uid && x.slot >= 0);
+      if (c) {
+        c.slot = i;
+        return;
+      }
+      const from = o.spawnFrom(chip.uid);
+      this.carts.push(this.makeCart(chip, i, from ? 'fly' : 'load', 0, from));
+    });
+    this.slots = Array.from({ length: RAIL_SLOTS }, (_, i) => uids[i] ?? null);
+  }
+
+  private startLeave(c: Cart, how: 'eject' | 'burn' | 'return', index: number): void {
+    c.origin.copy(c.cart.object.position);
+    const slot = c.slot;
+    c.slot = -1;
+    c.t = 0;
+    c.phase = how;
+    c.drift = (slot - 2) * 0.15;
+    c.spin = how === 'burn' ? (index % 2 === 0 ? 1 : -1) * (1 + index * 0.3) : 0.4;
+    c.delay = how === 'burn' ? index * tuning.terminal.BURN_STAGGER : 0;
+    c.cart.glow.visible = false;
+    if (how === 'eject') this.flashContacts(slot);
+  }
+
+  private land(c: Cart): void {
+    c.phase = 'idle';
+    c.lift.snap(0);
+    c.cart.object.scale.setScalar(1);
+    this.flashContacts(c.slot);
+  }
+
   private flashContacts(slot: number): void {
     const c = this.contacts[slot];
     if (c) c.left = tuning.terminal.CONTACT_FLASH_TIME;
   }
 
-  private makeCart(chip: RailChip, slot: number, delay: number): Cart {
-    const object = new THREE.Group();
-    const faceMat = new THREE.MeshBasicMaterial({ map: chipFaceTexture(chip.defId, chip.code), color: COLOR.faceIdle.clone() });
-    const body = new THREE.Mesh(this.bodyGeo, this.bodyMat);
-    const face = new THREE.Mesh(this.unitPlane, faceMat);
-    const clip = new THREE.Mesh(this.unitBox, this.clipMat);
-    const glow = new THREE.Mesh(this.unitBox, this.glowMat);
-    body.name = 'body';
-    face.name = 'face';
-    clip.name = 'clip';
-    glow.name = 'glow';
-    glow.visible = false;
-    object.add(glow, body, face, clip);
-    const cart: Cart = {
+  private makeCart(chip: RailChip, slot: number, phase: 'load' | 'fly', delay: number, from: THREE.Vector3 | null): Cart {
+    const cart = new Cartridge(chip.defId, chip.code);
+    cart.shape(this.texel, this.maxH);
+    cart.faceMat.color.copy(COLOR.faceIdle);
+    const o = cart.object;
+    if (from) o.position.copy(from);
+    o.visible = phase === 'fly';
+    this.group.add(o);
+    return {
       uid: chip.uid,
-      object,
-      faceMat,
-      glow,
+      cart,
       slot,
-      phase: 'load',
+      phase,
       t: 0,
       delay,
       lift: new Spring(0),
-      origin: new THREE.Vector3(),
+      pos: o.position.clone(),
+      origin: from ? from.clone() : new THREE.Vector3(),
       drift: 0,
       spin: 0,
     };
-    this.shape(cart);
-    object.visible = false;
-    this.group.add(object);
-    return cart;
   }
 
-  /** Sizes a cartridge's parts to the current texel size. */
-  private shape(c: Cart): void {
-    const tx = this.texel;
-    const w = this.chipW;
-    const h = this.chipH;
-    const faceScale = Math.min(1, (h - 6 * tx) / (FACE_H * tx));
-    for (const child of c.object.children) {
-      switch (child.name) {
-        case 'body':
-          child.scale.set(w, h, BODY_DEPTH);
-          break;
-        case 'face':
-          child.scale.set(FACE_W * tx * faceScale, FACE_H * tx * faceScale, 1);
-          child.position.set(0, -tx, BODY_DEPTH / 2 + 0.002);
-          break;
-        case 'clip':
-          child.scale.set(w * 0.4, 3 * tx, BODY_DEPTH * 1.1);
-          child.position.set(0, h / 2 - 1.5 * tx, 0);
-          break;
-        case 'glow':
-          child.scale.set(w + 4 * tx, h + 4 * tx, BODY_DEPTH * 0.6);
-          break;
-      }
-    }
-  }
-
-  private dropCart(c: Cart): void {
-    this.removeCart(c);
+  private drop(c: Cart): void {
+    this.detach(c);
     this.carts = this.carts.filter((x) => x !== c);
   }
 
-  private removeCart(c: Cart): void {
-    this.group.remove(c.object);
-    c.faceMat.dispose();
+  private detach(c: Cart): void {
+    this.group.remove(c.cart.object);
+    c.cart.dispose();
   }
 }

@@ -68,7 +68,9 @@ body {
 #app.ui-terminal .hud-top,
 #app.ui-terminal .controls,
 #app.ui-terminal .world-labels,
-#app.ui-terminal .banner {
+#app.ui-terminal .banner,
+#app.ui-terminal .custom-screen,
+#app.ui-terminal .cs-backdrop {
   display: none;
 }
 

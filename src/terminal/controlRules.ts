@@ -55,7 +55,8 @@ export function organForKey(code: string): { zone: ZoneId; dir?: Dir } | null {
 
 export type CursorKind = 'default' | 'point' | 'press';
 
-export function cursorKind(zone: ZoneId | null, pressed: boolean): CursorKind {
+/** `pointing`: the pointer is over something that can be pressed. */
+export function cursorKind(pointing: boolean, pressed: boolean): CursorKind {
   if (pressed) return 'press';
-  return zone ? 'point' : 'default';
+  return pointing ? 'point' : 'default';
 }

@@ -38,6 +38,8 @@ export interface HudModel {
   banner: BannerInfo | null;
   /** Short-lived message, e.g. NO CHIP after a dull EXECUTE press. */
   notice: string | null;
+  /** Chip described on the Custom Screen (the focused tray chip). */
+  info: { defId: ChipId; code: ChipCode } | null;
 }
 
 /** HP at or below this share of max HP is shown as low. */
@@ -64,7 +66,12 @@ export function bannerFor(s: HudSession, w: Pick<HudWorld, 'state' | 'firstStart
   }
 }
 
-export function hudModel(s: HudSession, w: HudWorld, notice: string | null = null): HudModel {
+export function hudModel(
+  s: HudSession,
+  w: HudWorld,
+  notice: string | null = null,
+  info: HudModel['info'] = null,
+): HudModel {
   const next = w.chips.queue[0];
   return {
     hp: w.player.hp,
@@ -74,6 +81,7 @@ export function hudModel(s: HudSession, w: HudWorld, notice: string | null = nul
     chip: next ? `${chipName(next.defId).toUpperCase()} ${next.code}` : null,
     banner: bannerFor(s, w),
     notice,
+    info,
   };
 }
 
@@ -87,6 +95,7 @@ export function hudKey(m: HudModel, blinkOn: boolean): string {
     m.chip ?? '',
     m.banner?.key ?? '',
     m.notice ?? '',
+    m.info ? `${m.info.defId}${m.info.code}` : '',
   ].join('|');
 }
 
