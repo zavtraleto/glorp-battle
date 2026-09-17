@@ -559,7 +559,6 @@ GameLoop.render ──► terminal.update(dt, view)
 | `CRT_GHOSTING` | 0.25 | | 0 = выкл. |
 | `PS1_VERTEX_SNAP` / `PS1_AFFINE` | false / false | | PS1-опции |
 | `ANIM_STEP_FPS` | 0 | FPS | 0 = без квантования |
-| `NO_CHIP_TIME` | 0.5 | с | надпись NO CHIP |
 | `HAPTICS_ENABLED` | true | | вибрация (T3) |
 
 ---

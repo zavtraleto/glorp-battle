@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { tuning } from '../config/tuning';
+import { secondsToTicks, tuning } from '../config/tuning';
 import type { SimEvent } from '../sim/events';
 import type { World } from '../sim/world';
 import { EnemyView, PlayerView, type SpriteFrame } from './actors';
@@ -7,6 +7,7 @@ import { FieldView, cellToWorld } from './field';
 import { FxView } from './fx';
 import { cellKey } from './cellStates';
 import { fitView } from './viewCamera';
+import { battleSignal } from './battleSignals';
 import { COLS } from '../sim/grid';
 
 export interface ScreenPoint {
@@ -69,6 +70,15 @@ export class SceneRenderer {
     if (!sprite) return null;
     const v = new THREE.Vector3().copy(sprite.position);
     v.y += height;
+    return this.projectToTarget(v);
+  }
+
+  /** Top centre of an actor sprite in the last render target, normalized. */
+  actorTopTargetPos(id: number): ScreenPoint | null {
+    const sprite = id === 1 ? this.playerView.sprite : this.enemyViews.get(id)?.sprite;
+    if (!sprite || !sprite.visible) return null;
+    const v = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 1);
+    v.multiplyScalar(sprite.scale.y).add(sprite.position);
     return this.projectToTarget(v);
   }
 
@@ -136,7 +146,18 @@ export class SceneRenderer {
     if (world.state === 'BATTLE_INTRO') {
       for (const e of world.enemies) this.spawns.set(cellKey(e.x, e.y, COLS), world.stateElapsed);
     }
-    this.field.update(world, alpha, this.spawns);
+    const fx = tuning.fx;
+    const signal = battleSignal({
+      state: world.state,
+      elapsed: world.stateElapsed,
+      firstStart: world.firstStart,
+      player: { x: world.player.x, y: world.player.y },
+      introTicks: secondsToTicks(fx.INTRO_TIME),
+      startTicks: secondsToTicks(fx.BANNER_BATTLE_START),
+      wonTicks: secondsToTicks(fx.RESULT_DELAY_WIN),
+      deadTicks: secondsToTicks(fx.RESULT_DELAY_LOSE),
+    });
+    this.field.update(world, alpha, this.spawns, signal);
   }
 
   /** Renders the battle into a render target (the CRT), field fitted to the whole target. */

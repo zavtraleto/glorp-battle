@@ -3,7 +3,6 @@ import type { Session } from '../app/session';
 import { secondsToTicks, tuning } from '../config/tuning';
 import type { Dir } from '../core/input/commands';
 import type { PerfProbe } from '../debug/perfProbe';
-import { t } from '../i18n';
 import type { SceneRenderer } from '../render/scene';
 import type { SimEvent } from '../sim/events';
 import type { World } from '../sim/world';
@@ -20,7 +19,8 @@ import { BattleTarget } from './crt/battleTarget';
 import { CrtCanvas } from './crt/crtCanvas';
 import { CrtMaterial } from './crt/crtMaterial';
 import { FloaterList, floaterFromEvent } from './crt/floaters';
-import { gaugeLedCount, hpLedCount, hudModel, type HudLabel, type LabelTone } from './crt/hudModel';
+import { EMPTY_HUD, gaugeLedCount, hpLedCount, type HpBar, type HudLabel } from './crt/hudModel';
+import { hpSegments } from '../render/battleSignals';
 import { menuFor, menuItemAt, menuLayout, moveCursor, type MenuAction, type MenuSpec } from './crt/menuModel';
 import { trayLayout, trayTargetAt, type TrayLayout, type TrayTarget } from './chips/trayLayout';
 import { cursorCss } from './interaction/cursor';
@@ -50,10 +50,12 @@ const PARALLAX_RATE = 6;
 const TRAY_READY = 0.95;
 /** Hand cartridges per tray row (keyboard up/down step). */
 const TRAY_COLUMNS = 5;
-/** Label anchors above the panel (world units): enemy HP, damage numbers start and rise. */
-const ENEMY_HP_HEIGHT = -0.12;
-const FLOATER_HEIGHT = 0.9;
+/** Damage numbers: start height and rise (world units), flicker after this share of their life. */
+const FLOATER_HEIGHT = 0.5;
 const FLOATER_RISE = 0.5;
+const FLOATER_FLICKER = 0.7;
+/** HP segments sit this many CRT pixels above an enemy's head. */
+const HP_BAR_GAP = 3;
 
 export interface TerminalHandlers {
   move(dir: Dir): void;
@@ -107,7 +109,6 @@ export class Terminal {
   private hovered: ZoneId | null = null;
   private cursor = '';
   private time = 0;
-  private noticeLeft = 0;
   private shown = { gauge: -1, full: false, hp: -1, chips: -1, lamps: '' };
   private layoutKey = '';
 
@@ -254,10 +255,9 @@ export class Terminal {
   }
 
   render(world: World, alpha: number, dt: number): void {
-    const { renderer, sceneRenderer, perf, session } = this.opts;
+    const { renderer, sceneRenderer, perf } = this.opts;
     this.resize();
     this.time += dt;
-    this.noticeLeft = Math.max(0, this.noticeLeft - dt);
     renderer.info.reset();
 
     const screen = this.battle.render(sceneRenderer, world, alpha, dt);
@@ -268,9 +268,8 @@ export class Terminal {
     const info = focused ? { defId: focused.defId, code: focused.code } : null;
     this.syncMenu();
     const menu = this.menu ? { spec: this.menu, cursor: this.menuCursor } : null;
-    const labels = world.state === 'CUSTOM' ? [] : this.fieldLabels(world, alpha);
-    const notice = this.noticeLeft > 0 ? t('hud.noChip') : null;
-    this.hud.draw(hudModel(session, world, notice, info, menu, labels), this.time);
+    const marks = world.state === 'CUSTOM' ? EMPTY_HUD : this.fieldMarks(world, alpha);
+    this.hud.draw({ labels: marks.labels, bars: marks.bars, info, menu }, this.time);
 
     this.syncIndicators(world);
     this.rail.update(dt);
@@ -319,13 +318,12 @@ export class Terminal {
         this.trackball.press();
         break;
       case 'execute': {
-        const a = executeAvailability(world);
-        this.deck.key('execute').press(a.press === 'dull');
-        if (a.press === 'ok') {
+        const ok = executeAvailability(world) === 'ok';
+        this.deck.key('execute').press(!ok);
+        if (ok) {
           if (send) handlers.execute();
         } else {
           this.deck.deny('execute');
-          if (a.notice === 'noChip') this.noticeLeft = tuning.terminal.NO_CHIP_TIME;
         }
         break;
       }
@@ -509,24 +507,28 @@ export class Terminal {
     });
   }
 
-  /** Enemy HP under each enemy and rising damage numbers, in CRT pixels. */
-  private fieldLabels(world: World, alpha: number): HudLabel[] {
+  /** HP segments above each enemy and rising damage numbers, in CRT pixels. */
+  private fieldMarks(world: World, alpha: number): { labels: HudLabel[]; bars: HpBar[] } {
     const { sceneRenderer } = this.opts;
     const W = this.battle.width;
     const H = this.battle.height;
-    const out: HudLabel[] = [];
+    const labels: HudLabel[] = [];
+    const bars: HpBar[] = [];
     for (const e of world.enemies) {
       if (!e.alive) continue;
-      const p = sceneRenderer.actorTargetPos(e.id, ENEMY_HP_HEIGHT);
-      if (p) out.push({ text: String(e.hp), x: p.x * W, y: p.y * H, tone: 'enemyHp', alpha: 1 });
+      const p = sceneRenderer.actorTopTargetPos(e.id);
+      if (!p) continue;
+      const seg = hpSegments(e.hp, e.maxHp, tuning.battleVisual.HP_SEGMENTS);
+      bars.push({ x: p.x * W, y: p.y * H - HP_BAR_GAP, ...seg });
     }
     const life = secondsToTicks(tuning.fx.DAMAGE_NUMBER_TIME);
     for (const { f, k } of this.floaters.live(world.tick, world.simFrozen ? 0 : alpha, life)) {
+      // The number flickers out at the end instead of fading (flat colours only).
+      if (k > FLOATER_FLICKER && Math.floor(world.tick / 3) % 2 === 1) continue;
       const p = sceneRenderer.cellTargetPos(f.x, f.y, FLOATER_HEIGHT + FLOATER_RISE * k);
-      const tone: LabelTone = f.kind;
-      out.push({ text: f.text, x: p.x * W, y: p.y * H, tone, alpha: 1 - k * k });
+      labels.push({ text: f.text, x: p.x * W, y: p.y * H, tone: f.kind });
     }
-    return out;
+    return { labels, bars };
   }
 
   /** Keyboard on the chip tray; returns true if the key was used. */

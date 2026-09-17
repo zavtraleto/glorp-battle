@@ -1,59 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import type { Screen } from '../src/app/session';
-import {
-  bannerFor,
-  gaugeLedCount,
-  hpLedCount,
-  hudKey,
-  hudModel,
-  type HudSession,
-  type HudWorld,
-} from '../src/terminal/crt/hudModel';
+import { EMPTY_HUD, gaugeLedCount, hpLedCount, hudKey } from '../src/terminal/crt/hudModel';
 import { drawText, glyphRows, measureText, GLYPH_H } from '../src/terminal/crt/pixelFont';
 import { lampStates, terminalMode } from '../src/terminal/terminalMode';
 import { plasticPattern } from '../src/terminal/textures/procedural';
-import type { GameState } from '../src/sim/world';
 
-const session = (screen: Screen = 'BATTLE'): HudSession => ({ screen, battleIndex: 2, battleCount: 4 });
-
-function world(over: Partial<HudWorld> = {}): HudWorld {
-  return {
-    state: 'ACTION',
-    firstStart: false,
-    player: { hp: 100, maxHp: 100 },
-    gauge: { value: 0.5, full: false },
-    chips: { queue: [{ defId: 'cannon', code: 'A' }] },
-    ...over,
-  };
-}
-
-describe('hudModel', () => {
-  it('picks the battle banner by state', () => {
-    const b = (state: GameState, firstStart = false) => bannerFor(session(), { state, firstStart })?.text ?? null;
-    expect(b('BATTLE_INTRO')).toBe('BATTLE 2/4');
-    expect(b('BATTLE_START', true)).toBe('BATTLE START!');
-    expect(b('BATTLE_START', false)).toBeNull();
-    expect(b('BATTLE_WON')).toBe('ENEMY DELETED!');
-    expect(b('PLAYER_DEAD')).toBe('GAME OVER');
-    expect(b('ACTION')).toBeNull();
-    expect(b('CUSTOM')).toBeNull();
-    expect(bannerFor(session('PAUSED'), { state: 'BATTLE_WON', firstStart: false })).toBeNull();
-    expect(bannerFor(session(), { state: 'PLAYER_DEAD', firstStart: false })?.tone).toBe('lose');
-  });
-
-  it('labels the next chip and flags low HP', () => {
-    expect(hudModel(session(), world()).chip).toBe('CANNON A');
-    expect(hudModel(session(), world({ chips: { queue: [] } })).chip).toBeNull();
-    expect(hudModel(session(), world({ player: { hp: 25, maxHp: 100 } })).hpLow).toBe(true);
-    expect(hudModel(session(), world({ player: { hp: 26, maxHp: 100 } })).hpLow).toBe(false);
-  });
-
-  it('changes the redraw key with content, and with blink only when full', () => {
-    const a = hudModel(session(), world());
+describe('hud model', () => {
+  it('changes the redraw key with content, and with blink only in menus', () => {
+    const a = { ...EMPTY_HUD, bars: [{ x: 10, y: 20, filled: 3, total: 8 }] };
+    const b = { ...EMPTY_HUD, bars: [{ x: 10, y: 20, filled: 2, total: 8 }] };
     expect(hudKey(a, true)).toBe(hudKey(a, false));
-    expect(hudKey(a, true)).not.toBe(hudKey(hudModel(session(), world({ player: { hp: 90, maxHp: 100 } })), true));
-    const full = hudModel(session(), world({ gauge: { value: 1, full: true } }));
-    expect(hudKey(full, true)).not.toBe(hudKey(full, false));
+    expect(hudKey(a, true)).not.toBe(hudKey(b, true));
+    const c = { ...EMPTY_HUD, labels: [{ text: '40', x: 5, y: 5, tone: 'damage' as const }] };
+    expect(hudKey(c, true)).not.toBe(hudKey(EMPTY_HUD, true));
   });
 
   it('counts LEDs', () => {
@@ -132,15 +90,5 @@ describe('plasticPattern', () => {
     expect(mean).toBeLessThan(156);
     expect(Math.min(...a)).toBeGreaterThanOrEqual(0);
     expect(Math.max(...a)).toBeLessThanOrEqual(255);
-  });
-});
-
-describe('hud notice', () => {
-  it('is part of the model and the redraw key', () => {
-    const a = hudModel(session(), world());
-    const b = hudModel(session(), world(), 'NO CHIP');
-    expect(a.notice).toBeNull();
-    expect(b.notice).toBe('NO CHIP');
-    expect(hudKey(a, true)).not.toBe(hudKey(b, true));
   });
 });

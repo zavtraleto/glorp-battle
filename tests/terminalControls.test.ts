@@ -59,12 +59,12 @@ function cw(over: Partial<ControlWorld> = {}): ControlWorld {
 
 describe('control rules', () => {
   it('lets EXECUTE fire only for a free player with a queued chip', () => {
-    expect(executeAvailability(cw())).toEqual({ press: 'ok', notice: null });
-    expect(executeAvailability(cw({ chips: { queue: [] } }))).toEqual({ press: 'dull', notice: 'noChip' });
-    expect(executeAvailability(cw({ activeChip: {} })).press).toBe('dull');
-    expect(executeAvailability(cw({ player: { flinched: true, actionTicks: 0 } })).press).toBe('dull');
-    expect(executeAvailability(cw({ player: { flinched: false, actionTicks: 3 } })).press).toBe('dull');
-    expect(executeAvailability(cw({ state: 'BATTLE_START' }))).toEqual({ press: 'dull', notice: null });
+    expect(executeAvailability(cw())).toBe('ok');
+    expect(executeAvailability(cw({ chips: { queue: [] } }))).toBe('dull');
+    expect(executeAvailability(cw({ activeChip: {} }))).toBe('dull');
+    expect(executeAvailability(cw({ player: { flinched: true, actionTicks: 0 } }))).toBe('dull');
+    expect(executeAvailability(cw({ player: { flinched: false, actionTicks: 3 } }))).toBe('dull');
+    expect(executeAvailability(cw({ state: 'BATTLE_START' }))).toBe('dull');
   });
 
   it('lets CHIP SELECT fire only with a full gauge in ACTION', () => {

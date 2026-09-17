@@ -24,8 +24,6 @@ export const en = {
   'result.hp': 'HP left',
   'result.total': 'Total time',
   'result.battles': 'Battles',
-  'hud.custom': 'CUSTOM',
-  'hud.noChip': 'NO CHIP',
   'term.model': 'NET-01',
   'term.subtitle': 'PERSONAL NET TERMINAL',
   'term.chipSelect': 'CHIP SELECT',

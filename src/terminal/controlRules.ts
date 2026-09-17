@@ -16,11 +16,10 @@ export interface ControlWorld {
 /** `dull`: the control moves less and sends nothing. */
 export type Availability = 'ok' | 'dull';
 
-export function executeAvailability(w: ControlWorld): { press: Availability; notice: 'noChip' | null } {
-  if (w.state !== 'ACTION') return { press: 'dull', notice: null };
-  if (w.chips.queue.length === 0) return { press: 'dull', notice: 'noChip' };
+export function executeAvailability(w: ControlWorld): Availability {
+  if (w.state !== 'ACTION' || w.chips.queue.length === 0) return 'dull';
   const busy = w.activeChip !== null || w.player.flinched || w.player.actionTicks > 0;
-  return { press: busy ? 'dull' : 'ok', notice: null };
+  return busy ? 'dull' : 'ok';
 }
 
 export function chipSelectAvailability(w: ControlWorld): Availability {

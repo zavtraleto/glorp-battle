@@ -3,6 +3,7 @@ import { secondsToTicks, tuning } from '../config/tuning';
 import { COLS, ROWS, sideOfRow, type Cell } from '../sim/grid';
 import type { World } from '../sim/world';
 import { LineBatch, QuadBatch } from './batch';
+import { NO_SIGNAL, type GridSignal } from './battleSignals';
 import { cellKey, cellStates, type AttackMark, type AttackTone, type CellView, type DebugCellState } from './cellStates';
 import { signal } from './palette';
 import { makeLabelTexture } from './sprites';
@@ -19,17 +20,6 @@ export function cellToWorld(x: number, y: number, out = new THREE.Vector3()): TH
   return out.set((x - (COLS - 1) / 2) * CELL_WIDTH, 0, (y - (ROWS - 1) / 2) * CELL_DEPTH);
 }
 
-/** Extra frame shaping of the grid (battle signals, BATTLE_VISUAL.md §8). */
-export interface GridFx {
-  /** 0..1 per row: how much of the row has been drawn in. */
-  reveal(y: number): number;
-  /** Extra accent brightness for a cell (0..1). */
-  flash(x: number, y: number): number;
-  /** Cells forced BROKEN (lose cascade). */
-  broken(x: number, y: number): boolean;
-}
-
-const NO_FX: GridFx = { reveal: () => 1, flash: () => 0, broken: () => false };
 
 const LINE_Y = 0.002;
 const FILL_Y = 0;
@@ -123,7 +113,7 @@ export class FieldView {
     });
   }
 
-  update(world: World, alpha: number, spawns: ReadonlyMap<number, number>, fx: GridFx = NO_FX): void {
+  update(world: World, alpha: number, spawns: ReadonlyMap<number, number>, fx: GridSignal = NO_SIGNAL): void {
     const v = tuning.battleVisual;
     signal('phosphor', 1, col.phosphor);
     signal('phosphor', v.GRID_DIM, col.dim);
@@ -149,7 +139,8 @@ export class FieldView {
         cellToWorld(x, y, c);
         const state = fx.broken(x, y) && view.state !== 'EMPTY' ? 'BROKEN' : view.state;
         const flash = fx.flash(x, y);
-        const base = flash > 0 ? col.tmp.copy(col.accent).multiplyScalar(Math.min(1, flash)) : col.phosphor;
+        const line = fx.red ? col.red : col.phosphor;
+        const base = flash > 0 ? col.tmp.copy(col.accent).multiplyScalar(Math.min(1, flash)) : line;
         const s = reveal < 1 ? reveal : 1;
         const cellHw = hw * s;
         const cellHd = hd * s;
@@ -197,7 +188,7 @@ export class FieldView {
             break;
           }
           case 'NORMAL':
-            this.outline(c, cellHw, cellHd, flash > 0 ? base : col.dim);
+            this.outline(c, cellHw, cellHd, flash > 0 || fx.red ? base : col.dim);
             break;
         }
         if (sideOfRow(y) === 'enemy' && state !== 'EMPTY') this.corners(c, cellHw, cellHd, col.red, 0.06);

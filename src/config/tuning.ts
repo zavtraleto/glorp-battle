@@ -157,7 +157,6 @@ export const DEFAULT_TUNING = {
     ARROW_FLASH_TIME: 0.15,
     /** Red blink of the CHIP SELECT ring / EXECUTE when refused. */
     DENIED_BLINK_TIME: 0.4,
-    NO_CHIP_TIME: 0.5,
     /** Camera tilt toward the mouse pointer (fine pointers only), degrees. */
     PARALLAX_DEG: 1.5,
     /** CHIP SELECT glow pulse when the gauge is full. */

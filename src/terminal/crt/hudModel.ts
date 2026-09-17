@@ -1,124 +1,46 @@
-import type { Screen } from '../../app/session';
 import type { ChipCode, ChipId } from '../../data/chips';
-import { chipName, t } from '../../i18n';
 import type { MenuSpec } from './menuModel';
-import type { GameState } from '../../sim/world';
 
-// What the CRT HUD and the housing indicators show (TERMINAL.md §7). Pure:
-// decisions live here, drawing lives in crtCanvas / housing.
+// What the CRT HUD layer shows (TERMINAL.md §7, BATTLE_VISUAL.md §7). Battle
+// has no text: only enemy HP segments and damage numbers; menus and the chip
+// description are text. Pure.
 
-export interface HudSession {
-  screen: Screen;
-  battleIndex: number;
-  battleCount: number;
-}
+export type LabelTone = 'damage' | 'playerDamage' | 'heal';
 
-export interface HudWorld {
-  state: GameState;
-  firstStart: boolean;
-  player: { hp: number; maxHp: number };
-  gauge: { value: number; full: boolean };
-  chips: { queue: readonly { defId: ChipId; code: ChipCode }[] };
-}
-
-export type BannerTone = 'info' | 'win' | 'lose';
-
-export type LabelTone = 'enemyHp' | 'damage' | 'playerDamage' | 'heal';
-
+/** A damage / heal number centred on a CRT pixel. */
 export interface HudLabel {
   text: string;
-  /** Centre of the text, CRT pixels. */
   x: number;
   y: number;
   tone: LabelTone;
-  /** 0..1 */
-  alpha: number;
 }
 
-export interface BannerInfo {
-  key: string;
-  text: string;
-  tone: BannerTone;
+/** Enemy HP segments centred above an enemy (CRT pixels). */
+export interface HpBar {
+  x: number;
+  y: number;
+  filled: number;
+  total: number;
 }
 
 export interface HudModel {
-  hp: number;
-  hpLow: boolean;
-  gauge: number;
-  gaugeFull: boolean;
-  /** Next chip, e.g. "CANNON A"; null when the queue is empty. */
-  chip: string | null;
-  banner: BannerInfo | null;
-  /** Short-lived message, e.g. NO CHIP after a dull EXECUTE press. */
-  notice: string | null;
+  labels: HudLabel[];
+  bars: HpBar[];
   /** Chip described on the Custom Screen (the focused tray chip). */
   info: { defId: ChipId; code: ChipCode } | null;
-  /** Text anchored to the field: enemy HP, damage numbers (CRT pixels). */
-  labels: HudLabel[];
   /** A session menu covers the whole CRT (TERMINAL.md §8). */
   menu: { spec: MenuSpec; cursor: number } | null;
 }
 
-/** HP at or below this share of max HP is shown as low. */
-export const HP_LOW_SHARE = 0.25;
-
-/** Battle banners (GDD §11). */
-export function bannerFor(s: HudSession, w: Pick<HudWorld, 'state' | 'firstStart'>): BannerInfo | null {
-  if (s.screen !== 'BATTLE') return null;
-  switch (w.state) {
-    case 'BATTLE_INTRO':
-      return {
-        key: `intro-${s.battleIndex}`,
-        text: t('banner.battle', { n: s.battleIndex, total: s.battleCount }),
-        tone: 'info',
-      };
-    case 'BATTLE_START':
-      return w.firstStart ? { key: 'battle-start', text: t('banner.battleStart'), tone: 'info' } : null;
-    case 'BATTLE_WON':
-      return { key: 'won', text: t('banner.enemyDeleted'), tone: 'win' };
-    case 'PLAYER_DEAD':
-      return { key: 'dead', text: t('banner.gameOver'), tone: 'lose' };
-    default:
-      return null;
-  }
-}
-
-export function hudModel(
-  s: HudSession,
-  w: HudWorld,
-  notice: string | null = null,
-  info: HudModel['info'] = null,
-  menu: HudModel['menu'] = null,
-  labels: HudLabel[] = [],
-): HudModel {
-  const next = w.chips.queue[0];
-  return {
-    hp: w.player.hp,
-    hpLow: w.player.hp <= w.player.maxHp * HP_LOW_SHARE,
-    gauge: w.gauge.value,
-    gaugeFull: w.gauge.full,
-    chip: next ? `${chipName(next.defId).toUpperCase()} ${next.code}` : null,
-    banner: bannerFor(s, w),
-    notice,
-    info,
-    labels,
-    menu,
-  };
-}
+export const EMPTY_HUD: HudModel = { labels: [], bars: [], info: null, menu: null };
 
 /** Redraw key: changes whenever the drawn HUD would change. */
 export function hudKey(m: HudModel, blinkOn: boolean): string {
   return [
-    m.hp,
-    m.hpLow ? 1 : 0,
-    Math.round(m.gauge * 100),
-    m.gaugeFull ? (blinkOn ? 'F1' : 'F0') : '',
-    m.chip ?? '',
-    m.banner?.key ?? '',
-    m.notice ?? '',
     m.info ? `${m.info.defId}${m.info.code}` : '',
     m.menu ? `${m.menu.spec.key}:${m.menu.cursor}:${blinkOn ? 1 : 0}` : '',
-    m.labels.map((l) => `${l.text}@${Math.round(l.x)},${Math.round(l.y)},${Math.round(l.alpha * 8)}`).join(';'),
+    m.labels.map((l) => `${l.text}@${Math.round(l.x)},${Math.round(l.y)}`).join(';'),
+    m.bars.map((b) => `${b.filled}/${b.total}@${Math.round(b.x)},${Math.round(b.y)}`).join(';'),
   ].join('|');
 }
 

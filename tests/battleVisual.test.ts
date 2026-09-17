@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { ENEMY_SEEDS } from '../src/data/enemies';
 import { generateCreature } from '../src/render/creatureGen';
+import { battleSignal, hpSegments, NO_SIGNAL } from '../src/render/battleSignals';
 import { cellKey, cellStates, type CellInputs } from '../src/render/cellStates';
 import { bayer4, paletteIndex, signal } from '../src/render/palette';
 import { fitView } from '../src/render/viewCamera';
@@ -192,5 +193,54 @@ describe('player sprite and texel scale', () => {
     expect(texelScale(1, 40, 32)).toBe(1);
     expect(texelScale(1, 70, 32)).toBe(2);
     expect(texelScale(1, 5, 32)).toBe(1);
+  });
+});
+
+describe('battle signals', () => {
+  const base = { firstStart: true, player: { x: 1, y: 4 }, introTicks: 48, startTicks: 60, wonTicks: 72, deadTicks: 60 };
+
+  it('draws the grid in from the player edge during the intro', () => {
+    const early = battleSignal({ ...base, state: 'BATTLE_INTRO', elapsed: 8 });
+    expect(early.reveal(5)).toBeGreaterThan(0);
+    expect(early.reveal(0)).toBe(0);
+    const done = battleSignal({ ...base, state: 'BATTLE_INTRO', elapsed: 48 });
+    for (let y = 0; y < 6; y++) expect(done.reveal(y)).toBe(1);
+  });
+
+  it('sweeps an accent wave into the depth at the first BATTLE START only', () => {
+    const near = battleSignal({ ...base, state: 'BATTLE_START', elapsed: 9 });
+    const far = battleSignal({ ...base, state: 'BATTLE_START', elapsed: 45 });
+    expect(near.flash(0, 5)).toBeGreaterThan(near.flash(0, 0));
+    expect(far.flash(0, 0)).toBeGreaterThan(far.flash(0, 5));
+    expect(battleSignal({ ...base, firstStart: false, state: 'BATTLE_START', elapsed: 9 })).toBe(NO_SIGNAL);
+  });
+
+  it('blinks the enemy side on a win', () => {
+    const s = battleSignal({ ...base, state: 'BATTLE_WON', elapsed: 0 });
+    expect(s.flash(0, 1)).toBe(1);
+    expect(battleSignal({ ...base, state: 'BATTLE_WON', elapsed: 4 }).flash(0, 1)).toBe(0);
+  });
+
+  it('breaks the grid outward from the player and fades it in red on defeat', () => {
+    const s = battleSignal({ ...base, state: 'PLAYER_DEAD', elapsed: 6 });
+    expect(s.red).toBe(true);
+    expect(s.broken(1, 4)).toBe(true);
+    expect(s.broken(0, 0)).toBe(false);
+    const end = battleSignal({ ...base, state: 'PLAYER_DEAD', elapsed: 60 });
+    expect(end.broken(0, 0)).toBe(true);
+    expect(end.reveal(0)).toBe(0);
+  });
+
+  it('shows nothing special in battle', () => {
+    expect(battleSignal({ ...base, state: 'ACTION', elapsed: 0 })).toBe(NO_SIGNAL);
+  });
+});
+
+describe('hpSegments', () => {
+  it('rounds up and keeps one segment while alive', () => {
+    expect(hpSegments(40, 40, 8)).toEqual({ filled: 8, total: 8 });
+    expect(hpSegments(1, 40, 8)).toEqual({ filled: 1, total: 8 });
+    expect(hpSegments(21, 40, 8)).toEqual({ filled: 5, total: 8 });
+    expect(hpSegments(0, 40, 8)).toEqual({ filled: 0, total: 8 });
   });
 });

@@ -1,28 +1,26 @@
 import * as THREE from 'three';
+import { tuning } from '../../config/tuning';
 import { CHIPS } from '../../data/chips';
-import { chipDesc, chipName, t } from '../../i18n';
+import { chipDesc, chipName } from '../../i18n';
+import { PALETTE } from '../../render/palette';
 import { CHIP_ICONS, ICON_PALETTE } from '../chips/chipIcons';
 import { blinkPhase } from '../terminalMode';
-import { hudKey, type BannerTone, type HudLabel, type HudModel, type LabelTone } from './hudModel';
+import { hudKey, type HpBar, type HudLabel, type HudModel, type LabelTone } from './hudModel';
 import { menuLayout, type MenuSpec, type MenuTone } from './menuModel';
 import { drawText, measureText, wrapText, type PixelSink } from './pixelFont';
 
 // HUD layer of the CRT (TERMINAL.md §7.1): drawn at the CRT resolution with the
 // pixel font and composited over the battle by the CRT shader.
 
+const hex = (v: number) => `#${v.toString(16).padStart(6, '0')}`;
+
 const COLOR = {
-  hp: '#7dff9a',
-  hpLow: '#ffb347',
-  gauge: '#6fd3ff',
-  gaugeFlash: '#e8fbff',
-  gaugeBack: 'rgba(10, 20, 30, 0.8)',
-  chip: '#ffe066',
-  band: 'rgba(0, 0, 0, 0.6)',
-  notice: '#ffb347',
   shade: 'rgba(4, 8, 12, 0.9)',
   infoName: '#e8dfc4',
   infoText: '#9fe8ff',
   infoPower: '#ffd166',
+  red: hex(PALETTE.red),
+  outline: hex(PALETTE.bg),
 };
 
 const MENU_COLOR: Record<MenuTone, string> = {
@@ -44,23 +42,10 @@ const MENU = {
 };
 
 const LABEL_COLOR: Record<LabelTone, string> = {
-  enemyHp: '#e8dfc4',
-  damage: '#ffffff',
-  playerDamage: '#ff8a3d',
-  heal: '#7dff9a',
+  damage: hex(PALETTE.accent),
+  playerDamage: hex(PALETTE.red),
+  heal: hex(PALETTE.phosphor),
 };
-const LABEL_OUTLINE = '#07090c';
-
-const BANNER_COLOR: Record<BannerTone, string> = {
-  info: '#6fd3ff',
-  win: '#7dff9a',
-  lose: '#ff5a5a',
-};
-
-/** Gauge bar width as a share of the CRT width. */
-const GAUGE_W = 0.38;
-/** Vertical centre of the banner band as a share of the CRT height. */
-const BANNER_Y = 0.45;
 
 export class CrtCanvas {
   readonly texture: THREE.CanvasTexture;
@@ -112,74 +97,48 @@ export class CrtCanvas {
       return;
     }
 
-    this.drawLabels(ctx, sink, m.labels, s);
-
-    // HP box, top-left.
-    const hpText = String(m.hp);
-    const hpColor = m.hpLow ? COLOR.hpLow : COLOR.hp;
-    const boxW = Math.max(measureText('000', s), measureText(hpText, s)) + 4 * s;
-    const boxH = 7 * s + 4 * s;
-    ctx.fillStyle = COLOR.gaugeBack;
-    ctx.fillRect(M, M, boxW, boxH);
-    ctx.strokeStyle = hpColor;
-    ctx.lineWidth = s;
-    ctx.strokeRect(M + s / 2, M + s / 2, boxW - s, boxH - s);
-    drawText(sink, hpText, M + boxW - 2 * s - measureText(hpText, s), M + 2 * s, s, hpColor);
-
-    // Custom gauge, top-right.
-    const barW = Math.round(W * GAUGE_W);
-    const barH = 4 * s;
-    const barX = W - M - barW;
-    const label = t('hud.custom');
-    drawText(sink, label, barX + Math.round((barW - measureText(label, s)) / 2), M, s, COLOR.gauge);
-    const barY = M + 8 * s;
-    ctx.fillStyle = COLOR.gaugeBack;
-    ctx.fillRect(barX, barY, barW, barH);
-    ctx.fillStyle = m.gaugeFull && blinkOn ? COLOR.gaugeFlash : COLOR.gauge;
-    ctx.fillRect(barX + s, barY + s, Math.round((barW - 2 * s) * Math.min(1, m.gauge)), barH - 2 * s);
-    ctx.strokeStyle = COLOR.gauge;
-    ctx.strokeRect(barX + s / 2, barY + s / 2, barW - s, barH - s);
-
+    this.drawBars(ctx, m.bars, s);
+    this.drawLabels(sink, m.labels);
     if (m.info) this.drawInfo(ctx, sink, m.info, W, H, s, M);
-
-    // Next chip, bottom-left; a notice (NO CHIP) takes the same line.
-    const bottomY = H - M - 7 * s;
-    if (m.notice) {
-      const tw = measureText(m.notice, s);
-      ctx.fillStyle = COLOR.band;
-      ctx.fillRect(M - s, bottomY - 2 * s, tw + 2 * s, 11 * s);
-      drawText(sink, m.notice, M, bottomY, s, COLOR.notice);
-    } else if (m.chip) {
-      drawText(sink, m.chip, M, bottomY, s, COLOR.chip);
-    }
-
-    // Banner across the middle.
-    if (m.banner) {
-      const big = measureText(m.banner.text, s + 1) <= W - 2 * M ? s + 1 : s;
-      const bandH = 7 * big + 8 * s;
-      const bandY = Math.round(H * BANNER_Y - bandH / 2);
-      ctx.fillStyle = COLOR.band;
-      ctx.fillRect(0, bandY, W, bandH);
-      const tw = measureText(m.banner.text, big);
-      drawText(sink, m.banner.text, Math.round((W - tw) / 2), bandY + 4 * s, big, BANNER_COLOR[m.banner.tone]);
-    }
-
     this.texture.needsUpdate = true;
   }
 
-  /** Enemy HP and damage numbers with a dark outline, centred on their anchors. */
-  private drawLabels(ctx: CanvasRenderingContext2D, sink: PixelSink, labels: readonly HudLabel[], s: number): void {
+  /** Enemy HP as a row of big segments: lit = red block, lost = red outline. */
+  private drawBars(ctx: CanvasRenderingContext2D, bars: readonly HpBar[], s: number): void {
+    const size = 2 * s;
+    const gap = Math.max(1, Math.floor(s / 2));
+    for (const b of bars) {
+      const width = b.total * size + (b.total - 1) * gap;
+      const x0 = Math.round(b.x - width / 2);
+      const y0 = Math.round(b.y - size);
+      ctx.fillStyle = COLOR.outline;
+      ctx.fillRect(x0 - 1, y0 - 1, width + 2, size + 2);
+      for (let i = 0; i < b.total; i++) {
+        const x = x0 + i * (size + gap);
+        ctx.fillStyle = COLOR.red;
+        if (i < b.filled) {
+          ctx.fillRect(x, y0, size, size);
+        } else {
+          ctx.fillRect(x, y0, size, 1);
+          ctx.fillRect(x, y0 + size - 1, size, 1);
+          ctx.fillRect(x, y0, 1, size);
+          ctx.fillRect(x + size - 1, y0, 1, size);
+        }
+      }
+    }
+  }
+
+  /** Damage and heal numbers: big pixel digits with a dark outline, centred on their anchors. */
+  private drawLabels(sink: PixelSink, labels: readonly HudLabel[]): void {
+    const scale = tuning.battleVisual.DAMAGE_SCALE;
     for (const l of labels) {
-      const scale = l.tone === 'enemyHp' ? Math.max(1, s - 1) : s;
       const x = Math.round(l.x - measureText(l.text, scale) / 2);
       const y = Math.round(l.y - (7 * scale) / 2);
-      ctx.globalAlpha = l.alpha;
       for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
-        drawText(sink, l.text, x + dx * scale, y + dy * scale, scale, LABEL_OUTLINE);
+        drawText(sink, l.text, x + dx, y + dy, scale, COLOR.outline);
       }
       drawText(sink, l.text, x, y, scale, LABEL_COLOR[l.tone]);
     }
-    ctx.globalAlpha = 1;
   }
 
   /** Session menu over the whole screen (TERMINAL.md §8). */
