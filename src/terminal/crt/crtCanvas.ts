@@ -4,7 +4,7 @@ import { chipDesc, chipName, t } from '../../i18n';
 import { CHIP_ICONS, ICON_PALETTE } from '../chips/chipIcons';
 import { blinkPhase } from '../terminalMode';
 import { hudKey, type BannerTone, type HudModel } from './hudModel';
-import { drawText, measureText, type PixelSink } from './pixelFont';
+import { drawText, measureText, wrapText, type PixelSink } from './pixelFont';
 
 // HUD layer of the CRT (TERMINAL.md §7.1): drawn at the CRT resolution with the
 // pixel font and composited over the battle by the CRT shader.
@@ -171,27 +171,9 @@ export class CrtCanvas {
       drawText(sink, p, Math.round((W - measureText(p, s)) / 2), y, s, COLOR.infoPower);
       y += 11 * s;
     }
-    for (const line of wrap(chipDesc(info.defId).toUpperCase(), Math.floor((W - 2 * M) / (6 * s)))) {
+    for (const line of wrapText(chipDesc(info.defId).toUpperCase(), Math.floor((W - 2 * M) / (6 * s)))) {
       drawText(sink, line, M, y, s, COLOR.infoText);
       y += 9 * s;
     }
   }
-}
-
-/** Greedy word wrap to `cols` characters. */
-function wrap(text: string, cols: number): string[] {
-  const lines: string[] = [];
-  let line = '';
-  for (const word of text.split(/\s+/)) {
-    if (!word) continue;
-    const next = line ? `${line} ${word}` : word;
-    if (next.length > cols && line) {
-      lines.push(line);
-      line = word;
-    } else {
-      line = next;
-    }
-  }
-  if (line) lines.push(line);
-  return lines;
 }

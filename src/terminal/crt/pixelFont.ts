@@ -53,6 +53,12 @@ const GLYPHS: Record<string, string> = {
   "'": '..#../..#../...../...../...../...../.....',
   '*': '...../#.#.#/.###./#####/.###./#.#.#/.....',
   ' ': '...../...../...../...../...../...../.....',
+  '>': '.#.../..#../...#./....#/...#./..#../.#...',
+  '<': '...#./..#../.#.../#..../.#.../..#../...#.',
+  ',': '...../...../...../...../...../..#../.#...',
+  '(': '...#./..#../.#.../.#.../.#.../..#../...#.',
+  ')': '.#.../..#../...#./...#./...#./..#../.#...',
+  '=': '...../...../#####/...../#####/...../.....',
 };
 
 const cache = new Map<string, readonly string[]>();
@@ -76,6 +82,24 @@ export function glyphRows(ch: string): readonly string[] {
 export function measureText(text: string, scale = 1): number {
   const n = [...text].length;
   return n === 0 ? 0 : (n * (GLYPH_W + GLYPH_GAP) - GLYPH_GAP) * scale;
+}
+
+/** Greedy word wrap to `cols` characters. */
+export function wrapText(text: string, cols: number): string[] {
+  const lines: string[] = [];
+  let line = '';
+  for (const word of text.split(/\s+/)) {
+    if (!word) continue;
+    const next = line ? `${line} ${word}` : word;
+    if (next.length > cols && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = next;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
 }
 
 export function drawText(sink: PixelSink, text: string, x: number, y: number, scale: number, color: string): void {

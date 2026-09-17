@@ -51,7 +51,7 @@ export class Screens {
           variant: 'title',
           title: t('game.title'),
           subtitle: t('title.subtitle'),
-          hint: [t('title.hintTouch'), t('title.hintKeys')],
+          hint: [t('title.hintTerminal'), t('title.hintKeys')],
           buttons: [{ label: t('title.start'), action: a.start, primary: true }],
         };
       case 'PAUSED':
