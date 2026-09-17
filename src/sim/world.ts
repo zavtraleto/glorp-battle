@@ -4,7 +4,7 @@ import { secondsToTicks, tuning } from '../config/tuning';
 import type { Command, Dir } from '../core/input/commands';
 import { Rng } from '../core/rng';
 import { getBattle } from '../data/battles';
-import type { ChipDef } from '../data/chips';
+import type { ChipDef, FieldAction } from '../data/chips';
 import type { FolderId } from '../data/folders';
 import type { Attack, AttackContext } from './attacks/attack';
 import { PlayerBomb } from './attacks/bomb';
@@ -19,7 +19,7 @@ import type { Enemy, EnemyContext } from './enemies/enemyBase';
 import { createEnemy } from './enemies/factory';
 import type { SimEvent } from './events';
 import { Gauge } from './gauge';
-import { ROWS, type Cell, type Side } from './grid';
+import { COLS, ROWS, type Cell, type Side } from './grid';
 import { Occupancy } from './occupancy';
 import { Player } from './player';
 
@@ -504,12 +504,58 @@ export class World implements EnemyContext, AttackContext {
         effect([]);
         break;
     }
+    if (def.field) this.applyFieldAction(def.field);
     if (def.heal) {
       const before = p.hp;
       p.hp = Math.min(p.maxHp, p.hp + def.heal);
       this.events.push({ type: 'healed', amount: p.hp - before, x: p.x, y: p.y });
     }
     if (def.invis) p.invisTicks = secondsToTicks(tuning.chips.INVIS_TIME);
+  }
+
+  /** Nearest row in front of the player with an enemy panel; -1 if none. */
+  private nearestEnemyRow(): number {
+    for (let y = this.player.y - 1; y >= 0; y--) {
+      for (let x = 0; x < COLS; x++) if (this.field.owner(x, y) === 'enemy') return y;
+    }
+    return -1;
+  }
+
+  /** Field chips (roguelite spec §4.4). */
+  private applyFieldAction(action: FieldAction): void {
+    const f = this.field;
+    const free = (x: number, y: number) => this.occupancy.isFree(x, y);
+    const p = this.player;
+    switch (action) {
+      case 'crackRow':
+      case 'steal': {
+        const y = this.nearestEnemyRow();
+        if (y < 0) return;
+        for (let x = 0; x < COLS; x++) {
+          if (f.owner(x, y) !== 'enemy') continue;
+          if (action === 'crackRow') f.crack(x, y);
+          else if (free(x, y)) f.setOwner(x, y, 'player', this.tick);
+        }
+        return;
+      }
+      case 'crackAll':
+      case 'breakEnemy':
+      case 'repair':
+        for (let y = 0; y < ROWS; y++) {
+          for (let x = 0; x < COLS; x++) {
+            if (action === 'repair') {
+              if (f.owner(x, y) === 'player') f.repair(x, y);
+            } else if (free(x, y)) {
+              if (action === 'crackAll') f.crack(x, y);
+              else if (f.owner(x, y) === 'enemy') f.breakPanel(x, y, this.tick, false);
+            }
+          }
+        }
+        return;
+      case 'rock':
+        if (f.owner(p.x, p.y - 1) === 'player') this.placeObject('rock', p.x, p.y - 1, 'player');
+        return;
+    }
   }
 
   private fireBuster(): void {

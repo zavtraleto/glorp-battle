@@ -9,6 +9,7 @@ import {
 import { events } from '../core/events';
 import type { FixedStepClock } from '../core/loop';
 import { CHIPS, type ChipId } from '../data/chips';
+import { FOLDERS } from '../data/folders';
 import type { DebugCellState } from '../render/cellStates';
 import type { Cheats } from '../sim/world';
 
@@ -94,7 +95,7 @@ export class DebugPanel {
   private buildSession(): void {
     const s = this.state;
     const f = this.gui.addFolder('Session');
-    f.add({ folder: new URLSearchParams(location.search).get('folder') ?? 'mvp' }, 'folder', ['mvp', 'p1'])
+    f.add({ folder: new URLSearchParams(location.search).get('folder') ?? 'mvp' }, 'folder', Object.keys(FOLDERS))
       .name('folder (reloads)')
       .onChange((v: string) => {
         const url = new URL(location.href);

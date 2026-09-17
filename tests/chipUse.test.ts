@@ -360,3 +360,177 @@ describe('player wave and invis', () => {
     expect(w.player.hitsTaken).toBe(0);
   });
 });
+
+const at = (w: World, x: number, y: number) => w.enemyAt(x, y)!;
+
+describe('new attack chips', () => {
+  it('M-Cannon deals 120', () => {
+    const w = makeWorld();
+    const e = addEnemy(w, 1, 1, 300);
+    give(w, 'mcannon');
+    use(w);
+    run(w, hitFrame());
+    expect(e.hp).toBe(180);
+  });
+
+  it('AirShot pushes the target back', () => {
+    const w = makeWorld();
+    const e = addEnemy(w, 1, 2);
+    give(w, 'airshot');
+    use(w);
+    run(w, hitFrame());
+    expect([e.hp, e.y]).toEqual([180, 1]);
+  });
+
+  it('V-Gun, SideGun and Spreader hit around the target', () => {
+    let w = makeWorld();
+    let t = addEnemy(w, 1, 1);
+    const diag = addEnemy(w, 0, 0);
+    give(w, 'vgun');
+    use(w);
+    run(w, hitFrame());
+    expect([t.hp, diag.hp, at(w, 2, 0).hp]).toEqual([170, 170, 9969]);
+
+    w = makeWorld();
+    t = addEnemy(w, 1, 1);
+    const side = addEnemy(w, 2, 1);
+    give(w, 'sidegun');
+    use(w);
+    run(w, hitFrame());
+    expect([t.hp, side.hp]).toEqual([170, 170]);
+
+    w = makeWorld();
+    t = addEnemy(w, 1, 1);
+    const near = addEnemy(w, 0, 2);
+    give(w, 'spreader');
+    use(w);
+    run(w, hitFrame());
+    expect([t.hp, near.hp, at(w, 2, 0).hp]).toEqual([170, 170, 9969]);
+  });
+
+  it('LilBomb hits a row of 3 and CrosBomb a cross', () => {
+    let w = makeWorld();
+    const row = [addEnemy(w, 0, 1), addEnemy(w, 1, 1), addEnemy(w, 2, 1)];
+    const front = addEnemy(w, 1, 2);
+    give(w, 'lilbomb');
+    use(w);
+    run(w, hitFrame() + T(tuning.chips.BOMB_FLIGHT_TIME));
+    expect([...row.map((e) => e.hp), front.hp]).toEqual([150, 150, 150, 200]);
+
+    w = makeWorld();
+    const cross = [addEnemy(w, 1, 1), addEnemy(w, 0, 1), addEnemy(w, 1, 0), addEnemy(w, 1, 2)];
+    const corner = addEnemy(w, 0, 0);
+    give(w, 'crosbomb');
+    use(w);
+    run(w, hitFrame() + T(tuning.chips.BOMB_FLIGHT_TIME));
+    expect([...cross.map((e) => e.hp), corner.hp]).toEqual([140, 140, 140, 140, 200]);
+  });
+
+  it('ShockWave pierces up the lane', () => {
+    const w = makeWorld();
+    const a = addEnemy(w, 1, 2);
+    const b = addEnemy(w, 1, 0);
+    give(w, 'shockwave');
+    use(w);
+    run(w, hitFrame() + T(tuning.chips.PLAYER_WAVE_STEP) * 6);
+    expect([a.hp, b.hp]).toEqual([140, 140]);
+  });
+
+  it('Quake1 cracks the landing panel', () => {
+    const w = makeWorld();
+    const e = addEnemy(w, 1, 1);
+    give(w, 'quake1');
+    use(w);
+    run(w, hitFrame() + T(tuning.chips.BOMB_FLIGHT_TIME));
+    expect(e.hp).toBe(110);
+    expect(w.field.panel(1, 1)).toBe('CRACKED');
+  });
+
+  it('ZapRing paralyzes', () => {
+    const w = makeWorld();
+    const e = addEnemy(w, 1, 1);
+    give(w, 'zapring');
+    use(w);
+    run(w, hitFrame());
+    expect(e.hp).toBe(180);
+    expect(e.paralyzeTicks).toBeGreaterThan(0);
+  });
+
+  it('Recov10, Recov80 and Invis', () => {
+    const w = makeWorld();
+    w.player.hp = 5;
+    give(w, 'recov10', 'recov80', 'invis');
+    use(w);
+    expect(w.player.hp).toBe(15);
+    run(w, useTicks(CHIPS.recov10));
+    use(w);
+    expect(w.player.hp).toBe(95);
+    run(w, useTicks(CHIPS.recov80));
+    use(w);
+    expect(w.player.invisTicks).toBe(T(tuning.chips.INVIS_TIME));
+  });
+});
+
+describe('field chips', () => {
+  const useNow = (w: World, id: ChipId) => {
+    give(w, id);
+    use(w);
+    run(w, useTicks(CHIPS[id]));
+  };
+
+  it('Crack cracks the nearest enemy row', () => {
+    const w = makeWorld();
+    useNow(w, 'crack');
+    expect([0, 1, 2].map((x) => w.field.panel(x, 2))).toEqual(['CRACKED', 'CRACKED', 'CRACKED']);
+    expect(w.field.panel(1, 1)).toBe('NORMAL');
+  });
+
+  it('Geddon1 cracks every empty panel, Geddon2 breaks empty enemy panels', () => {
+    let w = makeWorld();
+    useNow(w, 'geddon1');
+    expect(w.field.panel(0, 5)).toBe('CRACKED');
+    expect(w.field.panel(0, 0)).toBe('CRACKED');
+    expect(w.field.panel(1, 4)).toBe('NORMAL'); // the player
+    expect(w.field.panel(2, 0)).toBe('NORMAL'); // an enemy
+
+    w = makeWorld();
+    useNow(w, 'geddon2');
+    expect(w.field.panel(0, 0)).toBe('BROKEN');
+    expect(w.field.panel(2, 0)).toBe('NORMAL');
+    expect(w.field.panel(0, 5)).toBe('NORMAL');
+  });
+
+  it('Steal takes the free panels of the nearest enemy row', () => {
+    const w = makeWorld();
+    addEnemy(w, 0, 2);
+    useNow(w, 'steal');
+    expect([0, 1, 2].map((x) => w.field.owner(x, 2))).toEqual(['enemy', 'player', 'player']);
+  });
+
+  it('Repair fixes only the player panels', () => {
+    const w = makeWorld();
+    w.field.breakPanel(0, 5, w.tick, false);
+    w.field.crack(2, 3);
+    w.field.breakPanel(0, 0, w.tick, false);
+    useNow(w, 'repair');
+    expect([w.field.panel(0, 5), w.field.panel(2, 3), w.field.panel(0, 0)]).toEqual(['NORMAL', 'NORMAL', 'BROKEN']);
+  });
+
+  it('RockCube puts a rock on the free own panel in front', () => {
+    const w = makeWorld();
+    useNow(w, 'rockcube');
+    expect(w.objectAt(1, 3)?.kind).toBe('rock');
+    useNow(w, 'rockcube');
+    expect(w.objects).toHaveLength(1);
+    movePlayer(w, 0, 3);
+    useNow(w, 'rockcube');
+    expect(w.objects).toHaveLength(1); // (0,2) belongs to the enemy
+  });
+
+  it('field and support chips resolve at once', () => {
+    const w = makeWorld();
+    give(w, 'crack');
+    use(w);
+    expect(w.field.panel(1, 2)).toBe('CRACKED');
+  });
+});
