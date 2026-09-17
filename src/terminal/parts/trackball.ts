@@ -14,6 +14,9 @@ const ARROW_DIRS: readonly Dir[] = ['up', 'right', 'down', 'left'];
 const SPIN_FROM_DRAG = 60;
 /** The ball sinks a little when grabbed. */
 const GRAB_TRAVEL = 0.04;
+const AXIS_X = new THREE.Vector3(1, 0, 0);
+const AXIS_Y = new THREE.Vector3(0, 1, 0);
+const turn = new THREE.Quaternion();
 
 export class Trackball {
   readonly group = new THREE.Group();
@@ -90,8 +93,10 @@ export class Trackball {
 
   update(dt: number): void {
     this.key.update(dt);
-    this.ball.rotation.x += this.spin.x * dt;
-    this.ball.rotation.y += this.spin.y * dt;
+    // Turn about the socket's fixed axes; accumulating Euler angles would turn
+    // the second axis with the first and roll the ball the wrong way.
+    this.ball.quaternion.premultiply(turn.setFromAxisAngle(AXIS_X, this.spin.x * dt));
+    this.ball.quaternion.premultiply(turn.setFromAxisAngle(AXIS_Y, this.spin.y * dt));
     this.spin.multiplyScalar(Math.exp(-dt * tuning.terminal.TRACKBALL_FRICTION));
     const flash = tuning.terminal.ARROW_FLASH_TIME;
     for (const a of this.arrows) {

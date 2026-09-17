@@ -33,6 +33,7 @@ const col = {
   phosphor: new THREE.Color(),
   dim: new THREE.Color(),
   red: new THREE.Color(),
+  dimRed: new THREE.Color(),
   accent: new THREE.Color(),
   tmp: new THREE.Color(),
 };
@@ -118,6 +119,7 @@ export class FieldView {
     signal('phosphor', 1, col.phosphor);
     signal('phosphor', v.GRID_DIM, col.dim);
     signal('red', 1, col.red);
+    signal('red', v.GRID_DIM, col.dimRed);
     signal('accent', 1, col.accent);
     const views = this.views(world, spawns);
     const time = world.tick + alpha;
@@ -139,7 +141,10 @@ export class FieldView {
         cellToWorld(x, y, c);
         const state = fx.broken(x, y) && view.state !== 'EMPTY' ? 'BROKEN' : view.state;
         const flash = fx.flash(x, y);
-        const line = fx.red ? col.red : col.phosphor;
+        // Enemy territory is drawn in red (BATTLE_VISUAL.md §3).
+        const enemySide = sideOfRow(y) === 'enemy';
+        const line = fx.red || enemySide ? col.red : col.phosphor;
+        const dim = enemySide ? col.dimRed : col.dim;
         const base = flash > 0 ? col.tmp.copy(col.accent).multiplyScalar(Math.min(1, flash)) : line;
         const s = reveal < 1 ? reveal : 1;
         const cellHw = hw * s;
@@ -147,7 +152,7 @@ export class FieldView {
 
         switch (state) {
           case 'EMPTY':
-            this.corners(c, cellHw, cellHd, col.dim, 0.08);
+            this.corners(c, cellHw, cellHd, dim, 0.08);
             break;
           case 'BROKEN':
             this.brokenOutline(c, cellHw, cellHd, base, (x * 7 + y * 3 + Math.floor(time / 3)) % 5);
@@ -188,10 +193,9 @@ export class FieldView {
             break;
           }
           case 'NORMAL':
-            this.outline(c, cellHw, cellHd, flash > 0 || fx.red ? base : col.dim);
+            this.outline(c, cellHw, cellHd, flash > 0 || fx.red ? base : dim);
             break;
         }
-        if (sideOfRow(y) === 'enemy' && state !== 'EMPTY') this.corners(c, cellHw, cellHd, col.red, 0.06);
       }
     }
     this.divider(fx.reveal(Math.floor(ROWS / 2)));
