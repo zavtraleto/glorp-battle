@@ -1,0 +1,57 @@
+import { ROWS } from '../grid';
+import type { AttackContext } from './attack';
+import type { LaneMover } from './shockwave';
+
+// Enemy projectile flying down a lane (roguelite spec §5.2): Hopzap's ZapRing
+// and Finnik's dash. It flies over holes, stops on objects and on the first hit.
+
+export interface LaneShotOptions {
+  damage: number;
+  stepTicks: number;
+  /** Player paralysis on hit, in ticks (0 = none). */
+  paralyze?: number;
+}
+
+export class LaneShot implements LaneMover {
+  readonly hitIds = new Set<number>();
+  done = false;
+  lastStepTick: number;
+  readonly stepTicks: number;
+  readonly dir = 1 as const;
+  private readonly damage: number;
+  private readonly paralyze: number;
+
+  constructor(
+    readonly id: number,
+    readonly kind: 'zapring' | 'dash',
+    readonly x: number,
+    public y: number,
+    spawnTick: number,
+    opts: LaneShotOptions,
+  ) {
+    this.lastStepTick = spawnTick;
+    this.stepTicks = Math.max(1, opts.stepTicks);
+    this.damage = opts.damage;
+    this.paralyze = opts.paralyze ?? 0;
+  }
+
+  update(ctx: AttackContext): void {
+    if (this.done) return;
+    if (ctx.tick - this.lastStepTick >= this.stepTicks) {
+      this.y++;
+      this.lastStepTick = ctx.tick;
+      if (this.y >= ROWS) {
+        this.done = true;
+        return;
+      }
+    }
+    if (ctx.hitObjectAt(this, this.x, this.y, this.damage)) {
+      this.done = true;
+      return;
+    }
+    if (ctx.hitPlayerAt(this, this.x, this.y, this.damage)) {
+      if (this.paralyze > 0) ctx.paralyzePlayer(this.paralyze);
+      this.done = true;
+    }
+  }
+}

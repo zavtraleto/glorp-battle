@@ -91,6 +91,12 @@ export const en = {
   'enemy.mettik': 'Mettik',
   'enemy.canodron': 'Canodron',
   'enemy.spiker': 'Spiker',
+  'enemy.hopzap': 'Hopzap',
+  'enemy.bladdy': 'Bladdy',
+  'enemy.rattik': 'Rattik',
+  'enemy.helmhead': 'Helmhead',
+  'enemy.finnik': 'Finnik',
+  'enemy.punchy': 'Punchy',
 } as const;
 
 export type StringKey = keyof typeof en;

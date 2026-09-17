@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { CHIPS } from '../data/chips';
 import { secondsToTicks, tuning } from '../config/tuning';
 import type { PlayerBomb } from '../sim/attacks/bomb';
+import type { CannonBall } from '../sim/attacks/cannonBall';
+import type { RatMine } from '../sim/attacks/ratMine';
 import type { LaneMover } from '../sim/attacks/shockwave';
 import { ROWS, type Cell } from '../sim/grid';
 import type { SimEvent } from '../sim/events';
@@ -14,7 +16,7 @@ import { signal } from './palette';
 // strips and dots in palette signals. Floor effects draw under the creatures,
 // air effects over them.
 
-type TimedKind = 'tracer' | 'enemyTracer' | 'slash' | 'heal' | 'blast' | 'enemyBlast' | 'warp';
+type TimedKind = 'tracer' | 'enemyTracer' | 'slash' | 'enemySlash' | 'heal' | 'blast' | 'enemyBlast' | 'warp';
 
 interface Timed {
   kind: TimedKind;
@@ -78,6 +80,9 @@ export class FxView {
       case 'bombLanded':
         for (const c of e.cells) this.push('blast', tick, fx.EXPLOSION_TIME, c.x, c.y);
         break;
+      case 'enemySlash':
+        for (const c of e.cells) this.push('enemySlash', tick, fx.SLASH_TIME, c.x, c.y);
+        break;
       case 'explosion':
         // Enemy fire bursting on the player's side.
         for (const c of e.cells) this.push('enemyBlast', tick, fx.EXPLOSION_TIME, c.x, c.y);
@@ -109,6 +114,10 @@ export class FxView {
       if (a.kind === 'shockwave' || a.kind === 'playerWave')
         this.wave(a as unknown as LaneMover, tick, alpha, a.kind === 'playerWave' ? col.accent : col.red);
       else if (a.kind === 'heatshot') this.fireball(a as unknown as LaneMover, tick, alpha);
+      else if (a.kind === 'zapring') this.ring(a as unknown as LaneMover, tick, alpha);
+      else if (a.kind === 'dash') this.dash(a as unknown as LaneMover, tick, alpha);
+      else if (a.kind === 'ratmine') this.mine(a as unknown as RatMine, tick, alpha);
+      else if (a.kind === 'cannonball' || a.kind === 'rockfall') this.enemyArc(a as unknown as CannonBall, tick, alpha);
     }
     for (const b of world.bombs) this.bomb(b, tick, alpha);
     if (world.state === 'ACTION') {
@@ -149,7 +158,10 @@ export class FxView {
         this.laneLine(t.x, t.y, t.toY, col.red, k, 1);
         break;
       case 'slash':
-        this.slash(t.x, t.y, k);
+        this.slash(t.x, t.y, k, col.accent);
+        break;
+      case 'enemySlash':
+        this.slash(t.x, t.y, k, col.red);
         break;
       case 'heal':
         this.heal(t.x, t.y, k);
@@ -183,7 +195,7 @@ export class FxView {
   }
 
   /** Three arcs sweeping across the cell, upright. */
-  private slash(x: number, y: number, k: number): void {
+  private slash(x: number, y: number, k: number, color: THREE.Color): void {
     cellToWorld(x, y, p);
     const segments = 8;
     for (let arc = 0; arc < 3; arc++) {
@@ -200,7 +212,7 @@ export class FxView {
           p.x + Math.cos(a1) * r,
           0.35 + Math.sin(a1) * r,
           p.z + 0.05,
-          col.accent,
+          color,
         );
       }
     }
@@ -282,6 +294,61 @@ export class FxView {
     this.air.line(p.x, AIR_Y - s, z, p.x, AIR_Y - r, z, col.red);
     this.air.line(p.x + s, AIR_Y, z, p.x + r, AIR_Y, z, col.red);
     this.air.line(p.x - s, AIR_Y, z, p.x - r, AIR_Y, z, col.red);
+  }
+
+  /** Hopzap ring: a red diamond outline rolling down the lane. */
+  private ring(m: LaneMover, tick: number, alpha: number): void {
+    const progress = Math.min(1, Math.max(0, (tick - m.lastStepTick + alpha) / m.stepTicks));
+    cellToWorld(m.x, m.y, p);
+    const z = p.z + (progress - 0.5) * CELL_DEPTH;
+    const s = 0.2 + 0.04 * Math.sin((tick + alpha) * 0.8);
+    this.air.line(p.x, AIR_Y + s, z, p.x + s, AIR_Y, z, col.red);
+    this.air.line(p.x + s, AIR_Y, z, p.x, AIR_Y - s, z, col.red);
+    this.air.line(p.x, AIR_Y - s, z, p.x - s, AIR_Y, z, col.red);
+    this.air.line(p.x - s, AIR_Y, z, p.x, AIR_Y + s, z, col.red);
+  }
+
+  /** Finnik dash: a red streak with a trail back along the lane. */
+  private dash(m: LaneMover, tick: number, alpha: number): void {
+    const progress = Math.min(1, Math.max(0, (tick - m.lastStepTick + alpha) / m.stepTicks));
+    cellToWorld(m.x, m.y, p);
+    const z = p.z + (progress - 0.5) * CELL_DEPTH;
+    const hw = CELL_WIDTH * 0.3;
+    A.set(p.x - hw, 0.15, z - CELL_DEPTH * 0.8);
+    B.set(p.x + hw, 0.15, z - CELL_DEPTH * 0.8);
+    C.set(p.x + hw * 0.4, 0.3, z);
+    D.set(p.x - hw * 0.4, 0.3, z);
+    this.airFill.quad(A, B, C, D, col.red);
+  }
+
+  /** Rattik mine: a small red square sliding between panels. */
+  private mine(m: RatMine, tick: number, alpha: number): void {
+    const k = Math.min(1, Math.max(0, (tick - m.lastStepTick + alpha) / m.stepTicks));
+    cellToWorld(m.prevX, m.prevY, p);
+    cellToWorld(m.x, m.y, q);
+    const x = p.x + (q.x - p.x) * k;
+    const z = p.z + (q.z - p.z) * k;
+    this.square(this.floor, x, z, 0.12, 0.12 * CELL_DEPTH, FLOOR_Y, col.red);
+    this.square(this.floor, x, z, 0.06, 0.06 * CELL_DEPTH, FLOOR_Y, col.red);
+  }
+
+  /** Enemy lob: red dots on a parabola, target marks on the floor. */
+  private enemyArc(b: CannonBall, tick: number, alpha: number): void {
+    const k = b.progress(tick, alpha);
+    cellToWorld(b.fromX, b.fromY, p);
+    for (const c of b.cells) {
+      cellToWorld(c.x, c.y, q);
+      const x = p.x + (q.x - p.x) * k;
+      const z = p.z + (q.z - p.z) * k;
+      const y = b.kind === 'rockfall' ? 1.6 * (1 - k) + 0.1 : 0.3 + 1.6 * k * (1 - k);
+      const s = 0.08;
+      A.set(x - s, y - s, z);
+      B.set(x + s, y - s, z);
+      C.set(x + s, y + s, z);
+      D.set(x - s, y + s, z);
+      this.airFill.quad(A, B, C, D, col.red);
+      this.square(this.floor, q.x, q.z, 0.3 * (1 - k) + 0.1, (0.3 * (1 - k) + 0.1) * CELL_DEPTH, FLOOR_Y, col.red);
+    }
   }
 
   /** Player bomb: an accent dot on a parabola with a floor shadow mark. */

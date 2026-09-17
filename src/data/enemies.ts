@@ -8,6 +8,12 @@ export const ENEMY_SEEDS: Record<EnemyKind, number> = {
   mettik: 11,
   canodron: 23,
   spiker: 42,
+  hopzap: 57,
+  bladdy: 64,
+  rattik: 77,
+  helmhead: 91,
+  finnik: 103,
+  punchy: 118,
 };
 
 export type EnemyLevel = 1 | 2 | 3;

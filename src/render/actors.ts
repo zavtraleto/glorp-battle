@@ -120,6 +120,7 @@ export class EnemyView {
     // Paralysis: a steady flicker.
     if (enemy.paralyzeTicks > 0 && Math.floor(tick / 4) % 2 === 0) flash = true;
     this.pixels.setFlash(flash);
+    if (enemy.offField) this.sprite.visible = false;
     this.pixels.setDissolve(enemy.alive ? 0 : deathProgress(enemy.deathTick, tick, alpha, dt));
   }
 

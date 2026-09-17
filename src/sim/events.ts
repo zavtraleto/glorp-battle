@@ -25,6 +25,8 @@ export type SimEvent =
   | { type: 'panelChanged'; x: number; y: number; panel: Panel; owner: Side }
   | { type: 'objectPlaced'; id: EntityId; kind: ObjectKind; x: number; y: number }
   | { type: 'objectBroken'; id: EntityId; x: number; y: number }
+  /** Enemy melee swing over these panels (Bladdy, Punchy). */
+  | { type: 'enemySlash'; cells: Cell[] }
   /** A hit bounced off a guarded enemy. */
   | { type: 'guarded'; id: EntityId; x: number; y: number }
   /** Auto Buster shot down lane x; toY = row of the target hit, or -1 on a miss. */

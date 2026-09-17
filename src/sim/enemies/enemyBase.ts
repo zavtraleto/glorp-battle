@@ -12,7 +12,7 @@ import type { SimEvent } from '../events';
 // IDLE → MOVE → TELEGRAPH → ATTACK → RECOVERY → IDLE; DEAD is terminal.
 // Hits never interrupt an enemy's action; they only flash.
 
-export type EnemyKind = 'mettik' | 'canodron' | 'spiker';
+export type EnemyKind = 'mettik' | 'canodron' | 'spiker' | 'hopzap' | 'bladdy' | 'rattik' | 'helmhead' | 'finnik' | 'punchy';
 export type EnemyState = 'IDLE' | 'MOVE' | 'TELEGRAPH' | 'ATTACK' | 'RECOVERY' | 'DEAD';
 
 /** What an enemy may read or do during its update. */
@@ -29,6 +29,8 @@ export interface EnemyContext {
   emit(event: SimEvent): void;
   /** Instant hit on the first target in lane x from row `fromY` downward; returns the stop row. */
   shootLane(x: number, fromY: number, damage: number): number;
+  /** Damages the player on (x, y) once per attack record. */
+  hitPlayerAt(attack: Attack, x: number, y: number, damage: number): boolean;
   /** Knocks the player one row back (toward their edge); false if blocked. */
   pushPlayer(): boolean;
   paralyzePlayer(ticks: number): void;
@@ -53,6 +55,8 @@ export abstract class Enemy {
   deathTick = -Infinity;
   /** Hits do no damage while true (Helmhead's helmet, Finnik's dash). */
   guarded = false;
+  /** Not on any panel right now (Finnik's dash): not in Occupancy, not drawn. */
+  offField = false;
   /** Ticks left of paralysis: no actions, state timers stand still. */
   paralyzeTicks = 0;
 
