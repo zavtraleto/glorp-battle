@@ -40,9 +40,14 @@ export const DEFAULT_TUNING = {
     CHIP_USE_TIME_SWORD: 0.4,
     CHIP_USE_TIME_BOMB: 0.5,
     CHIP_USE_TIME_RECOVER: 0.5,
+    CHIP_USE_TIME_FIELD: 0.4,
     CHIP_HIT_FRAME: 0.1,
     BOMB_FLIGHT_TIME: 0.5,
-    RECOVER_AMOUNT: 50,
+    /** ZapRing paralysis (roguelite spec §4.3). */
+    PARALYZE_TIME: 1.5,
+    INVIS_TIME: 3.0,
+    /** Player ShockWave: seconds per panel. */
+    PLAYER_WAVE_STEP: 0.15,
   },
   mettik: {
     MET_HP: 40,

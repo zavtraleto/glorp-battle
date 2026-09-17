@@ -4,7 +4,7 @@ import type { Command, Dir } from '../src/core/input/commands';
 import type { ChipId } from '../src/data/chips';
 import { Shockwave } from '../src/sim/attacks/shockwave';
 import { useTicks } from '../src/sim/chips/executor';
-import { hitscanCells, lobTarget, meleeCells } from '../src/sim/chips/patterns';
+import { lobArea, lobTarget, shapeCells } from '../src/sim/chips/patterns';
 import { Mettik } from '../src/sim/enemies/mettik';
 import type { SimEvent } from '../src/sim/events';
 import { World } from '../src/sim/world';
@@ -64,38 +64,43 @@ function movePlayer(w: World, x: number, y: number): void {
   p.y = p.prevY = y;
 }
 
-describe('pattern geometry', () => {
-  it('melee cells', () => {
-    expect(meleeCells('melee_1', 1, 3)).toEqual([{ x: 1, y: 2 }]);
-    expect(meleeCells('melee_wide', 1, 3)).toEqual([
+describe('shape geometry', () => {
+  const none = () => -1;
+  const at = (row: number) => () => row;
+
+  it('near cells', () => {
+    expect(shapeCells(CHIPS.sword.shape, 1, 3, none)).toEqual([{ x: 1, y: 2 }]);
+    expect(shapeCells(CHIPS.widesword.shape, 1, 3, none)).toEqual([
       { x: 0, y: 2 },
       { x: 1, y: 2 },
       { x: 2, y: 2 },
     ]);
-    expect(meleeCells('melee_wide', 0, 4)).toEqual([
+    expect(shapeCells(CHIPS.widesword.shape, 0, 4, none)).toEqual([
       { x: 0, y: 3 },
       { x: 1, y: 3 },
     ]);
-    expect(meleeCells('melee_long', 2, 3)).toEqual([
+    expect(shapeCells(CHIPS.longsword.shape, 2, 3, none)).toEqual([
       { x: 2, y: 2 },
       { x: 2, y: 1 },
     ]);
   });
 
-  it('lob lands three rows ahead', () => {
-    expect(lobTarget(1, 3)).toEqual({ x: 1, y: 0 });
-    expect(lobTarget(1, 4)).toEqual({ x: 1, y: 1 });
-    expect(lobTarget(1, 5)).toEqual({ x: 1, y: 2 });
+  it('lob lands depth rows ahead and clips its area', () => {
+    expect(lobTarget(3, 1, 3)).toEqual({ x: 1, y: 0 });
+    expect(lobTarget(3, 1, 5)).toEqual({ x: 1, y: 2 });
+    expect(lobTarget(3, 1, 2)).toBeNull();
+    expect(lobArea([{ x: 0, y: 0 }, { x: -1, y: 0 }, { x: 0, y: -1 }], 0, 0)).toEqual([{ x: 0, y: 0 }]);
   });
 
-  it('hitscan with pierce adds the panel behind the target', () => {
-    expect(hitscanCells('lane_hitscan', 1, 4, () => 1)).toEqual([{ x: 1, y: 1 }]);
-    expect(hitscanCells('lane_hitscan_pierce1', 1, 4, () => 1)).toEqual([
+  it('lane shapes hit the first target plus cells around it', () => {
+    expect(shapeCells(CHIPS.cannon.shape, 1, 4, at(1))).toEqual([{ x: 1, y: 1 }]);
+    expect(shapeCells(CHIPS.shotgun.shape, 1, 4, at(1))).toEqual([
       { x: 1, y: 1 },
       { x: 1, y: 0 },
     ]);
-    expect(hitscanCells('lane_hitscan_pierce1', 1, 4, () => 0)).toEqual([{ x: 1, y: 0 }]);
-    expect(hitscanCells('lane_hitscan', 1, 4, () => -1)).toEqual([]);
+    expect(shapeCells(CHIPS.shotgun.shape, 1, 4, at(0))).toEqual([{ x: 1, y: 0 }]);
+    expect(shapeCells(CHIPS.cannon.shape, 1, 4, none)).toEqual([]);
+    expect(shapeCells({ t: 'self' }, 1, 4, at(1))).toEqual([]);
   });
 });
 

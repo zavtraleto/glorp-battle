@@ -4,6 +4,7 @@ import { secondsToTicks, tuning } from '../config/tuning';
 import type { Command, Dir } from '../core/input/commands';
 import { Rng } from '../core/rng';
 import { getBattle } from '../data/battles';
+import type { ChipDef } from '../data/chips';
 import type { FolderId } from '../data/folders';
 import type { Attack, AttackContext } from './attacks/attack';
 import { PlayerBomb } from './attacks/bomb';
@@ -12,7 +13,7 @@ import { Field } from './field';
 import { FieldObject, type ObjectKind } from './fieldObject';
 import { ChipSystem, type ChipInstance } from './chips/chipSystem';
 import { startChip, type ActiveChip } from './chips/executor';
-import { hitscanCells, lobTarget, meleeCells } from './chips/patterns';
+import { lobArea, lobTarget, shapeCells } from './chips/patterns';
 import type { Enemy, EnemyContext } from './enemies/enemyBase';
 import { createEnemy } from './enemies/factory';
 import type { SimEvent } from './events';
@@ -386,8 +387,9 @@ export class World implements EnemyContext, AttackContext {
     return -1;
   };
 
-  private damageCells(cells: readonly { x: number; y: number }[], damage: number): void {
+  private damageCells(cells: readonly { x: number; y: number }[], damage: number): Enemy[] {
     const hit = new Set<number>();
+    const enemies: Enemy[] = [];
     for (const c of cells) {
       const o = this.objectAt(c.x, c.y);
       if (o) {
@@ -401,7 +403,14 @@ export class World implements EnemyContext, AttackContext {
       if (!e || !e.alive || hit.has(e.id)) continue;
       hit.add(e.id);
       this.damageEnemy(e, damage);
+      enemies.push(e);
     }
+    return enemies;
+  }
+
+  /** Damage plus the chip's on-hit effects (roguelite spec §4.2). */
+  private hitCells(cells: readonly Cell[], damage: number, _def: ChipDef): void {
+    this.damageCells(cells, damage);
   }
 
   /** Starts the next queued chip if the player is free (no buffering, GDD §6.5). */
@@ -436,41 +445,36 @@ export class World implements EnemyContext, AttackContext {
     const p = this.player;
     const def = a.def;
     const power = def.power ?? 0;
-    const effect = (cells: { x: number; y: number }[], toY = -1) =>
-      this.events.push({ type: 'chipEffect', defId: def.id, pattern: def.pattern, x: p.x, fromY: p.y, cells, toY });
+    const shape = def.shape;
+    const effect = (cells: Cell[], toY = -1) =>
+      this.events.push({ type: 'chipEffect', defId: def.id, shape: shape.t, x: p.x, fromY: p.y, cells, toY });
 
-    switch (def.pattern) {
-      case 'lane_hitscan':
-      case 'lane_hitscan_pierce1': {
-        const cells = hitscanCells(def.pattern, p.x, p.y, this.firstTargetRow);
-        effect(cells, cells[0]?.y ?? -1);
-        this.damageCells(cells, power);
-        return;
+    switch (shape.t) {
+      case 'lane':
+      case 'near': {
+        const cells = shapeCells(shape, p.x, p.y, this.firstTargetRow);
+        effect(cells, shape.t === 'lane' ? (cells[0]?.y ?? -1) : -1);
+        this.hitCells(cells, power, def);
+        break;
       }
-      case 'melee_1':
-      case 'melee_wide':
-      case 'melee_long': {
-        const cells = meleeCells(def.pattern, p.x, p.y);
-        effect(cells);
-        this.damageCells(cells, power);
-        return;
-      }
-      case 'lob_3': {
-        const target = lobTarget(p.x, p.y);
-        if (!target) return;
-        const bomb = new PlayerBomb(this.attackIdCounter++, p.x, p.y, target.x, target.y, power, this.tick);
+      case 'lob': {
+        const land = lobTarget(shape.depth, p.x, p.y);
+        if (!land) break;
+        const bomb = new PlayerBomb(this.attackIdCounter++, p.x, p.y, land.x, land.y, power, this.tick, def);
         this.bombs.push(bomb);
-        effect([target], target.y);
+        effect([land], land.y);
         this.events.push({ type: 'bombThrown', id: bomb.id });
-        return;
+        break;
       }
-      case 'self_heal': {
-        const before = p.hp;
-        p.hp = Math.min(p.maxHp, p.hp + tuning.chips.RECOVER_AMOUNT);
+      case 'wave':
+      case 'self':
         effect([]);
-        this.events.push({ type: 'healed', amount: p.hp - before, x: p.x, y: p.y });
-        return;
-      }
+        break;
+    }
+    if (def.heal) {
+      const before = p.hp;
+      p.hp = Math.min(p.maxHp, p.hp + def.heal);
+      this.events.push({ type: 'healed', amount: p.hp - before, x: p.x, y: p.y });
     }
   }
 
@@ -491,8 +495,10 @@ export class World implements EnemyContext, AttackContext {
     for (const b of this.bombs) {
       if (b.done || this.tick < b.landTick) continue;
       b.done = true;
-      this.events.push({ type: 'bombLanded', id: b.id, x: b.x, y: b.y });
-      this.damageCells([{ x: b.x, y: b.y }], b.damage);
+      const shape = b.def.shape;
+      const cells = shape.t === 'lob' ? lobArea(shape.area, b.x, b.y) : [{ x: b.x, y: b.y }];
+      this.events.push({ type: 'bombLanded', id: b.id, x: b.x, y: b.y, cells });
+      this.hitCells(cells, b.damage, b.def);
     }
     this.bombs = this.bombs.filter((b) => !b.done);
   }

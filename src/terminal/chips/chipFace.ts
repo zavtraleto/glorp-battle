@@ -15,6 +15,7 @@ const GROUP_COLOR: Record<UseTimeGroup, { frame: string; backdrop: string }> = {
   SWORD: { frame: '#ffb347', backdrop: '#4a3317' },
   BOMB: { frame: '#9a6bff', backdrop: '#2c1f4a' },
   RECOVER: { frame: '#3fcf6a', backdrop: '#173d24' },
+  FIELD: { frame: '#c9b98a', backdrop: '#3a3326' },
 };
 
 const COLOR = {

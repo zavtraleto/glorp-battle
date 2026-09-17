@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { CHIPS } from '../data/chips';
 import { secondsToTicks, tuning } from '../config/tuning';
 import type { PlayerBomb } from '../sim/attacks/bomb';
 import type { LaneMover } from '../sim/attacks/shockwave';
@@ -66,16 +67,16 @@ export class FxView {
     const fx = tuning.fx;
     switch (e.type) {
       case 'chipEffect':
-        if (e.pattern === 'lane_hitscan' || e.pattern === 'lane_hitscan_pierce1') {
+        if (e.shape === 'lane') {
           this.push('tracer', tick, fx.CANNON_TRACER_TIME, e.x, e.fromY, e.toY);
-        } else if (e.pattern.startsWith('melee')) {
+        } else if (e.shape === 'near') {
           for (const c of e.cells) this.push('slash', tick, fx.SLASH_TIME, c.x, c.y);
-        } else if (e.pattern === 'self_heal') {
+        } else if (CHIPS[e.defId].heal) {
           this.push('heal', tick, fx.HEAL_FX_TIME, e.x, e.fromY);
         }
         break;
       case 'bombLanded':
-        this.push('blast', tick, fx.EXPLOSION_TIME, e.x, e.y);
+        for (const c of e.cells) this.push('blast', tick, fx.EXPLOSION_TIME, c.x, c.y);
         break;
       case 'explosion':
         // Enemy fire bursting on the player's side.

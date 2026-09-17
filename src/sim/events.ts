@@ -1,4 +1,4 @@
-import type { ChipId, PatternId } from '../data/chips';
+import type { ChipId, ShapeKind } from '../data/chips';
 import type { Panel } from './field';
 import type { ObjectKind } from './fieldObject';
 import type { Cell, Side } from './grid';
@@ -16,10 +16,10 @@ export type SimEvent =
   | { type: 'chipUsed'; defId: ChipId; x: number; y: number }
   | { type: 'chipInterrupted'; defId: ChipId }
   /** Visual footprint of a resolved chip; `cells` are the panels it swept or hit. */
-  | { type: 'chipEffect'; defId: ChipId; pattern: PatternId; x: number; fromY: number; cells: Cell[]; toY: number }
+  | { type: 'chipEffect'; defId: ChipId; shape: ShapeKind; x: number; fromY: number; cells: Cell[]; toY: number }
   | { type: 'healed'; amount: number; x: number; y: number }
   | { type: 'bombThrown'; id: number }
-  | { type: 'bombLanded'; id: number; x: number; y: number }
+  | { type: 'bombLanded'; id: number; x: number; y: number; cells: Cell[] }
   /** Instant enemy shot along a lane (Canodron); toY = row where it stopped, or ROWS if it left the field. */
   | { type: 'enemyShot'; x: number; fromY: number; toY: number }
   | { type: 'panelChanged'; x: number; y: number; panel: Panel; owner: Side }

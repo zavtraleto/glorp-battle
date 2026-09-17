@@ -22,6 +22,6 @@ export function useTicks(def: ChipDef): number {
 export function startChip(chip: ChipInstance, tick: number): ActiveChip {
   const def = CHIPS[chip.defId];
   const total = useTicks(def);
-  const hitDelay = def.kind === 'support' ? 0 : Math.min(total, secondsToTicks(tuning.chips.CHIP_HIT_FRAME));
+  const hitDelay = def.kind !== 'attack' ? 0 : Math.min(total, secondsToTicks(tuning.chips.CHIP_HIT_FRAME));
   return { chip, def, startTick: tick, hitTick: tick + hitDelay, endTick: tick + total, resolved: false };
 }

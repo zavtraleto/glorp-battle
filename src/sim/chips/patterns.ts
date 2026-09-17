@@ -1,52 +1,38 @@
-import type { PatternId } from '../../data/chips';
+import type { Offset, Shape } from '../../data/chips';
 import { inField, type Cell } from '../grid';
 
-// Attack patterns (GDD §6.4). The player stands at (px, py) and faces −y.
-// Hitscan patterns need the field to find their target, so they take a lookup.
+// Chip shapes (GDD §6.4, roguelite spec §4.2). The player stands at (px, py)
+// and faces −y. Lane shapes need the field to find their target, so they take a lookup.
 
-/** Returns the row of the first living enemy in lane `x` in front of `py`, or -1. */
-export type FirstEnemyRow = (x: number, py: number) => number;
+/** Row of the first target in lane `x` in front of row `py`, or -1. */
+export type TargetRow = (x: number, py: number) => number;
 
-/** Fixed cells hit by melee patterns, clipped to the field. */
-export function meleeCells(pattern: PatternId, px: number, py: number): Cell[] {
-  let cells: Cell[];
-  switch (pattern) {
-    case 'melee_1':
-      cells = [{ x: px, y: py - 1 }];
-      break;
-    case 'melee_wide':
-      cells = [
-        { x: px - 1, y: py - 1 },
-        { x: px, y: py - 1 },
-        { x: px + 1, y: py - 1 },
-      ];
-      break;
-    case 'melee_long':
-      cells = [
-        { x: px, y: py - 1 },
-        { x: px, y: py - 2 },
-      ];
-      break;
-    default:
-      cells = [];
-  }
-  return cells.filter((c) => inField(c.x, c.y));
+function around(offsets: readonly Offset[], x: number, y: number): Cell[] {
+  return offsets.map((o) => ({ x: x + o.x, y: y + o.y })).filter((c) => inField(c.x, c.y));
 }
 
-/** Landing cell of a lobbed bomb (MMBN1 MiniBomb: "Depth=3"). */
-export function lobTarget(px: number, py: number): Cell | null {
-  const c = { x: px, y: py - 3 };
+/** Cells damaged right away by lane and near shapes; other shapes return []. */
+export function shapeCells(shape: Shape, px: number, py: number, targetRow: TargetRow): Cell[] {
+  switch (shape.t) {
+    case 'lane': {
+      const ty = targetRow(px, py);
+      if (ty < 0) return [];
+      return [{ x: px, y: ty }, ...around(shape.around ?? [], px, ty)];
+    }
+    case 'near':
+      return around(shape.cells, px, py);
+    default:
+      return [];
+  }
+}
+
+/** Landing cell of a lobbed chip (MMBN1 MiniBomb: "Depth=3"), or null off the field. */
+export function lobTarget(depth: number, px: number, py: number): Cell | null {
+  const c = { x: px, y: py - depth };
   return inField(c.x, c.y) ? c : null;
 }
 
-/**
- * Cells damaged by hitscan patterns: the first enemy in the lane, plus the
- * panel behind it for Shotgun ("Hits enemy and keeps going 1pnl").
- */
-export function hitscanCells(pattern: PatternId, px: number, py: number, firstEnemyRow: FirstEnemyRow): Cell[] {
-  const ey = firstEnemyRow(px, py);
-  if (ey < 0) return [];
-  const cells: Cell[] = [{ x: px, y: ey }];
-  if (pattern === 'lane_hitscan_pierce1' && inField(px, ey - 1)) cells.push({ x: px, y: ey - 1 });
-  return cells;
+/** Cells hit around a landing cell. */
+export function lobArea(area: readonly Offset[], x: number, y: number): Cell[] {
+  return around(area, x, y);
 }

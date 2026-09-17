@@ -1,7 +1,8 @@
 import { secondsToTicks, tuning } from '../../config/tuning';
+import type { ChipDef } from '../../data/chips';
 
-// Player MiniBomb in flight (GDD §6.4 `lob_3`): lands after BOMB_FLIGHT_TIME and
-// damages whatever enemy stands on the landing cell at that moment.
+// Player bomb in flight (GDD §6.4 lob): lands after BOMB_FLIGHT_TIME and hits
+// its chip's area around the landing cell.
 
 export class PlayerBomb {
   readonly landTick: number;
@@ -15,6 +16,7 @@ export class PlayerBomb {
     readonly y: number,
     readonly damage: number,
     readonly throwTick: number,
+    readonly def: ChipDef,
   ) {
     this.landTick = throwTick + Math.max(1, secondsToTicks(tuning.chips.BOMB_FLIGHT_TIME));
   }

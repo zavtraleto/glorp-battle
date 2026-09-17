@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_TUNING, mergeTuning, secondsToTicks, tuning } from '../src/config/tuning';
 import type { Command } from '../src/core/input/commands';
 import { Rng } from '../src/core/rng';
+import { CHIPS } from '../src/data/chips';
 import { FOLDERS, FOLDER_SIZE } from '../src/data/folders';
 import { ChipSystem } from '../src/sim/chips/chipSystem';
 import { isValidSelection, type ChipKey } from '../src/sim/chips/selection';
@@ -21,6 +22,12 @@ describe('folders', () => {
   it('contain exactly 30 chips', () => {
     for (const folder of Object.values(FOLDERS)) {
       expect(folder.reduce((n, e) => n + e.count, 0)).toBe(FOLDER_SIZE);
+    }
+  });
+
+  it('use codes the chip can have', () => {
+    for (const folder of Object.values(FOLDERS)) {
+      for (const e of folder) expect(CHIPS[e.chip].codes, `${e.chip} ${e.code}`).toContain(e.code);
     }
   });
 });
