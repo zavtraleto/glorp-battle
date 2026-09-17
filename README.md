@@ -2,6 +2,10 @@
 
 Прототип боевой системы в духе Mega Man Battle Network 1. Спецификация: [docs/GDD.md](docs/GDD.md).
 
+**Играть:** https://zavtraleto.github.io/glorp-battle/ (отладка: добавьте `?debug=1`).
+
+Сборка публикуется автоматически при каждом пуше в `main` (GitHub Actions: тесты → сборка → GitHub Pages, см. `.github/workflows/deploy-pages.yml`).
+
 ## Команды
 
 | Команда | Что делает |
