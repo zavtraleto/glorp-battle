@@ -6,13 +6,15 @@ import type { Rng } from '../../core/rng';
 import type { Attack } from '../attacks/attack';
 import { ENEMY_LEVELS, type EnemyLevel } from '../../data/enemies';
 import type { Field } from '../field';
+import type { FieldObject, ObjectKind } from '../fieldObject';
+import type { Side } from '../grid';
 import type { SimEvent } from '../events';
 
 // Common enemy state machine (GDD §8.1):
 // IDLE → MOVE → TELEGRAPH → ATTACK → RECOVERY → IDLE; DEAD is terminal.
 // Hits never interrupt an enemy's action; they only flash.
 
-export type EnemyKind = 'mettik' | 'canodron' | 'spiker' | 'hopzap' | 'bladdy' | 'rattik' | 'helmhead' | 'finnik' | 'punchy';
+export type EnemyKind = 'mettik' | 'canodron' | 'spiker' | 'hopzap' | 'bladdy' | 'rattik' | 'helmhead' | 'finnik' | 'punchy' | 'monolith';
 export type EnemyState = 'IDLE' | 'MOVE' | 'TELEGRAPH' | 'ATTACK' | 'RECOVERY' | 'DEAD';
 
 /** What an enemy may read or do during its update. */
@@ -34,6 +36,7 @@ export interface EnemyContext {
   /** Knocks the player one row back (toward their edge); false if blocked. */
   pushPlayer(): boolean;
   paralyzePlayer(ticks: number): void;
+  placeObject(kind: ObjectKind, x: number, y: number, side: Side): FieldObject | null;
   /** Mettik turn-taking (GDD §8.2). */
   hasTurn(enemy: Enemy): boolean;
   passTurn(enemy: Enemy): void;

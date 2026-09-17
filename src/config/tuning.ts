@@ -127,6 +127,21 @@ export const DEFAULT_TUNING = {
     PUN_ATTACK_TIME: 0.2,
     PUN_RECOVERY: 1.5,
   },
+  /** Act boss (roguelite spec §5.3); all values [оценка]. */
+  monolith: {
+    MONO_HP: 600,
+    MONO_MOVE_INTERVAL: 1.2,
+    MONO_ATTACK_INTERVAL: 2.5,
+    MONO_TELEGRAPH: 0.8,
+    MONO_ATTACK_TIME: 0.4,
+    MONO_ROCK_DMG: 40,
+    MONO_ROCK_FALL: 0.3,
+    MONO_ROCKS: 3,
+    MONO_ROCKS_RAGE: 5,
+    MONO_WAVE_DMG: 50,
+    MONO_WAVE_STEP: 0.2,
+    MONO_RAGE_SPEED: 1.25,
+  },
   fx: {
     HIT_FLASH: 0.1,
     IFRAME_BLINK_HZ: 15,

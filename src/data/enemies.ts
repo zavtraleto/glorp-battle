@@ -14,6 +14,7 @@ export const ENEMY_SEEDS: Record<EnemyKind, number> = {
   helmhead: 91,
   finnik: 103,
   punchy: 118,
+  monolith: 131,
 };
 
 export type EnemyLevel = 1 | 2 | 3;

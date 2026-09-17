@@ -97,6 +97,7 @@ export const en = {
   'enemy.helmhead': 'Helmhead',
   'enemy.finnik': 'Finnik',
   'enemy.punchy': 'Punchy',
+  'enemy.monolith': 'Monolith',
 } as const;
 
 export type StringKey = keyof typeof en;

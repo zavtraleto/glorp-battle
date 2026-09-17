@@ -3,7 +3,7 @@ import { secondsToTicks, tuning } from '../config/tuning';
 import { ENEMY_SEEDS } from '../data/enemies';
 import type { Enemy } from '../sim/enemies/enemyBase';
 import type { Player } from '../sim/player';
-import { generateCreature, type CreatureBitmap } from './creatureGen';
+import { CREATURE_SIZE, generateCreature, type CreatureBitmap } from './creatureGen';
 import { CELL_DEPTH, CELL_WIDTH, cellToWorld } from './field';
 import { PixelSprite } from './pixelSprite';
 import { playerBitmap } from './playerSprite';
@@ -80,11 +80,16 @@ export class PlayerView {
 
 const bitmaps = new Map<number, CreatureBitmap>();
 
-function creature(seed: number): CreatureBitmap {
-  let b = bitmaps.get(seed);
+/** Bosses are drawn from a bigger bitmap and a wider sprite (roguelite spec §5.3). */
+const BOSS_SIZE = 48;
+const BOSS_WIDTH = 1.4;
+
+function creature(seed: number, size: number): CreatureBitmap {
+  const key = seed * 1000 + size;
+  let b = bitmaps.get(key);
   if (!b) {
-    b = generateCreature(seed);
-    bitmaps.set(seed, b);
+    b = generateCreature(seed, size);
+    bitmaps.set(key, b);
   }
   return b;
 }
@@ -93,9 +98,11 @@ export class EnemyView {
   private readonly pixels: PixelSprite;
   readonly sprite: THREE.Sprite;
   private readonly phase: number;
+  private readonly boss: boolean;
 
   constructor(enemy: Enemy) {
-    this.pixels = new PixelSprite(creature(ENEMY_SEEDS[enemy.kind]), 'red');
+    this.boss = enemy.kind === 'monolith';
+    this.pixels = new PixelSprite(creature(ENEMY_SEEDS[enemy.kind], this.boss ? BOSS_SIZE : CREATURE_SIZE), 'red');
     this.sprite = this.pixels.sprite;
     this.phase = enemy.id * 1.7;
   }
@@ -115,7 +122,7 @@ export class EnemyView {
       flash = true;
     }
 
-    this.pixels.place(a, CELL_WIDTH * tuning.battleVisual.SPRITE_CELL_FRAC, frame.camera, frame.width, frame.height, lift);
+    this.pixels.place(a, CELL_WIDTH * tuning.battleVisual.SPRITE_CELL_FRAC * (this.boss ? BOSS_WIDTH : 1), frame.camera, frame.width, frame.height, lift);
     this.sprite.renderOrder = rowRenderOrder(enemy.y);
     // Paralysis: a steady flicker.
     if (enemy.paralyzeTicks > 0 && Math.floor(tick / 4) % 2 === 0) flash = true;

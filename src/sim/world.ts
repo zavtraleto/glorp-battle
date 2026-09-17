@@ -3,7 +3,7 @@
 import { secondsToTicks, tuning } from '../config/tuning';
 import type { Command, Dir } from '../core/input/commands';
 import { Rng } from '../core/rng';
-import { getBattle } from '../data/battles';
+import { debugEncounter, type Encounter } from '../data/encounters';
 import type { ChipDef, FieldAction } from '../data/chips';
 import type { FolderId } from '../data/folders';
 import type { Attack, AttackContext } from './attacks/attack';
@@ -47,7 +47,9 @@ export interface Cheats {
 
 export interface WorldOptions {
   seed: number;
+  /** Debug/tests: the old fixed battle 1–4, used when `encounter` is not given. */
   battleIndex: number;
+  encounter?: Encounter;
   playerHp?: number;
   cheats?: Cheats;
   folder?: FolderId;
@@ -92,6 +94,7 @@ export class World implements EnemyContext, AttackContext {
   private pausedFrom: GameState | null = null;
   readonly seed: number;
   readonly battleIndex: number;
+  readonly encounter: Encounter;
   readonly rngFolder: Rng;
   readonly rngAi: Rng;
   readonly occupancy = new Occupancy();
@@ -116,6 +119,7 @@ export class World implements EnemyContext, AttackContext {
   constructor(options: WorldOptions) {
     this.seed = options.seed;
     this.battleIndex = options.battleIndex;
+    this.encounter = options.encounter ?? debugEncounter(options.battleIndex);
     this.cheats = options.cheats ?? { god: false, aiEnabled: true };
     const root = new Rng(options.seed);
     this.rngFolder = root.fork('folder');
@@ -135,10 +139,14 @@ export class World implements EnemyContext, AttackContext {
   }
 
   private spawnBattle(): void {
-    for (const spawn of getBattle(this.battleIndex).enemies) {
+    for (const spawn of this.encounter.enemies) {
       const enemy = createEnemy(spawn, this.nextEnemyId++, this.tick);
       this.occupancy.place(enemy.id, enemy.x, enemy.y);
       this.enemies.push(enemy);
+    }
+    for (const p of this.encounter.panels ?? []) {
+      if (p.panel === 'CRACKED') this.field.crack(p.x, p.y);
+      else this.field.breakPanel(p.x, p.y, this.tick, !this.occupancy.isFree(p.x, p.y));
     }
   }
 

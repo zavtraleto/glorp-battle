@@ -6,6 +6,7 @@ import { Finnik } from './finnik';
 import { Helmhead } from './helmhead';
 import { Hopzap } from './hopzap';
 import { Mettik } from './mettik';
+import { Monolith } from './monolith';
 import { Punchy } from './punchy';
 import { Rattik } from './rattik';
 import { Spiker } from './spiker';
@@ -32,5 +33,7 @@ export function createEnemy(spawn: EnemySpawn, id: number, tick: number): Enemy 
       return new Finnik(...args);
     case 'punchy':
       return new Punchy(...args);
+    case 'monolith':
+      return new Monolith(...args);
   }
 }
