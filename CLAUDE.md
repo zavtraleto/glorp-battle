@@ -5,6 +5,7 @@ Vite + TypeScript (strict) + Three.js. The whole interface is a 3D physical term
 
 - Spec: `docs/GDD.md` (Russian). It is the contract: read the relevant section before changing gameplay.
 - Interface spec: `docs/TERMINAL.md` (Russian) — the physical terminal NET-01 (stages T1–T3). It wins over the GDD for controls and presentation.
+- Battle look: `docs/BATTLE_VISUAL.md` (Russian). **Before changing how anything looks, read its §10.1–10.2 and TERMINAL.md §9.1–9.2**: the code map (which file owns which part of the look) and the pitfalls we already hit.
 - Live build: https://zavtraleto.github.io/glorp-battle/ (public repo `zavtraleto/glorp-battle`).
 
 ## Language
