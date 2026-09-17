@@ -19,6 +19,14 @@ export interface ScreenPoint {
 
 const tmp = new THREE.Vector3();
 
+export const BATTLE_CLEAR_COLOR = 0x0b0e14;
+
+export interface SceneRendererOptions {
+  renderer: THREE.WebGLRenderer;
+  /** Legacy full-screen mode: the renderer canvas lives in and is sized to this element. */
+  container?: HTMLElement;
+}
+
 export class SceneRenderer {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
@@ -28,21 +36,24 @@ export class SceneRenderer {
   readonly fx = new FxView();
   private readonly enemyViews = new Map<number, EnemyView>();
   private readonly target = new THREE.Vector3(0, 0, 0);
+  private readonly container: HTMLElement | null;
   private insets: LayoutInsets = { top: 0 };
   private lastCameraKey = '';
 
-  constructor(private container: HTMLElement) {
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setClearColor(0x0b0e14, 1);
-    this.renderer.domElement.id = 'game-canvas';
-    container.appendChild(this.renderer.domElement);
+  constructor(opts: SceneRendererOptions) {
+    this.renderer = opts.renderer;
+    this.container = opts.container ?? null;
+    if (this.container) {
+      this.renderer.domElement.id = 'game-canvas';
+      this.container.appendChild(this.renderer.domElement);
+    }
 
     this.field = new FieldView(tuning.render.PANEL_GAP);
     this.scene.add(this.field.group);
     this.fieldCamera = new FieldCamera(this.field.bounds);
     this.scene.add(this.playerView.sprite, this.fx.group);
 
-    this.resize();
+    if (this.container) this.resize();
   }
 
   setInsets(insets: LayoutInsets): void {
@@ -51,6 +62,7 @@ export class SceneRenderer {
   }
 
   resize(): void {
+    if (!this.container) return;
     const w = this.container.clientWidth;
     const h = this.container.clientHeight;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, tuning.render.MAX_PIXEL_RATIO));
@@ -58,21 +70,22 @@ export class SceneRenderer {
     this.updateCamera(true);
   }
 
+  private viewSize(): { w: number; h: number } {
+    return this.container ? { w: this.container.clientWidth, h: this.container.clientHeight } : { w: 1, h: 1 };
+  }
+
   private updateCamera(force: boolean): void {
+    const { w, h } = this.viewSize();
+    this.fitCamera(force, w, h, this.insets.top, h * tuning.render.FIELD_SCREEN_SHARE - this.insets.top);
+  }
+
+  private fitCamera(force: boolean, w: number, h: number, top: number, regionHeight: number): void {
     const tilt = tuning.render.CAMERA_TILT_DEG;
-    const key = `${tilt}|${tuning.render.FIELD_SCREEN_SHARE}`;
+    const key = `${tilt}|${w}|${h}|${top}|${regionHeight}`;
     if (!force && key === this.lastCameraKey) return;
     this.lastCameraKey = key;
     this.fieldCamera.setTilt(tilt, this.target);
-    const h = this.container.clientHeight;
-    const regionHeight = h * tuning.render.FIELD_SCREEN_SHARE - this.insets.top;
-    this.fieldCamera.fit({
-      width: this.container.clientWidth,
-      height: h,
-      top: this.insets.top,
-      regionHeight,
-      fill: 0.94,
-    });
+    this.fieldCamera.fit({ width: w, height: h, top, regionHeight, fill: 0.94 });
   }
 
   /** Projects a logical cell (plus height above the panel) to CSS pixels. */
@@ -83,10 +96,11 @@ export class SceneRenderer {
   }
 
   worldToScreen(v: THREE.Vector3): ScreenPoint {
+    const { w, h } = this.viewSize();
     tmp.copy(v).project(this.fieldCamera.camera);
     return {
-      x: ((tmp.x + 1) / 2) * this.container.clientWidth,
-      y: ((1 - tmp.y) / 2) * this.container.clientHeight,
+      x: ((tmp.x + 1) / 2) * w,
+      y: ((1 - tmp.y) / 2) * h,
     };
   }
 
@@ -133,13 +147,32 @@ export class SceneRenderer {
     }
   }
 
-  render(world: World, alpha: number, dt: number): void {
-    this.updateCamera(false);
+  private prepare(world: World, alpha: number, dt: number): void {
     this.playerView.update(world.player, world.tick, alpha, dt, world.activeChip !== null);
     this.syncEnemies(world, alpha, dt);
     this.fx.update(world, alpha);
     const pulse = 0.5 + 0.5 * Math.sin((world.tick + alpha) * 0.5);
     this.field.setDanger(world.state === 'ACTION' ? world.dangerCells() : [], pulse);
+  }
+
+  /** Legacy full-screen render into the canvas. */
+  render(world: World, alpha: number, dt: number): void {
+    this.updateCamera(false);
+    this.prepare(world, alpha, dt);
+    this.renderer.setRenderTarget(null);
+    this.renderer.setClearColor(BATTLE_CLEAR_COLOR, 1);
     this.renderer.render(this.scene, this.fieldCamera.camera);
+  }
+
+  /** Renders the battle into a render target (the CRT), field fitted to the whole target. */
+  renderInto(target: THREE.WebGLRenderTarget, world: World, alpha: number, dt: number): void {
+    const w = target.width;
+    const h = target.height;
+    this.fitCamera(false, w, h, 0, h);
+    this.prepare(world, alpha, dt);
+    this.renderer.setRenderTarget(target);
+    this.renderer.setClearColor(BATTLE_CLEAR_COLOR, 1);
+    this.renderer.render(this.scene, this.fieldCamera.camera);
+    this.renderer.setRenderTarget(null);
   }
 }

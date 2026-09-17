@@ -1,4 +1,5 @@
 import './ui/styles.css';
+import * as THREE from 'three';
 import { Session } from './app/session';
 import { loadTuningOverrides, tuning } from './config/tuning';
 import { events } from './core/events';
@@ -38,7 +39,8 @@ const session = new Session({ seed: params.seed ?? randomSeed(), cheats, folder:
 // ?battle=N skips the title and jumps straight into that battle (debug).
 if (query.has('battle')) session.debugJump(params.battle);
 
-const sceneRenderer = new SceneRenderer(stage);
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+const sceneRenderer = new SceneRenderer({ renderer, container: stage });
 const hud = new Hud(ui);
 const labels = new WorldLabels(ui, sceneRenderer);
 const input = new InputState();
