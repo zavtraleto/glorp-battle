@@ -28,6 +28,8 @@ export class Player {
   iframeTicks = 0;
   /** Remaining ticks of Invis: enemy attacks pass through. */
   invisTicks = 0;
+  /** Remaining ticks of paralysis: no movement, chips or Buster, no i-frames. */
+  paralyzeTicks = 0;
   /** Remaining ticks of a chip animation: no movement. */
   actionTicks = 0;
   lastHitTick = -Infinity;
@@ -50,6 +52,19 @@ export class Player {
 
   get flinched(): boolean {
     return this.flinchTicks > 0;
+  }
+
+  /** Knock-back one row toward the player's edge (+y); blocked by holes, others and the edge. */
+  pushBack(tick: number): boolean {
+    const ny = this.y + 1;
+    if (!this.field.canStand('player', this.x, ny) || !this.occupancy.isFree(this.x, ny)) return false;
+    this.prevX = this.x;
+    this.prevY = this.y;
+    this.occupancy.move(this.id, this.x, this.y, this.x, ny);
+    this.y = ny;
+    this.lastMoveTick = tick;
+    this.field.onLeave(this.prevX, this.prevY, tick);
+    return true;
   }
 
   get invulnerable(): boolean {
@@ -102,6 +117,7 @@ export class Player {
     if (this.flinchTicks > 0) this.flinchTicks--;
     if (this.iframeTicks > 0) this.iframeTicks--;
     if (this.invisTicks > 0) this.invisTicks--;
+    if (this.paralyzeTicks > 0) this.paralyzeTicks--;
     if (this.actionTicks > 0) this.actionTicks--;
   }
 
@@ -113,7 +129,7 @@ export class Player {
   updateMovement(tick: number, pressed: readonly Dir[], held: Dir | null): void {
     if (pressed.length > 0) this.bufferedDir = pressed[pressed.length - 1] as Dir;
 
-    if (this.flinchTicks > 0 || this.actionTicks > 0) {
+    if (this.flinchTicks > 0 || this.actionTicks > 0 || this.paralyzeTicks > 0) {
       // Presses during a lock are dropped, not replayed afterwards.
       this.bufferedDir = null;
       return;

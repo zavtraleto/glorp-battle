@@ -1,4 +1,5 @@
-import { secondsToTicks, tuning } from '../../config/tuning';
+import { tuning } from '../../config/tuning';
+import type { EnemyLevel } from '../../data/enemies';
 import { HeatShot } from '../attacks/heatShot';
 import { COLS, ENEMY_ROWS, laneCellsBelow, type Cell } from '../grid';
 import { Enemy, type EnemyContext } from './enemyBase';
@@ -12,8 +13,8 @@ export class Spiker extends Enemy {
   /** Random warps left before lining up; -1 = roll a new count. */
   private warpsLeft = -1;
 
-  constructor(id: number, x: number, y: number, spawnTick: number) {
-    super(id, x, y, tuning.spiker.SPK_HP, spawnTick);
+  constructor(id: number, x: number, y: number, spawnTick: number, level: EnemyLevel = 1) {
+    super(id, x, y, tuning.spiker.SPK_HP, spawnTick, level);
     this.state = 'MOVE';
   }
 
@@ -24,7 +25,7 @@ export class Spiker extends Enemy {
   override forceAttack(tick: number): void {
     if (!this.alive || this.state !== 'MOVE') return;
     this.warpsLeft = 0;
-    this.stateTick = tick - secondsToTicks(tuning.spiker.SPK_WARP_INTERVAL);
+    this.stateTick = tick - this.ticks(tuning.spiker.SPK_WARP_INTERVAL);
   }
 
   private freeCells(ctx: EnemyContext, lane: number | null): Cell[] {
@@ -53,7 +54,7 @@ export class Spiker extends Enemy {
       case 'IDLE':
       case 'MOVE': {
         if (this.warpsLeft < 0) this.warpsLeft = ctx.rngAi.int(s.SPK_WARPS_MIN, Math.max(s.SPK_WARPS_MIN, s.SPK_WARPS_MAX));
-        if (this.elapsed(t) < secondsToTicks(s.SPK_WARP_INTERVAL)) return;
+        if (this.elapsed(t) < this.ticks(s.SPK_WARP_INTERVAL)) return;
         this.stateTick = t;
         if (this.warpsLeft > 0) {
           this.warpRandom(ctx, null);
@@ -71,15 +72,17 @@ export class Spiker extends Enemy {
         return;
       }
       case 'TELEGRAPH':
-        if (this.elapsed(t) < secondsToTicks(s.SPK_TELEGRAPH)) return;
-        ctx.spawnAttack(new HeatShot(ctx.nextAttackId(), this.x, this.y + 1, t));
+        if (this.elapsed(t) < this.ticks(s.SPK_TELEGRAPH)) return;
+        ctx.spawnAttack(
+          new HeatShot(ctx.nextAttackId(), this.x, this.y + 1, t, this.dmg(s.SPK_DMG), this.ticks(s.SPK_SHOT_STEP)),
+        );
         this.setState('ATTACK', t);
         return;
       case 'ATTACK':
-        if (this.elapsed(t) >= secondsToTicks(s.SPK_ATTACK_TIME)) this.setState('RECOVERY', t);
+        if (this.elapsed(t) >= this.ticks(s.SPK_ATTACK_TIME)) this.setState('RECOVERY', t);
         return;
       case 'RECOVERY':
-        if (this.elapsed(t) < secondsToTicks(s.SPK_RECOVERY)) return;
+        if (this.elapsed(t) < this.ticks(s.SPK_RECOVERY)) return;
         this.warpsLeft = -1;
         this.setState('MOVE', t);
         return;

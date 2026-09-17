@@ -283,6 +283,15 @@ export class World implements EnemyContext, AttackContext {
     return ROWS;
   }
 
+  pushPlayer(): boolean {
+    return this.player.alive && this.player.pushBack(this.tick);
+  }
+
+  paralyzePlayer(ticks: number): void {
+    const p = this.player;
+    if (p.alive && !this.cheats.god) p.paralyzeTicks = Math.max(p.paralyzeTicks, ticks);
+  }
+
   spawnAttack(attack: Attack): void {
     this.attacks.push(attack);
     const pos = attack as unknown as { x?: number; y?: number };
@@ -380,6 +389,10 @@ export class World implements EnemyContext, AttackContext {
 
   damageEnemy(enemy: Enemy, amount: number): void {
     if (!enemy.alive) return;
+    if (enemy.guarded) {
+      this.events.push({ type: 'guarded', id: enemy.id, x: enemy.x, y: enemy.y });
+      return;
+    }
     const died = enemy.applyDamage(amount, this.tick);
     this.events.push({ type: 'damaged', targetId: enemy.id, amount, x: enemy.x, y: enemy.y, hpLeft: enemy.hp });
     if (died) {
@@ -439,7 +452,7 @@ export class World implements EnemyContext, AttackContext {
   /** Starts the next queued chip if the player is free (no buffering, GDD §6.5). */
   private tryUseChip(): void {
     const p = this.player;
-    if (p.flinched || p.actionTicks > 0 || this.activeChip) return;
+    if (p.flinched || p.actionTicks > 0 || p.paralyzeTicks > 0 || this.activeChip) return;
     const chip = this.chips.takeNext();
     if (!chip) return;
     this.beginChip(chip);
@@ -635,7 +648,7 @@ export class World implements EnemyContext, AttackContext {
     p.updateMovement(this.tick, moves, input.held);
     this.updateActiveChip();
     this.updateBombs();
-    const busy = p.flinched || p.actionTicks > 0 || this.activeChip !== null;
+    const busy = p.flinched || p.actionTicks > 0 || p.paralyzeTicks > 0 || this.activeChip !== null;
     if (this.buster.tick(busy || this.cheats.buster === false)) this.fireBuster();
 
     for (const e of this.enemies) {

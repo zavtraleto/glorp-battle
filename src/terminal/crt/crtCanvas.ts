@@ -20,6 +20,7 @@ const COLOR = {
   infoText: '#9fe8ff',
   infoPower: '#ffd166',
   red: hex(PALETTE.red),
+  accent: hex(PALETTE.accent),
   outline: hex(PALETTE.bg),
 };
 
@@ -124,6 +125,11 @@ export class CrtCanvas {
           ctx.fillRect(x, y0, 1, size);
           ctx.fillRect(x + size - 1, y0, 1, size);
         }
+      }
+      // Level dots above the bar.
+      ctx.fillStyle = COLOR.accent;
+      for (let i = 1; i < b.level; i++) {
+        ctx.fillRect(Math.round(b.x + (i - b.level / 2 - 0.5) * size * 2 + size / 2), y0 - size - gap, size, size);
       }
     }
   }

@@ -4,6 +4,7 @@ import type { EntityId, Occupancy } from '../occupancy';
 import type { Player } from '../player';
 import type { Rng } from '../../core/rng';
 import type { Attack } from '../attacks/attack';
+import { ENEMY_LEVELS, type EnemyLevel } from '../../data/enemies';
 import type { Field } from '../field';
 import type { SimEvent } from '../events';
 
@@ -28,6 +29,9 @@ export interface EnemyContext {
   emit(event: SimEvent): void;
   /** Instant hit on the first target in lane x from row `fromY` downward; returns the stop row. */
   shootLane(x: number, fromY: number, damage: number): number;
+  /** Knocks the player one row back (toward their edge); false if blocked. */
+  pushPlayer(): boolean;
+  paralyzePlayer(ticks: number): void;
   /** Mettik turn-taking (GDD §8.2). */
   hasTurn(enemy: Enemy): boolean;
   passTurn(enemy: Enemy): void;
@@ -47,6 +51,8 @@ export abstract class Enemy {
   stateTick: number;
   lastHitTick = -Infinity;
   deathTick = -Infinity;
+  /** Hits do no damage while true (Helmhead's helmet, Finnik's dash). */
+  guarded = false;
   /** Ticks left of paralysis: no actions, state timers stand still. */
   paralyzeTicks = 0;
 
@@ -54,13 +60,24 @@ export abstract class Enemy {
     readonly id: EntityId,
     x: number,
     y: number,
-    hp: number,
+    baseHp: number,
     spawnTick: number,
+    readonly level: EnemyLevel = 1,
   ) {
     this.x = this.prevX = x;
     this.y = this.prevY = y;
-    this.hp = this.maxHp = hp;
+    this.hp = this.maxHp = Math.round(baseHp * ENEMY_LEVELS[level].hp);
     this.stateTick = spawnTick;
+  }
+
+  /** A timing tunable in ticks, shortened by the level's speed. */
+  protected ticks(seconds: number): number {
+    return Math.max(1, secondsToTicks(seconds / ENEMY_LEVELS[this.level].speed));
+  }
+
+  /** A damage tunable scaled by the level. */
+  protected dmg(base: number): number {
+    return Math.round(base * ENEMY_LEVELS[this.level].damage);
   }
 
   get alive(): boolean {

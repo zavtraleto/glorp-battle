@@ -1,4 +1,5 @@
-import { secondsToTicks, tuning } from '../../config/tuning';
+import { tuning } from '../../config/tuning';
+import type { EnemyLevel } from '../../data/enemies';
 import { Shockwave } from '../attacks/shockwave';
 import { laneCellsBelow, type Cell } from '../grid';
 import { Enemy, type EnemyContext } from './enemyBase';
@@ -9,8 +10,8 @@ import { Enemy, type EnemyContext } from './enemyBase';
 
 export class Mettik extends Enemy {
   readonly kind = 'mettik';
-  constructor(id: number, x: number, y: number, spawnTick: number) {
-    super(id, x, y, tuning.mettik.MET_HP, spawnTick);
+  constructor(id: number, x: number, y: number, spawnTick: number, level: EnemyLevel = 1) {
+    super(id, x, y, tuning.mettik.MET_HP, spawnTick, level);
   }
 
   override dangerCells(): Cell[] {
@@ -29,7 +30,7 @@ export class Mettik extends Enemy {
     switch (this.state) {
       case 'IDLE':
       case 'MOVE': {
-        if (this.elapsed(t) < secondsToTicks(m.MET_MOVE_INTERVAL)) return;
+        if (this.elapsed(t) < this.ticks(m.MET_MOVE_INTERVAL)) return;
         this.stateTick = t;
         const px = ctx.player.x;
         if (this.x === px) {
@@ -41,15 +42,22 @@ export class Mettik extends Enemy {
         return;
       }
       case 'TELEGRAPH':
-        if (this.elapsed(t) < secondsToTicks(m.MET_TELEGRAPH)) return;
-        ctx.spawnAttack(new Shockwave(ctx.nextAttackId(), this.x, this.y + 1, t));
+        if (this.elapsed(t) < this.ticks(m.MET_TELEGRAPH)) return;
+        ctx.spawnAttack(
+          new Shockwave(ctx.nextAttackId(), this.x, this.y + 1, t, {
+            dir: 1,
+            damage: this.dmg(m.MET_DMG),
+            stepTicks: this.ticks(m.MET_WAVE_STEP),
+            owner: 'enemy',
+          }),
+        );
         this.setState('ATTACK', t);
         return;
       case 'ATTACK':
-        if (this.elapsed(t) >= secondsToTicks(m.MET_ATTACK_TIME)) this.setState('RECOVERY', t);
+        if (this.elapsed(t) >= this.ticks(m.MET_ATTACK_TIME)) this.setState('RECOVERY', t);
         return;
       case 'RECOVERY':
-        if (this.elapsed(t) < secondsToTicks(m.MET_RECOVERY)) return;
+        if (this.elapsed(t) < this.ticks(m.MET_RECOVERY)) return;
         ctx.passTurn(this);
         this.setState('IDLE', t);
         return;

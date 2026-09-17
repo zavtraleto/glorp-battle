@@ -1,4 +1,5 @@
 import type { EnemyKind } from '../sim/enemies/enemyBase';
+import type { EnemyLevel } from './enemies';
 
 // Fixed battle sequence (GDD §10.1). Coordinates are logical cells in the enemy area.
 
@@ -6,6 +7,8 @@ export interface EnemySpawn {
   kind: EnemyKind;
   x: number;
   y: number;
+  /** Virus level (roguelite spec §5.1); 1 by default. */
+  level?: EnemyLevel;
 }
 
 export interface BattleDef {

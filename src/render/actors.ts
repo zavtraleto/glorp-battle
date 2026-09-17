@@ -69,7 +69,8 @@ export class PlayerView {
     const width = CELL_WIDTH * tuning.battleVisual.SPRITE_CELL_FRAC * 0.8;
     this.pixels.place(a, width, frame.camera, frame.width, frame.height, usingChip ? 1 : 0);
     this.sprite.renderOrder = rowRenderOrder(player.y);
-    this.pixels.setFlash(flashing(player.lastHitTick, tick));
+    // Paralysis flickers like a hit.
+    this.pixels.setFlash(flashing(player.lastHitTick, tick) || (player.paralyzeTicks > 0 && Math.floor(tick / 4) % 2 === 0));
     // Blink while invulnerable.
     const blinkTicks = Math.max(1, Math.round(tuning.sim.SIM_HZ / Math.max(1, tuning.fx.IFRAME_BLINK_HZ) / 2));
     this.sprite.visible = !player.invulnerable || Math.floor(tick / blinkTicks) % 2 === 0;

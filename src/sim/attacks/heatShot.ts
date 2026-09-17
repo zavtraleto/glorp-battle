@@ -21,10 +21,12 @@ export class HeatShot implements LaneMover {
     readonly x: number,
     public y: number,
     spawnTick: number,
+    damage = tuning.spiker.SPK_DMG,
+    stepTicks = secondsToTicks(tuning.spiker.SPK_SHOT_STEP),
   ) {
     this.lastStepTick = spawnTick;
-    this.stepTicks = Math.max(1, secondsToTicks(tuning.spiker.SPK_SHOT_STEP));
-    this.damage = tuning.spiker.SPK_DMG;
+    this.stepTicks = Math.max(1, stepTicks);
+    this.damage = damage;
   }
 
   update(ctx: AttackContext): void {

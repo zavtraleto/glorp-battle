@@ -1,4 +1,5 @@
-import { secondsToTicks, tuning } from '../../config/tuning';
+import { tuning } from '../../config/tuning';
+import type { EnemyLevel } from '../../data/enemies';
 import { ROWS, laneCellsBelow, type Cell } from '../grid';
 import { Enemy, type EnemyContext } from './enemyBase';
 
@@ -15,8 +16,8 @@ export class Canodron extends Enemy {
   private locked = false;
   private lockTick = 0;
 
-  constructor(id: number, x: number, y: number, spawnTick: number) {
-    super(id, x, y, tuning.canodron.CANO_HP, spawnTick);
+  constructor(id: number, x: number, y: number, spawnTick: number, level: EnemyLevel = 1) {
+    super(id, x, y, tuning.canodron.CANO_HP, spawnTick, level);
   }
 
   override cursorCell(): { x: number; y: number; locked: boolean } | null {
@@ -63,8 +64,8 @@ export class Canodron extends Enemy {
         return;
       case 'TELEGRAPH': {
         if (this.locked) {
-          if (t - this.lockTick < secondsToTicks(c.CANO_FIRE_DELAY)) return;
-          ctx.shootLane(this.x, this.y + 1, c.CANO_DMG);
+          if (t - this.lockTick < this.ticks(c.CANO_FIRE_DELAY)) return;
+          ctx.shootLane(this.x, this.y + 1, this.dmg(c.CANO_DMG));
           this.cursorY = -1;
           this.locked = false;
           this.setState('ATTACK', t);
@@ -74,7 +75,7 @@ export class Canodron extends Enemy {
           this.resetCursor(t);
           return;
         }
-        if (t - this.cursorStepTick >= Math.max(1, secondsToTicks(c.CANO_CURSOR_STEP))) {
+        if (t - this.cursorStepTick >= this.ticks(c.CANO_CURSOR_STEP)) {
           this.cursorY++;
           this.cursorStepTick = t;
           if (this.cursorY >= ROWS) {
@@ -86,10 +87,10 @@ export class Canodron extends Enemy {
         return;
       }
       case 'ATTACK':
-        if (this.elapsed(t) >= secondsToTicks(c.CANO_ATTACK_TIME)) this.setState('RECOVERY', t);
+        if (this.elapsed(t) >= this.ticks(c.CANO_ATTACK_TIME)) this.setState('RECOVERY', t);
         return;
       case 'RECOVERY':
-        if (this.elapsed(t) >= secondsToTicks(c.CANO_COOLDOWN)) this.setState('IDLE', t);
+        if (this.elapsed(t) >= this.ticks(c.CANO_COOLDOWN)) this.setState('IDLE', t);
         return;
       case 'DEAD':
         return;

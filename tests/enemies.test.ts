@@ -3,6 +3,8 @@ import { DEFAULT_TUNING, mergeTuning, secondsToTicks, tuning } from '../src/conf
 import type { Command, Dir } from '../src/core/input/commands';
 import { BATTLES } from '../src/data/battles';
 import { HeatShot } from '../src/sim/attacks/heatShot';
+import { Shockwave } from '../src/sim/attacks/shockwave';
+import { Mettik } from '../src/sim/enemies/mettik';
 import { Canodron } from '../src/sim/enemies/canodron';
 import type { Enemy } from '../src/sim/enemies/enemyBase';
 import { Spiker } from '../src/sim/enemies/spiker';
@@ -236,5 +238,74 @@ describe('battles 2–4 are winnable', () => {
       run(w, T(tuning.chips.CHIP_USE_TIME_CANNON));
     }
     expect(w.state).toBe('BATTLE_WON');
+  });
+});
+
+describe('levels, guard, player paralysis and knock-back', () => {
+  /** Battle 1 with its Mettik replaced by one of the given level. */
+  function withMettik(level: 1 | 2 | 3): { w: World; m: Mettik } {
+    const w = world(1);
+    w.cheats.buster = false;
+    const old = w.enemies[0]!;
+    w.occupancy.remove(old.id, old.x, old.y);
+    const m = new Mettik(500, 1, 1, w.tick, level);
+    w.occupancy.place(m.id, 1, 1);
+    w.enemies = [m];
+    return { w, m };
+  }
+
+  it('scales HP, damage and timings by level', () => {
+    const one = withMettik(1);
+    const two = withMettik(2);
+    expect(two.m.hp).toBe(tuning.mettik.MET_HP * 2);
+    const firstWave = (w: World) => {
+      for (let i = 0; i < T(5); i++) {
+        step(w);
+        const a = w.attacks.find((x) => x.kind === 'shockwave');
+        if (a) return { at: i, damage: (a as Shockwave).damage };
+      }
+      return { at: -1, damage: 0 };
+    };
+    const a = firstWave(one.w);
+    const b = firstWave(two.w);
+    expect(b.damage).toBe(tuning.mettik.MET_DMG * 2);
+    expect(a.damage).toBe(tuning.mettik.MET_DMG);
+    expect(b.at).toBeGreaterThan(0);
+    expect(b.at).toBeLessThan(a.at);
+  });
+
+  it('a guarded enemy takes no damage', () => {
+    const { w, m } = withMettik(1);
+    m.guarded = true;
+    w.damageEnemy(m, 30);
+    expect(m.hp).toBe(tuning.mettik.MET_HP);
+    expect(w.drainEvents().some((e) => e.type === 'guarded')).toBe(true);
+  });
+
+  it('paralysis stops the player without i-frames', () => {
+    const { w } = withMettik(1);
+    w.cheats.aiEnabled = false;
+    w.paralyzePlayer(T(1));
+    move(w, 'left');
+    expect(w.player.x).toBe(1);
+    expect(w.player.invulnerable).toBe(false);
+    w.giveChip({ uid: 30_001, defId: 'cannon', code: '*', state: 'queued' });
+    step(w, [{ type: 'useChip' }]);
+    expect(w.activeChip).toBeNull();
+    run(w, T(1));
+    move(w, 'left');
+    expect(w.player.x).toBe(0);
+  });
+
+  it('knock-back moves the player one row toward their edge unless blocked', () => {
+    const { w } = withMettik(1);
+    expect(w.pushPlayer()).toBe(true);
+    expect(w.player.y).toBe(5);
+    expect(w.pushPlayer()).toBe(false);
+    w.player.y = 4;
+    w.occupancy.move(w.player.id, 1, 5, 1, 4);
+    w.field.breakPanel(1, 5, w.tick, false);
+    expect(w.pushPlayer()).toBe(false);
+    expect(w.player.y).toBe(4);
   });
 });

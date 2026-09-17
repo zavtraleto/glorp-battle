@@ -519,7 +519,7 @@ export class Terminal {
       const p = sceneRenderer.actorTopTargetPos(e.id);
       if (!p) continue;
       const seg = hpSegments(e.hp, e.maxHp, tuning.battleVisual.HP_SEGMENTS);
-      bars.push({ x: p.x * W, y: p.y * H - HP_BAR_GAP, ...seg });
+      bars.push({ x: p.x * W, y: p.y * H - HP_BAR_GAP, ...seg, level: e.level });
     }
     const life = secondsToTicks(tuning.fx.DAMAGE_NUMBER_TIME);
     for (const { f, k } of this.floaters.live(world.tick, world.simFrozen ? 0 : alpha, life)) {

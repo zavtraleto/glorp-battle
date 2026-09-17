@@ -21,6 +21,8 @@ export interface HpBar {
   y: number;
   filled: number;
   total: number;
+  /** Virus level: level − 1 accent dots above the bar. */
+  level: number;
 }
 
 export interface HudModel {
@@ -40,7 +42,7 @@ export function hudKey(m: HudModel, blinkOn: boolean): string {
     m.info ? `${m.info.defId}${m.info.code}` : '',
     m.menu ? `${m.menu.spec.key}:${m.menu.cursor}:${blinkOn ? 1 : 0}` : '',
     m.labels.map((l) => `${l.text}@${Math.round(l.x)},${Math.round(l.y)}`).join(';'),
-    m.bars.map((b) => `${b.filled}/${b.total}@${Math.round(b.x)},${Math.round(b.y)}`).join(';'),
+    m.bars.map((b) => `${b.filled}/${b.total}L${b.level}@${Math.round(b.x)},${Math.round(b.y)}`).join(';'),
   ].join('|');
 }
 
