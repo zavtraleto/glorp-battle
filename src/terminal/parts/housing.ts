@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { t } from '../../i18n';
 import type { CrtMaterial } from '../crt/crtMaterial';
-import { rectToWorld, type Rect, type TerminalLayout } from '../layout';
+import { glassRect, rectToWorld, type Rect, type TerminalLayout } from '../layout';
 import type { LampStates } from '../terminalMode';
 import { counterTexture, drawCounter, labelTexture, plasticTexture } from '../textures/procedural';
 
@@ -95,10 +95,9 @@ export class Housing {
     // CRT bezel and glass (the glass keeps the render target's aspect).
     const crt = W(layout.crt);
     this.addBox(crt.cx, crt.cy, 0.05, crt.w * 1.02, crt.h * 0.98, 0.3, this.bezelMat);
-    const glassH = crt.h * 0.9;
-    const glassW = Math.min(crt.w * 0.94, glassH * crtAspect);
-    this.glass.scale.set(glassW, glassH, 1);
-    this.glass.position.set(crt.cx, crt.cy, 0.21);
+    const glass = W(glassRect(layout, crtAspect));
+    this.glass.scale.set(glass.w, glass.h, 1);
+    this.glass.position.set(glass.cx, glass.cy, 0.21);
     this.group.add(this.glass);
 
     // Status lamps: a 2×2 grid on the top bar, lamp left of its label.

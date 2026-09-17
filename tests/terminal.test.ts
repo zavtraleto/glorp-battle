@@ -5,7 +5,7 @@ import { BenchAutopilot, formatBench } from '../src/debug/bench';
 import { parseDebugParams } from '../src/debug/params';
 import { PerfProbe, percentile } from '../src/debug/perfProbe';
 import { PointerRouter, type RouterHandlers } from '../src/terminal/interaction/pointerRouter';
-import { computeLayout, cssToWorld, rectContains, rectToWorld, zoneAt, TERMINAL_WORLD_WIDTH } from '../src/terminal/layout';
+import { computeLayout, cssToWorld, glassRect, rectContains, rectToWorld, zoneAt, TERMINAL_WORLD_WIDTH } from '../src/terminal/layout';
 
 beforeEach(() => {
   mergeTuning(tuning, JSON.parse(JSON.stringify(DEFAULT_TUNING)));
@@ -319,5 +319,16 @@ describe('cssToWorld', () => {
     const p = cssToWorld(l, r.x + r.w / 2, r.y + r.h / 2);
     expect(p.x).toBeCloseTo(w.cx, 6);
     expect(p.y).toBeCloseTo(w.cy, 6);
+  });
+});
+
+describe('glassRect', () => {
+  it('centres the CRT glass inside the CRT row with the image aspect', () => {
+    const l = computeLayout(390, 844);
+    const g = glassRect(l, 0.75);
+    expect(g.w / g.h).toBeCloseTo(0.75, 5);
+    expect(g.x + g.w / 2).toBeCloseTo(l.crt.x + l.crt.w / 2, 5);
+    expect(g.y + g.h / 2).toBeCloseTo(l.crt.y + l.crt.h / 2, 5);
+    expect(g.w).toBeLessThanOrEqual(l.crt.w);
   });
 });

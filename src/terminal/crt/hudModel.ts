@@ -1,6 +1,7 @@
 import type { Screen } from '../../app/session';
 import type { ChipCode, ChipId } from '../../data/chips';
 import { chipName, t } from '../../i18n';
+import type { MenuSpec } from './menuModel';
 import type { GameState } from '../../sim/world';
 
 // What the CRT HUD and the housing indicators show (TERMINAL.md §7). Pure:
@@ -40,6 +41,8 @@ export interface HudModel {
   notice: string | null;
   /** Chip described on the Custom Screen (the focused tray chip). */
   info: { defId: ChipId; code: ChipCode } | null;
+  /** A session menu covers the whole CRT (TERMINAL.md §8). */
+  menu: { spec: MenuSpec; cursor: number } | null;
 }
 
 /** HP at or below this share of max HP is shown as low. */
@@ -71,6 +74,7 @@ export function hudModel(
   w: HudWorld,
   notice: string | null = null,
   info: HudModel['info'] = null,
+  menu: HudModel['menu'] = null,
 ): HudModel {
   const next = w.chips.queue[0];
   return {
@@ -82,6 +86,7 @@ export function hudModel(
     banner: bannerFor(s, w),
     notice,
     info,
+    menu,
   };
 }
 
@@ -96,6 +101,7 @@ export function hudKey(m: HudModel, blinkOn: boolean): string {
     m.banner?.key ?? '',
     m.notice ?? '',
     m.info ? `${m.info.defId}${m.info.code}` : '',
+    m.menu ? `${m.menu.spec.key}:${m.menu.cursor}:${blinkOn ? 1 : 0}` : '',
   ].join('|');
 }
 

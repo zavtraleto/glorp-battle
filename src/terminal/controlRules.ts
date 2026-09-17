@@ -27,9 +27,13 @@ export function chipSelectAvailability(w: ControlWorld): Availability {
   return w.state === 'ACTION' && w.gauge.full ? 'ok' : 'dull';
 }
 
-/** Controls react only in BATTLE; the pause key works whenever it is visible. */
+/**
+ * Controls react in BATTLE; in MENU the trackball moves the cursor and EXECUTE
+ * picks the item; the pause key works whenever it is visible.
+ */
 export function acceptsPress(mode: TerminalMode, zone: ZoneId): boolean {
-  return zone === 'pause' || mode === 'BATTLE';
+  if (zone === 'pause' || mode === 'BATTLE') return true;
+  return mode === 'MENU' && (zone === 'trackball' || zone === 'execute');
 }
 
 const KEY_ORGANS: Record<string, { zone: ZoneId; dir?: Dir }> = {

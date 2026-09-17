@@ -4,6 +4,7 @@ import { chipDesc, chipName, t } from '../../i18n';
 import { CHIP_ICONS, ICON_PALETTE } from '../chips/chipIcons';
 import { blinkPhase } from '../terminalMode';
 import { hudKey, type BannerTone, type HudModel } from './hudModel';
+import { menuLayout, type MenuSpec, type MenuTone } from './menuModel';
 import { drawText, measureText, wrapText, type PixelSink } from './pixelFont';
 
 // HUD layer of the CRT (TERMINAL.md §7.1): drawn at the CRT resolution with the
@@ -22,6 +23,24 @@ const COLOR = {
   infoName: '#e8dfc4',
   infoText: '#9fe8ff',
   infoPower: '#ffd166',
+};
+
+const MENU_COLOR: Record<MenuTone, string> = {
+  title: '#ffe066',
+  info: '#6fd3ff',
+  win: '#7dff9a',
+  lose: '#ff5a5a',
+};
+
+const MENU = {
+  shade: 'rgba(3, 6, 10, 0.96)',
+  subtitle: '#9aa6c4',
+  rowLabel: '#9aa6c4',
+  rowValue: '#e8dfc4',
+  item: '#7d8aa3',
+  itemActive: '#ffffff',
+  itemBand: 'rgba(111, 211, 255, 0.18)',
+  hint: '#6f7a8f',
 };
 
 const BANNER_COLOR: Record<BannerTone, string> = {
@@ -79,6 +98,11 @@ export class CrtCanvas {
     const M = 3 * s;
     const sink = ctx as unknown as PixelSink;
     ctx.clearRect(0, 0, W, H);
+    if (m.menu) {
+      this.drawMenu(ctx, sink, m.menu.spec, m.menu.cursor, blinkOn, W, H);
+      this.texture.needsUpdate = true;
+      return;
+    }
 
     // HP box, top-left.
     const hpText = String(m.hp);
@@ -131,6 +155,38 @@ export class CrtCanvas {
     }
 
     this.texture.needsUpdate = true;
+  }
+
+  /** Session menu over the whole screen (TERMINAL.md §8). */
+  private drawMenu(
+    ctx: CanvasRenderingContext2D,
+    sink: PixelSink,
+    spec: MenuSpec,
+    cursor: number,
+    blinkOn: boolean,
+    W: number,
+    H: number,
+  ): void {
+    const l = menuLayout(spec, W, H);
+    ctx.fillStyle = MENU.shade;
+    ctx.fillRect(0, 0, W, H);
+    const tone = MENU_COLOR[spec.tone];
+    drawText(sink, l.title.text, l.title.x, l.title.y, l.title.scale, tone);
+    if (l.subtitle) drawText(sink, l.subtitle.text, l.subtitle.x, l.subtitle.y, l.subtitle.scale, MENU.subtitle);
+    for (const r of l.rows) {
+      drawText(sink, r.label.text.toUpperCase(), r.label.x, r.label.y, r.label.scale, MENU.rowLabel);
+      drawText(sink, r.value.text, r.value.x, r.value.y, r.value.scale, MENU.rowValue);
+    }
+    l.items.forEach((item, i) => {
+      const active = i === cursor;
+      if (active) {
+        ctx.fillStyle = MENU.itemBand;
+        ctx.fillRect(item.rect.x, item.rect.y, item.rect.w, item.rect.h);
+        if (blinkOn) drawText(sink, '>', item.rect.x + 2 * l.s, item.text.y, item.text.scale, tone);
+      }
+      drawText(sink, item.text.text, item.text.x, item.text.y, item.text.scale, active ? MENU.itemActive : MENU.item);
+    });
+    for (const h of l.hint) drawText(sink, h.text, h.x, h.y, h.scale, MENU.hint);
   }
 
   /** Custom Screen: the focused chip, large, over the dimmed field (TERMINAL.md §6.4). */

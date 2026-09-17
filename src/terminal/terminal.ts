@@ -12,12 +12,13 @@ import { BattleTarget } from './crt/battleTarget';
 import { CrtCanvas } from './crt/crtCanvas';
 import { CrtMaterial } from './crt/crtMaterial';
 import { gaugeLedCount, hpLedCount, hudModel } from './crt/hudModel';
+import { menuFor, menuItemAt, menuLayout, moveCursor, type MenuAction, type MenuSpec } from './crt/menuModel';
 import { trayLayout, trayTargetAt, type TrayLayout, type TrayTarget } from './chips/trayLayout';
 import { cursorCss } from './interaction/cursor';
 import { attachPointers } from './interaction/pointerEvents';
 import { TrayInput } from './interaction/trayInput';
 import { PointerRouter } from './interaction/pointerRouter';
-import { computeLayout, cssToWorld, type TerminalLayout, type ZoneId } from './layout';
+import { computeLayout, cssToWorld, glassRect, rectContains, type TerminalLayout, type ZoneId } from './layout';
 import { DeckControls } from './parts/deckControls';
 import { Environment } from './parts/environment';
 import { ChipRail, RAIL_SLOTS } from './parts/chipRail';
@@ -41,6 +42,8 @@ const TRAY_READY = 0.95;
 
 export interface TerminalHandlers {
   move(dir: Dir): void;
+  /** A session menu item was chosen. */
+  menu(action: MenuAction): void;
   execute(): void;
   chipSelect(): void;
   pause(): void;
@@ -71,6 +74,9 @@ export class Terminal {
   private trayHover = false;
   private trayDragging = false;
   private selectedBefore = new Set<number>();
+  private menu: MenuSpec | null = null;
+  private menuCursor = 0;
+  private readonly menuPresses = new Map<number, number>();
   private readonly hitZones = new HitZones();
   private readonly deck = new DeckControls();
   private readonly trackball = new Trackball();
@@ -119,7 +125,8 @@ export class Terminal {
       release: (z) => this.release(z),
       move: (d) => {
         this.trackball.step(d);
-        opts.handlers.move(d);
+        if (this.mode() === 'MENU') this.moveMenu(d);
+        else opts.handlers.move(d);
       },
       roll: (dx, dy) => this.trackball.roll(dx, dy),
       action: () => {},
@@ -144,6 +151,13 @@ export class Terminal {
         cancelAll: () => tray.cancelAll(),
         isCaptured: (id) => tray.isCaptured(id),
         hover: (x, y) => this.trayHoverAt(x, y),
+      }),
+      attachPointers(renderer.domElement, {
+        down: (id, x, y) => this.menuDown(id, x, y),
+        move: () => {},
+        up: (id, x, y) => this.menuUp(id, x, y),
+        cancelAll: () => this.menuPresses.clear(),
+        isCaptured: (id) => this.menuPresses.has(id),
       }),
       this.attachKeyVisuals(),
     );
@@ -233,7 +247,9 @@ export class Terminal {
     this.syncTray(world);
     const focused = world.state === 'CUSTOM' ? world.chips.hand[this.focusSlot] : null;
     const info = focused ? { defId: focused.defId, code: focused.code } : null;
-    this.hud.draw(hudModel(session, world, this.noticeLeft > 0 ? t('hud.noChip') : null, info), this.time);
+    this.syncMenu();
+    const menu = this.menu ? { spec: this.menu, cursor: this.menuCursor } : null;
+    this.hud.draw(hudModel(session, world, this.noticeLeft > 0 ? t('hud.noChip') : null, info, menu), this.time);
 
     this.syncIndicators(world);
     this.rail.update(dt);
@@ -270,6 +286,13 @@ export class Terminal {
   private press(zone: ZoneId, send: boolean): void {
     const world = this.opts.session.world;
     const { handlers } = this.opts;
+    if (this.mode() === 'MENU' && zone === 'execute') {
+      // Menus are driven only by the terminal, so keyboard presses act too.
+      this.deck.key('execute').press(false);
+      this.activateMenu();
+      this.updateCursor();
+      return;
+    }
     switch (zone) {
       case 'trackball':
         this.trackball.press();
@@ -465,20 +488,68 @@ export class Terminal {
     });
   }
 
-  /** Keyboard keys press the same controls (visual only). */
+  /** Session menu for the current screen; a new menu starts at its first item. */
+  private syncMenu(): void {
+    const spec = menuFor(this.opts.session);
+    if (spec?.key !== this.menu?.key) {
+      this.menuCursor = 0;
+      this.menuPresses.clear();
+    }
+    this.menu = spec;
+  }
+
+  private moveMenu(dir: Dir): void {
+    if (!this.menu || (dir !== 'up' && dir !== 'down')) return;
+    this.menuCursor = moveCursor(this.menuCursor, dir, this.menu.items.length);
+  }
+
+  private activateMenu(): void {
+    const item = this.menu?.items[this.menuCursor];
+    if (item) this.opts.handlers.menu(item.action);
+  }
+
+  /** Menu item under a CSS point on the CRT glass, or -1. */
+  private menuItemAtCss(x: number, y: number): number {
+    if (!this.menu) return -1;
+    const t = tuning.terminal;
+    const g = glassRect(this.layout, t.CRT_RES_W / t.CRT_RES_H);
+    if (!rectContains(g, x, y)) return -1;
+    const layout = menuLayout(this.menu, t.CRT_RES_W, t.CRT_RES_H);
+    return menuItemAt(layout, ((x - g.x) / g.w) * t.CRT_RES_W, ((y - g.y) / g.h) * t.CRT_RES_H);
+  }
+
+  private menuDown(id: number, x: number, y: number): boolean {
+    if (this.mode() !== 'MENU') return false;
+    const item = this.menuItemAtCss(x, y);
+    if (item < 0) return false;
+    this.menuCursor = item;
+    this.menuPresses.set(id, item);
+    return true;
+  }
+
+  private menuUp(id: number, x: number, y: number): void {
+    const item = this.menuPresses.get(id);
+    this.menuPresses.delete(id);
+    if (item !== undefined && item === this.menuItemAtCss(x, y) && this.mode() === 'MENU') this.activateMenu();
+  }
+
+  /** Keyboard keys press the same controls; in menus they also navigate. */
   private attachKeyVisuals(): () => void {
     const held = new Set<string>();
     const onDown = (e: KeyboardEvent) => {
       if (e.repeat || held.has(e.code) || e.target instanceof HTMLInputElement) return;
-      const organ = organForKey(e.code);
+      const code = e.code === 'Enter' && this.mode() === 'MENU' ? 'Space' : e.code;
+      const organ = organForKey(code);
       if (!organ || !acceptsPress(this.mode(), organ.zone)) return;
       held.add(e.code);
+      if (organ.dir && this.mode() === 'MENU') this.moveMenu(organ.dir);
       this.press(organ.zone, false);
       if (organ.dir) this.trackball.step(organ.dir);
+      if (code === 'Space') e.preventDefault();
     };
     const onUp = (e: KeyboardEvent) => {
       if (!held.delete(e.code)) return;
-      const organ = organForKey(e.code);
+      const organ = organForKey(e.code === 'Enter' ? 'Space' : e.code);
       if (organ) this.release(organ.zone);
     };
     window.addEventListener('keydown', onDown);

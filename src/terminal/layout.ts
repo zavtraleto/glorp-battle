@@ -115,3 +115,11 @@ export function cssToWorld(layout: TerminalLayout, x: number, y: number): { x: n
     y: -(y - (layout.body.y + layout.body.h / 2)) * k,
   };
 }
+
+/** CRT glass rect in CSS px: 90% of the CRT row height, `aspect` = w/h of the CRT image. */
+export function glassRect(layout: TerminalLayout, aspect: number): Rect {
+  const c = layout.crt;
+  const h = c.h * 0.9;
+  const w = Math.min(c.w * 0.94, h * aspect);
+  return { x: c.x + (c.w - w) / 2, y: c.y + (c.h - h) / 2, w, h };
+}

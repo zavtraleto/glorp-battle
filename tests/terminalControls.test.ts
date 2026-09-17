@@ -71,12 +71,15 @@ describe('control rules', () => {
     expect(chipSelectAvailability(cw({ gauge: { full: true }, state: 'CUSTOM' }))).toBe('dull');
   });
 
-  it('accepts presses only in battle, except pause', () => {
+  it('accepts presses in battle, menu navigation in menus, pause always', () => {
     expect(acceptsPress('BATTLE', 'execute')).toBe(true);
     expect(acceptsPress('TRANSITION', 'execute')).toBe(false);
     expect(acceptsPress('TRANSITION', 'trackball')).toBe(false);
     expect(acceptsPress('TRANSITION', 'pause')).toBe(true);
     expect(acceptsPress('MENU', 'chipSelect')).toBe(false);
+    expect(acceptsPress('MENU', 'trackball')).toBe(true);
+    expect(acceptsPress('MENU', 'execute')).toBe(true);
+    expect(acceptsPress('CHIP_SELECT', 'execute')).toBe(false);
   });
 
   it('maps keys to controls', () => {

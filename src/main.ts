@@ -128,6 +128,14 @@ const terminal = terminalMode
       perf,
       handlers: {
         move: (dir) => input.push({ type: 'move', dir }),
+        menu: (action) => {
+          if (action === 'start' || action === 'restart') {
+            session.start();
+            void keepAwake();
+          } else if (action === 'resume') session.resume();
+          else if (action === 'retry') session.retry();
+          else session.next();
+        },
         execute: () => input.push({ type: 'useChip' }),
         chipSelect: () => input.push({ type: 'openCustom' }),
         pause: () => {
@@ -167,7 +175,7 @@ hud.gauge.addEventListener('pointerdown', (e) => {
 window.addEventListener(
   'keydown',
   (e) => {
-    if (screens.handleKey(e)) {
+    if (!terminalMode && screens.handleKey(e)) {
       e.preventDefault();
       e.stopImmediatePropagation();
     } else if (e.code === 'Escape' && !e.repeat && (session.screen === 'BATTLE' || session.screen === 'PAUSED')) {
