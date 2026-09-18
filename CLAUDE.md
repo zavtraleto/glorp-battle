@@ -1,6 +1,6 @@
 # Glorp Battle
 
-Mobile-first, portrait, real-time grid battle prototype modeled on Mega Man Battle Network 1 (MMBN1).
+Mobile-first, portrait, real-time grid battle prototype modeled on Mega Man Battle Network: MMBN6 for combat rules, MMBN3 for content.
 Vite + TypeScript (strict) + Three.js. The whole interface is a 3D physical terminal (NET-01) with the battle on its CRT. Target: Chrome (Android first), 60–120 FPS.
 
 - Spec: `docs/GDD.md` (Russian). It is the contract: read the relevant section before changing gameplay.
@@ -27,23 +27,24 @@ Before every commit: `npm test` and `npm run build` must pass. Pushing to `main`
 
 ## Design rules
 
-- **MMBN1 is the source of truth** for anything the GDD leaves open. If MMBN1 lacks it, use MMBN2–3 and say so.
+- **Source of truth for anything the GDD leaves open: MMBN6 as the combat base, MMBN3 for content and systemic depth** (chips, codes, virus stats, folder content). If BN3 lacks something, use BN6 and say so. MMBN1 is no longer a reference. Labels in docs: `[MMBN3]`, `[MMBN6]`, `[оценка]`, `[решение]`.
 - **Deliberate deviations — do not undo them:**
-  - The Buster is automatic: one weak shot per `BUSTER_INTERVAL` down the player's column (GDD §4). There is no Buster button or command.
+  - There is no Buster (GDD §4): only chips deal damage. Spent chips reshuffle into the draw pile when it runs dry (GDD §5).
+  - The run is linear and the folder never changes during it: no path choice, rewards, legacy or saves between runs (GDD §10).
   - One trackball gesture = exactly one panel. No hold-to-repeat on gestures (keyboard keeps it).
-  - A `DBG` button (bottom-left) toggles debug tools in every build.
-  - Working names replace Capcom names: Mettik, Canodron, Spiker (see GDD §0.1).
+  - A `DBG` button (bottom-right) toggles debug tools in every build; the pause key sits bottom-left on the control panel.
+  - Working names replace Capcom names: Mettik, Canodron, Spiker, … (see GDD §0.1).
 - When behavior changes, update the GDD in the same change. Mark new decisions `[решение YYYY-MM-DD]`, estimates `[оценка]`, and keep §17 (tuning table) in sync with `src/config/tuning.ts`.
 
 ## Architecture
 
 ```
-src/sim/      pure simulation: no DOM, no Three.js — World, Player, enemies, attacks, chips, gauge
-src/app/      Session + Run: title → path (10 steps) → battle → reward → … → boss; death → legacy; pause
+src/sim/      pure simulation: no DOM, no Three.js — World, Player, field, enemies, attacks, chips
+src/app/      Session + Run: title (Basic / Field / Random folder) → linear run of 10 (path → battle → …) → complete; death / abandon → game over; pause
 src/render/   battle view (BATTLE_VISUAL.md): grid + cell states, procedural sprites, FX, palette pass; reads sim state, never mutates it
-src/terminal/ 3D physical terminal: CRT (battle render target + HUD/menu canvas), controls, chip rail, tray
+src/terminal/ 3D physical terminal: CRT (battle render target + HUD/menu canvas), controls, chip rail
 src/core/     fixed-step loop, seeded RNG, input (commands, swipe, keyboard, browser-gesture guards)
-src/data/     encounters, chips, folders, starter folder, enemy looks and levels — content is data, not code
+src/data/     encounters, chips, folders (basic, field, debug all), enemy looks and levels — content is data, not code
 src/config/tuning.ts   every gameplay number (seconds), live-editable in the debug panel
 src/debug/    lil-gui panel, stats overlay, URL params
 ```
@@ -51,17 +52,17 @@ src/debug/    lil-gui panel, stats overlay, URL params
 Invariants:
 
 - **Fixed 60 Hz step.** Durations live in `tuning` as seconds; convert with `secondsToTicks()`. Never hardcode numbers in logic.
-- **Two clocks in `World`:** `tick` advances only in `ACTION` (and end-of-battle animations); `uiTick` always advances and drives state timers (`stateElapsed`). Enemy/attack timers use `tick`, so they freeze during `CUSTOM`, `BATTLE_INTRO`, `BATTLE_START`, `PAUSED`. Render with `alpha = 0` while `world.simFrozen`.
-- **Input is abstract.** The terminal controls and the keyboard push `Command`s into `InputState`; `World.step()` consumes them once per tick. Only `ACTION` reacts to them. The chip tray calls `world.custom*()` directly (the sim is frozen then); menus call `Session` actions through `TerminalHandlers.menu`.
+- **Two clocks in `World`:** `tick` advances only in `ACTION` (and end-of-battle animations); `uiTick` always advances and drives state timers (`stateElapsed`). Enemy/attack timers use `tick`, so they freeze during `BATTLE_INTRO` and `PAUSED`. Render with `alpha = 0` while `world.simFrozen`.
+- **Input is abstract.** The terminal controls and the keyboard push `Command`s into `InputState`; `World.step()` consumes them once per tick. Only `ACTION` reacts to them, including chip selection (rail taps and keys 1–5 send `selectChip`); menus call `Session` actions through `TerminalHandlers.menu`.
 - **Sim → view via events.** The sim pushes `SimEvent`s; `main.ts` drains them each tick into FX, the terminal (CRT flash, damage numbers) and the debug log. Add an event instead of letting render peek at transient sim state.
-- **Determinism.** All sim randomness uses `world.rngFolder` / `world.rngAi` (seeded, forked streams). No `Math.random()` in `src/sim`. Session derives a seed per battle and per retry.
+- **Determinism.** All sim randomness uses `world.rngFolder` / `world.rngAi` (seeded, forked streams). No `Math.random()` in `src/sim`. Session derives a seed per run; the run derives its folder, each step's encounter pick and each step's battle from it.
 - **Enemies** extend `Enemy` (`src/sim/enemies/enemyBase.ts`), act only through `EnemyContext`, register in `factory.ts`, get a seed in `data/enemies.ts`, and are placed in `data/encounters.ts`. Scale damage and timings with `this.dmg()` / `this.ticks()` so levels work. Lane attacks implement `LaneMover` so FX can interpolate them.
 - **New tunables** go into the right group in `tuning.ts`; the debug panel picks them up automatically (add a slider range in `RANGES` if the auto range is wrong).
 - **Battle palette.** Battle materials emit a signal, not a colour: G = phosphor, R = red, B = accent (`render/palette.ts`); the palette pass maps them to the three colours with Bayer dithering. No text in battle: HUD shows only HP segments, damage numbers and menus.
 - **Panels live in the sim.** `world.field` owns panel state and ownership; movement, warps and waves ask `field.canStand` / `field.panel`, and anything leaving a cell calls `field.onLeave`. Objects (`world.objects`) sit in `Occupancy` and stop shots.
 - **New chips** are data: a `shape`, optional `onHit` / `field` / `heal` / `invis`, `codes` and `rarity` in `data/chips.ts`; a new shape or field action goes into `sim/chips/patterns.ts` / `World.applyFieldAction`. Add strings to `i18n/en.ts`, an icon to `terminal/chips/chipIcons.ts`, and a test in `tests/chipUse.test.ts`.
 
-- **The terminal only reads** sim/session state; it changes them only through `InputState`, `world.custom*()` and `Session` actions. Its mode is derived from `session.screen` + `world.state`, never stored.
+- **The terminal only reads** sim/session state; it changes them only through `InputState` and `Session` actions. Its mode is derived from `session.screen` + `world.state`, never stored.
 - **Terminal feedback is immediate:** a control reacts on `pointerdown` in the same frame; animations tied to game outcomes (chip eject, hits) are driven by `SimEvent`s and never delay the action.
 - **Terminal look is PS1 low-poly + big pixels:** procedural geometry and small canvas textures with nearest filtering, low-res render target upscaled without smoothing, CRT shader only on the screen glass. Stay within the performance budget in TERMINAL.md §10.
 
@@ -69,7 +70,7 @@ Comments cite GDD sections (`// GDD §8.2`). Match the surrounding style: short 
 
 ## Testing
 
-- Tests drive `World`/`Session` directly with `step(dt, { commands, held })`. Pass `storage: null` (or an in-memory store) to `Session` so the legacy store never touches localStorage.
+- Tests drive `World`/`Session` directly with `step(dt, { commands, held })`. `Session` takes `{ seed, cheats, folder }` and has no storage.
 - Use `skipIntro: true` to start in `ACTION`, `cheats: { god, aiEnabled: false }` to isolate systems, `world.giveChip(...)` to queue chips.
 - Reset tuning in `beforeEach`: `mergeTuning(tuning, JSON.parse(JSON.stringify(DEFAULT_TUNING)))`.
 - A world with no living enemies becomes `BATTLE_WON` on the next tick — keep at least one enemy when testing other systems.
@@ -78,7 +79,7 @@ Comments cite GDD sections (`// GDD §8.2`). Match the surrounding style: short 
 ## Verifying in the browser
 
 - Dev-only handle: `window.__glorp` (`world`, `session`, `input`, `loop`, `sceneRenderer` / `battleView`, `terminal`, `tuning`, `cheats`, `startBattle`).
-- URL params: `?debug=1&seed=123&battle=3&encounter=e1&folder=p1|p2&god=1&timescale=0.5` (`battle=` / `encounter=` skip the title; `folder=p2` holds the roguelite chips); terminal: `?hitzones=1&rscale=400&crtres=240x320&bench=1`.
+- URL params: `?debug=1&seed=123&battle=3&encounter=e1&folder=basic|field|all&god=1&timescale=0.5` (`battle=` / `encounter=` skip the title and use the `folder=` folder; `all` holds one of every chip); terminal: `?hitzones=1&rscale=400&crtres=240x320&bench=1`.
 - Drive the terminal with synthetic `PointerEvent`s on `#terminal-canvas`; zone rects are in `__glorp.terminal.layout.zones` (CSS px).
 - Do not run `?bench=1` or CPU-throttled measurements unless the user asks.
 - The in-app Browser pane does not run `requestAnimationFrame` while hidden, so the game looks frozen there. Use the Chrome DevTools MCP with phone emulation (`390x844x3,mobile,touch`) for anything time-based.

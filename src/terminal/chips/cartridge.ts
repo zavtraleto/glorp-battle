@@ -2,11 +2,10 @@ import * as THREE from 'three';
 import type { ChipCode, ChipId } from '../../data/chips';
 import { drawText, measureText, type PixelSink } from '../crt/pixelFont';
 import { chipFaceTexture, FACE_CUT, FACE_H, FACE_W } from './chipFace';
-import { CHIP_TEXELS_H, CHIP_TEXELS_W } from './trayLayout';
+import { CHIP_TEXELS_H, CHIP_TEXELS_W } from './railLayout';
 
 // A chip cartridge mesh (spec §9.1): a thick bevelled body with the top-right
 // corner cut like an SD card, a pixel face, a metal clip and a glow frame.
-// Shared by the rail and the tray.
 
 /** Body thickness as a share of the cartridge width. */
 export const CART_DEPTH_RATIO = 0.22;
@@ -53,6 +52,7 @@ const COLOR = {
   body: 0x3a3833,
   clip: 0x8a8578,
   glow: 0x55ff66,
+  flight: 0x4a4639,
   order: '#0a0c0e',
   orderBack: '#55ff66',
 };
@@ -87,6 +87,8 @@ const shared = {
   body: bodyGeometry(),
   plane: new THREE.PlaneGeometry(1, 1),
   bodyMat: new THREE.MeshLambertMaterial({ color: COLOR.body, flatShading: true }),
+  /** In flight the cartridge leaves the lit rail: it glows faintly so it reads as a solid object. */
+  flightMat: new THREE.MeshLambertMaterial({ color: COLOR.body, emissive: COLOR.flight, flatShading: true }),
   clipMat: new THREE.MeshLambertMaterial({ color: COLOR.clip, flatShading: true }),
   glowMat: new THREE.MeshBasicMaterial({ color: COLOR.glow }),
 };
@@ -109,12 +111,11 @@ export class Cartridge {
   constructor(
     readonly defId: ChipId,
     readonly code: ChipCode,
-    legacyGen?: number,
   ) {
     // alphaTest, not blending: the cut corner is punched out of the texture and
     // must not draw at all (blending would sort badly against the body).
     this.faceMat = new THREE.MeshBasicMaterial({
-      map: chipFaceTexture(defId, code, legacyGen),
+      map: chipFaceTexture(defId, code),
       alphaTest: 0.5,
     });
     this.body = new THREE.Mesh(shared.body, shared.bodyMat);
@@ -148,6 +149,11 @@ export class Cartridge {
   }
 
   /** Shows the Attack Queue position, or hides the badge at 0 (GDD §7.2). */
+  /** Ejected: the body lights itself, the rail's lights no longer reach it. */
+  setFlying(on: boolean): void {
+    this.body.material = on ? shared.flightMat : shared.bodyMat;
+  }
+
   setOrder(n: number): void {
     if (n === this.shownOrder) return;
     this.shownOrder = n;

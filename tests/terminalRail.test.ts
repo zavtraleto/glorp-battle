@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { CHIPS, type ChipId } from '../src/data/chips';
 import { CHIP_ICONS, ICON_PALETTE } from '../src/terminal/chips/chipIcons';
-import { activeSlot } from '../src/terminal/chips/railPlan';
-import { railDropIndex, railSlotRects, RAIL_SLOTS, trayLayout, trayTargetAt } from '../src/terminal/chips/trayLayout';
-import { computeLayout } from '../src/terminal/layout';
-
+import { Rng } from '../src/core/rng';
+import { ChipSystem } from '../src/sim/chips/chipSystem';
+import { activeSlot, railChanges } from '../src/terminal/chips/railPlan';
 
 describe('activeSlot', () => {
   it('finds the first occupied slot', () => {
@@ -26,57 +25,26 @@ describe('chip icons', () => {
   });
 });
 
-describe('tray layout', () => {
-  const layout = computeLayout(390, 844);
-  const center = (r: { x: number; y: number; w: number; h: number }) => [r.x + r.w / 2, r.y + r.h / 2] as const;
-
-  it('packs five rail slots inside the rail', () => {
-    const slots = railSlotRects(layout);
-    expect(slots).toHaveLength(RAIL_SLOTS);
-    for (const s of slots) {
-      expect(s.x).toBeGreaterThanOrEqual(layout.rail.x);
-      expect(s.x + s.w).toBeLessThanOrEqual(layout.rail.x + layout.rail.w);
-    }
+describe('railChanges', () => {
+  it('ejects gone chips and loads new ones, leaving unchanged slots alone', () => {
+    expect(railChanges([1, 2, null, 4, null], [1, 7, 8, null, null])).toEqual([
+      { slot: 1, eject: true, load: true },
+      { slot: 2, eject: false, load: true },
+      { slot: 3, eject: true, load: false },
+    ]);
   });
 
-  it('turns a drop into a packed selection index', () => {
-    const slots = railSlotRects(layout);
-    expect(railDropIndex(layout, ...center(slots[3]!), 1)).toBe(1);
-    expect(railDropIndex(layout, ...center(slots[0]!), 3)).toBe(0);
-    expect(railDropIndex(layout, ...center(slots[2]!), 4)).toBe(2);
-    expect(railDropIndex(layout, center(slots[2]!)[0], layout.rail.y - 2, 4)).toBe(2); // slightly above
-    expect(railDropIndex(layout, ...center(layout.crt), 0)).toBeNull();
-  });
-
-  it('lays out 5, 10 and 15 hand cells above the keys', () => {
-    for (const n of [5, 10, 15]) {
-      const t = trayLayout(layout, n);
-      expect(t.cells).toHaveLength(n);
-      for (const c of t.cells) {
-        expect(c.y).toBeGreaterThanOrEqual(layout.deck.y);
-        expect(c.y + c.h).toBeLessThanOrEqual(t.ok.y + 0.001);
-      }
-      expect(t.scale).toBeGreaterThan(0);
-      expect(t.scale).toBeLessThanOrEqual(1);
-    }
-    expect(trayLayout(layout, 15).scale).toBeLessThan(trayLayout(layout, 5).scale);
-  });
-
-  it('keeps OK and ADD apart and large enough', () => {
-    const t = trayLayout(layout, 5);
-    expect(t.add.x + t.add.w).toBeLessThan(t.ok.x);
-    expect(Math.min(t.ok.w, t.ok.h)).toBeGreaterThanOrEqual(56);
-    expect(Math.min(t.add.w, t.add.h)).toBeGreaterThanOrEqual(56);
-    expect(t.ok.y + t.ok.h).toBeLessThanOrEqual(layout.deck.y + layout.deck.h);
-  });
-
-  it('finds what a press hits', () => {
-    const t = trayLayout(layout, 5);
-    expect(trayTargetAt(layout, t, ...center(t.ok), 0)).toEqual({ kind: 'ok' });
-    expect(trayTargetAt(layout, t, ...center(t.add), 0)).toEqual({ kind: 'add' });
-    expect(trayTargetAt(layout, t, ...center(t.cells[2]!), 0)).toEqual({ kind: 'hand', slot: 2 });
-    const slots = railSlotRects(layout);
-    expect(trayTargetAt(layout, t, ...center(slots[1]!), 2)).toEqual({ kind: 'rail', index: 1 });
-    expect(trayTargetAt(layout, t, ...center(slots[3]!), 2)).toBeNull();
+  it('treats a chip re-dealt into the same slot as eject + load', () => {
+    // One chip: fired, then reshuffled straight back into slot 0 by the Refresh.
+    const cs = new ChipSystem([{ defId: 'cannon', code: 'A' }], new Rng(1));
+    cs.dealHand();
+    const keys = () => cs.hand.map((c) => (c ? c.deal : null));
+    const uid = cs.hand[0]?.uid;
+    const before = keys();
+    cs.toggleSelect(0);
+    cs.takeNext();
+    cs.refresh();
+    expect(cs.hand[0]?.uid).toBe(uid);
+    expect(railChanges(before, keys())).toEqual([{ slot: 0, eject: true, load: true }]);
   });
 });

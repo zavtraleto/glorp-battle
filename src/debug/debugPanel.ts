@@ -30,12 +30,10 @@ export interface DebugActions {
   clearCellStates(): void;
   demoCellStates(): void;
   rerollEnemies(): void;
-  /** Roguelite run (roguelite spec §6.6). */
+  /** Run (GDD §10–11). */
   runDepth(depth: number): void;
-  clearLegacy(): void;
-  setGeneration(generation: number): void;
   /** Changes the real panels (roguelite spec §3). */
-  simPanel(x: number, y: number, action: 'crack' | 'break' | 'repair' | 'steal' | 'rock'): void;
+  simPanel(x: number, y: number, action: 'crack' | 'break' | 'repair' | 'grab' | 'rock'): void;
 }
 
 // Slider ranges for numeric tunables; anything not listed gets an auto range.
@@ -67,8 +65,7 @@ const RANGES: Record<string, [number, number, number]> = {
   LIGHT_RING: [0, 2, 0.05],
   LIGHT_CHIP: [0, 2, 0.05],
   VIGNETTE: [0, 1, 0.01],
-  DECK_TILT: [0, 45, 1],
-  RAIL_TILT: [0, 30, 1],
+  CONTROL_TILT: [0, 45, 1],
   CRT_TILT: [0, 20, 1],
   BALL_W: [0.1, 0.5, 0.01],
   RING_W: [0.15, 0.6, 0.01],
@@ -121,7 +118,7 @@ export class DebugPanel {
   private buildSession(): void {
     const s = this.state;
     const f = this.gui.addFolder('Session');
-    f.add({ folder: new URLSearchParams(location.search).get('folder') ?? 'mvp' }, 'folder', Object.keys(FOLDERS))
+    f.add({ folder: new URLSearchParams(location.search).get('folder') ?? 'basic' }, 'folder', Object.keys(FOLDERS))
       .name('folder (reloads)')
       .onChange((v: string) => {
         const url = new URL(location.href);
@@ -133,12 +130,9 @@ export class DebugPanel {
     f.add({ apply: () => this.actions.restart({ seed: s.seed >>> 0 }) }, 'apply').name('restart with seed');
     f.add({ random: () => this.actions.restart({ seed: 'random' }) }, 'random').name('restart random seed');
     f.add({ copy: () => this.copyLink() }, 'copy').name('copy repro link');
-    const run = { depth: 1, generation: 1 };
+    const run = { depth: 1 };
     f.add(run, 'depth', 1, 10, 1).name('run step');
     f.add({ go: () => this.actions.runDepth(run.depth) }, 'go').name('go to step');
-    f.add(run, 'generation', 1, 99, 1).name('generation');
-    f.add({ set: () => this.actions.setGeneration(run.generation) }, 'set').name('set generation');
-    f.add({ clear: () => this.actions.clearLegacy() }, 'clear').name('clear legacy');
 
     const tf = this.gui.addFolder('Time');
     tf.add(s, 'timeScale', [0.25, 0.5, 1, 2]).name('time scale').onChange((v: number) => {
@@ -161,7 +155,6 @@ export class DebugPanel {
     const hp = { value: 100 };
     cf.add(a.cheats, 'god').name('god mode (no damage)');
     cf.add(a.cheats, 'aiEnabled').name('enemy AI');
-    cf.add(a.cheats, 'buster').name('auto buster');
     cf.add({ kill: () => a.killAll() }, 'kill').name('kill all enemies');
     cf.add({ force: () => a.forceAttack() }, 'force').name('force enemy attack');
     cf.add({ step: () => a.advanceRefresh() }, 'step').name('advance refresh counter');
@@ -179,8 +172,8 @@ export class DebugPanel {
     ff.add(cell, 'y', 0, 5, 1).name('cell y');
     ff.add(cell, 'state', ['BROKEN', 'EMPTY', 'OBJECT', 'NONE']).name('state');
     ff.add({ apply: () => a.setCellState(cell.x, cell.y, cell.state) }, 'apply').name('apply to cell');
-    const sim = { action: 'crack' as 'crack' | 'break' | 'repair' | 'steal' | 'rock' };
-    ff.add(sim, 'action', ['crack', 'break', 'repair', 'steal', 'rock']).name('sim action');
+    const sim = { action: 'crack' as 'crack' | 'break' | 'repair' | 'grab' | 'rock' };
+    ff.add(sim, 'action', ['crack', 'break', 'repair', 'grab', 'rock']).name('sim action');
     ff.add({ run: () => a.simPanel(cell.x, cell.y, sim.action) }, 'run').name('apply to sim');
     ff.add({ clear: () => a.clearCellStates() }, 'clear').name('clear cell states');
     ff.add({ demo: () => a.demoCellStates() }, 'demo').name('demo all states');

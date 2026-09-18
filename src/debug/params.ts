@@ -1,5 +1,5 @@
 // URL debug parameters (GDD §15.5, TERMINAL.md §14):
-// ?debug=1&seed=123&battle=3&encounter=e1&folder=p1|p2&god=1&timescale=0.5
+// ?debug=1&seed=123&battle=3&encounter=e1&folder=basic|field|all&god=1&timescale=0.5
 // ?rscale=300&crtres=160x240&bench=1&hitzones=1
 
 import type { FolderId } from '../data/folders';
@@ -44,7 +44,7 @@ export function parseDebugParams(search: string): DebugParams {
     seed: seed === null ? null : Math.floor(seed) >>> 0,
     battle: battle === null ? 1 : Math.min(4, Math.max(1, Math.floor(battle))),
     encounter: q.get('encounter'),
-    folder: (['p1', 'p2'] as const).find((f) => f === q.get('folder')) ?? 'mvp',
+    folder: (['basic', 'field', 'all'] as const).find((f) => f === q.get('folder')) ?? 'basic',
     god: flag('god'),
     timescale: timescale === null ? 1 : Math.min(4, Math.max(0.05, timescale)),
     rscale: rscale === null ? null : Math.min(2160, Math.max(120, Math.round(rscale))),

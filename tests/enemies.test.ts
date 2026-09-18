@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_TUNING, mergeTuning, secondsToTicks, tuning } from '../src/config/tuning';
 import type { Command, Dir } from '../src/core/input/commands';
 import { BATTLES } from '../src/data/battles';
+import { ENEMY_LEVELS } from '../src/data/enemies';
 import { HeatShot } from '../src/sim/attacks/heatShot';
 import { Shockwave } from '../src/sim/attacks/shockwave';
 import { Mettik } from '../src/sim/enemies/mettik';
 import { Canodron } from '../src/sim/enemies/canodron';
-import type { Enemy } from '../src/sim/enemies/enemyBase';
 import { Spiker } from '../src/sim/enemies/spiker';
 import type { SimEvent } from '../src/sim/events';
 import { World } from '../src/sim/world';
@@ -143,11 +143,8 @@ describe('Spiker', () => {
   const spiker = (w: World) => w.enemies.find((e) => e.kind === 'spiker') as Spiker;
 
   function aiOnlySpiker(seed: number): World {
-    const w = world(4, seed);
-    // Freeze the Canodron so only Spiker acts.
-    const cano = w.enemies.find((e) => e.kind === 'canodron') as Enemy;
-    cano.update = () => undefined;
-    return w;
+    // Battle 4 (n4) is a lone Spiker, so nothing else needs freezing.
+    return world(4, seed);
   }
 
   it('warps between random free enemy panels, then lines up and throws', () => {
@@ -167,7 +164,6 @@ describe('Spiker', () => {
     for (const e of events) {
       if (e.type !== 'enemyWarped') continue;
       expect(e.y).toBeLessThanOrEqual(2);
-      expect(`${e.x},${e.y}`).not.toBe('0,0'); // Canodron's panel
     }
     expect(s.x).toBe(w.player.x);
     expect(w.dangerCells().every((c) => c.x === s.x && c.y > s.y)).toBe(true);
@@ -233,7 +229,7 @@ describe('battles 2–4 are winnable', () => {
         run(w, T(tuning.player.MOVE_COOLDOWN));
         continue;
       }
-      w.giveChip({ uid: 20_000 + i, defId: 'hicannon', code: '*', state: 'queued' });
+      w.giveChip({ uid: 20_000 + i, defId: 'hicannon', code: '*', state: 'queued', deal: 0 });
       step(w, [{ type: 'useChip' }]);
       run(w, T(tuning.chips.CHIP_USE_TIME_CANNON));
     }
@@ -241,11 +237,10 @@ describe('battles 2–4 are winnable', () => {
   });
 });
 
-describe('levels, guard, player paralysis and knock-back', () => {
+describe('levels, guard and player paralysis', () => {
   /** Battle 1 with its Mettik replaced by one of the given level. */
   function withMettik(level: 1 | 2 | 3): { w: World; m: Mettik } {
     const w = world(1);
-    w.cheats.buster = false;
     const old = w.enemies[0]!;
     w.occupancy.remove(old.id, old.x, old.y);
     const m = new Mettik(500, 1, 1, w.tick, level);
@@ -257,7 +252,7 @@ describe('levels, guard, player paralysis and knock-back', () => {
   it('scales HP, damage and timings by level', () => {
     const one = withMettik(1);
     const two = withMettik(2);
-    expect(two.m.hp).toBe(tuning.mettik.MET_HP * 2);
+    expect(two.m.hp).toBe(Math.round(tuning.mettik.MET_HP * ENEMY_LEVELS[2].hp));
     const firstWave = (w: World) => {
       for (let i = 0; i < T(5); i++) {
         step(w);
@@ -268,7 +263,7 @@ describe('levels, guard, player paralysis and knock-back', () => {
     };
     const a = firstWave(one.w);
     const b = firstWave(two.w);
-    expect(b.damage).toBe(tuning.mettik.MET_DMG * 2);
+    expect(b.damage).toBe(Math.round(tuning.mettik.MET_DMG * ENEMY_LEVELS[2].damage));
     expect(a.damage).toBe(tuning.mettik.MET_DMG);
     expect(b.at).toBeGreaterThan(0);
     expect(b.at).toBeLessThan(a.at);
@@ -289,23 +284,11 @@ describe('levels, guard, player paralysis and knock-back', () => {
     move(w, 'left');
     expect(w.player.x).toBe(1);
     expect(w.player.invulnerable).toBe(false);
-    w.giveChip({ uid: 30_001, defId: 'cannon', code: '*', state: 'queued' });
+    w.giveChip({ uid: 30_001, defId: 'cannon', code: '*', state: 'queued', deal: 0 });
     step(w, [{ type: 'useChip' }]);
     expect(w.activeChip).toBeNull();
     run(w, T(1));
     move(w, 'left');
     expect(w.player.x).toBe(0);
-  });
-
-  it('knock-back moves the player one row toward their edge unless blocked', () => {
-    const { w } = withMettik(1);
-    expect(w.pushPlayer()).toBe(true);
-    expect(w.player.y).toBe(5);
-    expect(w.pushPlayer()).toBe(false);
-    w.player.y = 4;
-    w.occupancy.move(w.player.id, 1, 5, 1, 4);
-    w.field.breakPanel(1, 5, w.tick, false);
-    expect(w.pushPlayer()).toBe(false);
-    expect(w.player.y).toBe(4);
   });
 });

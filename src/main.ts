@@ -1,5 +1,6 @@
 import './styles.css';
 import * as THREE from 'three';
+import type { StartFolder } from './app/run';
 import { Session } from './app/session';
 import { loadTuningOverrides, tuning } from './config/tuning';
 import { events } from './core/events';
@@ -37,7 +38,7 @@ if (params.crtres) [tuning.terminal.CRT_RES_W, tuning.terminal.CRT_RES_H] = para
 const stage = byId('stage');
 const ui = byId('ui');
 
-const cheats: Cheats = { god: params.god, aiEnabled: true, buster: true };
+const cheats: Cheats = { god: params.god, aiEnabled: true };
 const session = new Session({ seed: params.seed ?? randomSeed(), cheats, folder: params.folder });
 // ?battle=N / ?encounter=<id> skip the title and jump straight into a battle (debug).
 if (params.encounter) session.debugEncounter(params.encounter);
@@ -94,15 +95,13 @@ const terminal = new Terminal({
     },
     menu: (action) => {
       const [kind, arg] = action.split(':');
-      const index = Number(arg ?? 0);
       if (kind === 'start') {
-        session.start();
+        session.start(arg as StartFolder);
         void keepAwake();
       } else if (kind === 'resume') session.resume();
       else if (kind === 'abandon') session.abandon();
       else if (kind === 'title') session.toTitle();
-      else if (kind === 'path') session.choosePath(index);
-      else if (kind === 'legacy') session.chooseLegacy(index);
+      else if (kind === 'fight') session.fight();
     },
   },
 });
@@ -192,7 +191,7 @@ const loop = new GameLoop(
           `draw ${world.chips.drawRemaining} hand ${world.chips.hand.filter(Boolean).length}/${world.chips.hand.length}` +
           ` attack ${world.chips.attack.length} used ${world.chips.count('used')}` +
           ` chip ${world.activeChip ? world.activeChip.def.id : '-'}\n` +
-          `gen ${session.generation}  step ${session.depth}/${session.steps}  folder ${session.folderSize}\n` +
+          `step ${session.depth}/${session.steps}  folder ${session.folderSize}\n` +
           world.enemies.map((e) => `${e.kind}#${e.id} ${e.x},${e.y} hp ${e.hp} ${e.state}`).join('\n') +
           `\nattacks ${world.attacks.length}${cheats.god ? '  GOD' : ''}${cheats.aiEnabled ? '' : '  AI OFF'}`,
       });
@@ -221,7 +220,7 @@ const panel = new DebugPanel(loop.clock, {
   advanceRefresh: () => session.world.advanceRefresh(),
   giveChip: (defId) => {
     // Debug chips get uids outside the folder range and a wildcard code.
-    session.world.giveChip({ uid: debugChipUid++, defId, code: '*', state: 'queued' });
+    session.world.giveChip({ uid: debugChipUid++, defId, code: '*', state: 'queued', deal: 0 });
   },
   forceAttack: () => {
     const w = session.world;
@@ -233,15 +232,13 @@ const panel = new DebugPanel(loop.clock, {
     else sceneRenderer.field.overrides.set(key, state);
   },
   runDepth: (depth) => session.debugDepth(depth),
-  clearLegacy: () => session.debugClearLegacy(),
-  setGeneration: (g) => session.debugSetGeneration(g),
   simPanel: (x, y, action) => {
     const w = session.world;
     const occupied = !w.occupancy.isFree(x, y);
     if (action === 'crack') w.field.crack(x, y);
     else if (action === 'break') w.field.breakPanel(x, y, w.tick, occupied);
     else if (action === 'repair') w.field.repair(x, y);
-    else if (action === 'steal') w.field.setOwner(x, y, w.field.owner(x, y) === 'enemy' ? 'player' : 'enemy', w.tick);
+    else if (action === 'grab') w.field.setOwner(x, y, w.field.owner(x, y) === 'enemy' ? 'player' : 'enemy', w.tick);
     else w.placeObject('rock', x, y, w.field.owner(x, y) ?? 'player');
   },
   clearCellStates: () => sceneRenderer.field.overrides.clear(),

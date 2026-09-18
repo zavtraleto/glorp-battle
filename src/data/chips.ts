@@ -1,18 +1,19 @@
 // Battle chip catalogue (GDD §6.2, roguelite spec §4). A chip is data: where it
 // hits (shape), what a hit does (onHit), what it does to the field, and support
-// effects. Values follow MMBN1; use times and effect durations are tunables.
-// Names and descriptions live in i18n (`chip.<id>.name` / `chip.<id>.desc`).
+// effects. Values and codes follow MMBN3 (MMKB chip list); use times and effect
+// durations are tunables. Names and descriptions live in i18n
+// (`chip.<id>.name` / `chip.<id>.desc`).
 
 export type ChipCode =
   | 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'M'
   | 'N' | 'O' | 'P' | 'Q' | 'R' | 'S' | 'T' | 'U' | 'V' | 'W' | 'X' | 'Y' | 'Z' | '*';
 
 export type ChipId =
-  | 'cannon' | 'hicannon' | 'mcannon' | 'airshot' | 'vgun' | 'sidegun' | 'spreader' | 'shotgun'
+  | 'cannon' | 'hicannon' | 'mcannon' | 'airshot' | 'shotgun' | 'vgun' | 'sidegun' | 'spreader'
   | 'sword' | 'widesword' | 'longsword'
-  | 'minibomb' | 'lilbomb' | 'crosbomb' | 'shockwave' | 'quake1' | 'zapring'
-  | 'recov10' | 'recover50' | 'recov80' | 'invis'
-  | 'crack' | 'geddon1' | 'geddon2' | 'steal' | 'repair' | 'rockcube';
+  | 'minibomb' | 'shockwave' | 'zapring'
+  | 'recov10' | 'recov30' | 'recover50' | 'recov80' | 'invis'
+  | 'geddon1' | 'geddon2' | 'areagrab' | 'panlgrab' | 'panlout1' | 'panlout3' | 'repair' | 'rockcube';
 
 /** Which tunable holds the use (animation) time: `CHIP_USE_TIME_<group>`. */
 export type UseTimeGroup = 'CANNON' | 'SWORD' | 'BOMB' | 'RECOVER' | 'FIELD';
@@ -41,11 +42,10 @@ export interface OnHit {
   push?: true;
   /** Hit enemies stop for PARALYZE_TIME. */
   paralyze?: true;
-  /** Every cell of the hit area cracks or breaks. */
-  panel?: 'crack' | 'break';
 }
 
-export type FieldAction = 'crackRow' | 'crackAll' | 'breakEnemy' | 'steal' | 'repair' | 'rock';
+export type FieldAction =
+  | 'crackAll' | 'breakEnemy' | 'areaGrab' | 'grabPanel' | 'breakAhead' | 'breakRowAhead' | 'repair' | 'rock';
 
 export interface ChipDef {
   id: ChipId;
@@ -53,7 +53,7 @@ export interface ChipDef {
   power: number | null;
   kind: 'attack' | 'support' | 'field';
   useTime: UseTimeGroup;
-  /** Codes this chip can come with (rewards pick one). */
+  /** Codes this chip can come with. */
   codes: readonly ChipCode[];
   rarity: Rarity;
   shape: Shape;
@@ -75,15 +75,35 @@ const AHEAD: readonly Offset[] = [{ x: 0, y: -1 }];
 const LANE: Shape = { t: 'lane' };
 
 export const CHIPS: Record<ChipId, ChipDef> = {
-  cannon: { id: 'cannon', power: 40, kind: 'attack', useTime: 'CANNON', codes: ['A', 'B', 'C', 'D', 'E'], rarity: 'common', shape: LANE },
-  hicannon: { id: 'hicannon', power: 80, kind: 'attack', useTime: 'CANNON', codes: ['F', 'G', 'H', 'I', 'J'], rarity: 'uncommon', shape: LANE },
-  sword: { id: 'sword', power: 80, kind: 'attack', useTime: 'SWORD', codes: ['B', 'K', 'L', 'P', 'S'], rarity: 'common', shape: { t: 'near', cells: AHEAD } },
+  cannon: { id: 'cannon', power: 40, kind: 'attack', useTime: 'CANNON', codes: ['A', 'B', 'C', 'D', 'E', '*'], rarity: 'common', shape: LANE },
+  hicannon: { id: 'hicannon', power: 60, kind: 'attack', useTime: 'CANNON', codes: ['H', 'I', 'J', 'K', 'L', '*'], rarity: 'uncommon', shape: LANE },
+  mcannon: { id: 'mcannon', power: 80, kind: 'attack', useTime: 'CANNON', codes: ['O', 'P', 'Q', 'R', 'S'], rarity: 'rare', shape: LANE },
+  airshot: { id: 'airshot', power: 20, kind: 'attack', useTime: 'CANNON', codes: ['*'], rarity: 'common', shape: LANE, onHit: { push: true } },
+  shotgun: {
+    id: 'shotgun',
+    power: 30,
+    kind: 'attack',
+    useTime: 'CANNON',
+    codes: ['B', 'F', 'J', 'N', 'T', '*'],
+    rarity: 'common',
+    shape: { t: 'lane', around: [{ x: 0, y: -1 }] },
+  },
+  vgun: {
+    id: 'vgun', power: 30, kind: 'attack', useTime: 'CANNON', codes: ['D', 'G', 'L', 'P', 'V', '*'], rarity: 'common',
+    shape: { t: 'lane', around: [{ x: -1, y: -1 }, { x: 1, y: -1 }] },
+  },
+  sidegun: {
+    id: 'sidegun', power: 30, kind: 'attack', useTime: 'CANNON', codes: ['C', 'H', 'M', 'S', 'Y', '*'], rarity: 'common',
+    shape: { t: 'lane', around: [{ x: -1, y: 0 }, { x: 1, y: 0 }] },
+  },
+  spreader: { id: 'spreader', power: 30, kind: 'attack', useTime: 'CANNON', codes: ['M', 'N', 'O', 'P', 'Q', '*'], rarity: 'uncommon', shape: { t: 'lane', around: RING } },
+  sword: { id: 'sword', power: 80, kind: 'attack', useTime: 'SWORD', codes: ['E', 'H', 'L', 'S', 'Y'], rarity: 'common', shape: { t: 'near', cells: AHEAD } },
   widesword: {
     id: 'widesword',
     power: 80,
     kind: 'attack',
     useTime: 'SWORD',
-    codes: ['C', 'K', 'M', 'N', 'S'],
+    codes: ['C', 'E', 'L', 'Q', 'Y'],
     rarity: 'uncommon',
     shape: { t: 'near', cells: [{ x: -1, y: -1 }, { x: 0, y: -1 }, { x: 1, y: -1 }] },
   },
@@ -92,70 +112,41 @@ export const CHIPS: Record<ChipId, ChipDef> = {
     power: 80,
     kind: 'attack',
     useTime: 'SWORD',
-    codes: ['D', 'E', 'N', 'O', 'S'],
+    codes: ['E', 'I', 'L', 'R', 'Y'],
     rarity: 'uncommon',
     shape: { t: 'near', cells: [{ x: 0, y: -1 }, { x: 0, y: -2 }] },
-  },
-  shotgun: {
-    id: 'shotgun',
-    power: 30,
-    kind: 'attack',
-    useTime: 'CANNON',
-    codes: ['K', 'M', 'N', 'Q', 'R'],
-    rarity: 'common',
-    shape: { t: 'lane', around: [{ x: 0, y: -1 }] },
   },
   minibomb: {
     id: 'minibomb',
     power: 50,
     kind: 'attack',
     useTime: 'BOMB',
-    codes: ['C', 'E', 'J', 'L', 'P'],
+    codes: ['B', 'G', 'L', 'O', 'S', '*'],
     rarity: 'common',
     shape: { t: 'lob', depth: 3, area: SPOT },
   },
+  shockwave: { id: 'shockwave', power: 60, kind: 'attack', useTime: 'CANNON', codes: ['D', 'H', 'J', 'L', 'R'], rarity: 'common', shape: { t: 'wave' } },
+  zapring: { id: 'zapring', power: 20, kind: 'attack', useTime: 'CANNON', codes: ['A', 'M', 'P', 'Q', 'S', '*'], rarity: 'common', shape: LANE, onHit: { paralyze: true } },
+  recov10: { id: 'recov10', power: null, kind: 'support', useTime: 'RECOVER', codes: ['A', 'C', 'E', 'G', 'L', '*'], rarity: 'common', shape: { t: 'self' }, heal: 10 },
+  recov30: { id: 'recov30', power: null, kind: 'support', useTime: 'RECOVER', codes: ['B', 'D', 'F', 'H', 'M', '*'], rarity: 'common', shape: { t: 'self' }, heal: 30 },
   recover50: {
     id: 'recover50',
     power: null,
     kind: 'support',
     useTime: 'RECOVER',
-    codes: ['A', 'C', 'E', 'G', 'L'],
+    codes: ['C', 'E', 'G', 'I', 'N', '*'],
     rarity: 'uncommon',
     shape: { t: 'self' },
     heal: 50,
   },
-  mcannon: { id: 'mcannon', power: 120, kind: 'attack', useTime: 'CANNON', codes: ['K', 'L', 'M', 'N', 'O'], rarity: 'rare', shape: LANE },
-  airshot: { id: 'airshot', power: 20, kind: 'attack', useTime: 'CANNON', codes: ['*'], rarity: 'common', shape: LANE, onHit: { push: true } },
-  vgun: {
-    id: 'vgun', power: 30, kind: 'attack', useTime: 'CANNON', codes: ['D', 'E', 'L', 'M', 'S'], rarity: 'common',
-    shape: { t: 'lane', around: [{ x: -1, y: -1 }, { x: 1, y: -1 }] },
-  },
-  sidegun: {
-    id: 'sidegun', power: 30, kind: 'attack', useTime: 'CANNON', codes: ['A', 'G', 'H', 'R', 'S'], rarity: 'common',
-    shape: { t: 'lane', around: [{ x: -1, y: 0 }, { x: 1, y: 0 }] },
-  },
-  spreader: { id: 'spreader', power: 30, kind: 'attack', useTime: 'CANNON', codes: ['M', 'N', 'O', 'P', 'Q'], rarity: 'uncommon', shape: { t: 'lane', around: RING } },
-  lilbomb: {
-    id: 'lilbomb', power: 50, kind: 'attack', useTime: 'BOMB', codes: ['B', 'G', 'L', 'O', 'T'], rarity: 'common',
-    shape: { t: 'lob', depth: 3, area: [{ x: -1, y: 0 }, { x: 0, y: 0 }, { x: 1, y: 0 }] },
-  },
-  crosbomb: {
-    id: 'crosbomb', power: 60, kind: 'attack', useTime: 'BOMB', codes: ['B', 'G', 'L', 'O', 'V'], rarity: 'uncommon',
-    shape: { t: 'lob', depth: 3, area: [{ x: 0, y: 0 }, { x: -1, y: 0 }, { x: 1, y: 0 }, { x: 0, y: -1 }, { x: 0, y: 1 }] },
-  },
-  shockwave: { id: 'shockwave', power: 60, kind: 'attack', useTime: 'CANNON', codes: ['C', 'D', 'J', 'L', 'M'], rarity: 'common', shape: { t: 'wave' } },
-  quake1: {
-    id: 'quake1', power: 90, kind: 'attack', useTime: 'BOMB', codes: ['A', 'B', 'Q', 'R', 'S'], rarity: 'uncommon',
-    shape: { t: 'lob', depth: 3, area: SPOT }, onHit: { panel: 'crack' },
-  },
-  zapring: { id: 'zapring', power: 20, kind: 'attack', useTime: 'CANNON', codes: ['A', 'B', 'C', 'D', 'E'], rarity: 'common', shape: LANE, onHit: { paralyze: true } },
-  recov10: { id: 'recov10', power: null, kind: 'support', useTime: 'RECOVER', codes: ['A', 'C', 'E', 'G', 'L'], rarity: 'common', shape: { t: 'self' }, heal: 10 },
-  recov80: { id: 'recov80', power: null, kind: 'support', useTime: 'RECOVER', codes: ['A', 'C', 'E', 'G', 'L'], rarity: 'rare', shape: { t: 'self' }, heal: 80 },
-  invis: { id: 'invis', power: null, kind: 'support', useTime: 'RECOVER', codes: ['*'], rarity: 'uncommon', shape: { t: 'self' }, invis: true },
-  crack: { id: 'crack', ...FIELD_CHIP, codes: ['A', 'B', 'C', '*'], rarity: 'common', field: 'crackRow' },
-  geddon1: { id: 'geddon1', ...FIELD_CHIP, codes: ['F', 'H', 'J', 'L', 'N'], rarity: 'uncommon', field: 'crackAll' },
-  geddon2: { id: 'geddon2', ...FIELD_CHIP, codes: ['E', 'G', 'I', 'K', 'M'], rarity: 'rare', field: 'breakEnemy' },
-  steal: { id: 'steal', ...FIELD_CHIP, codes: ['A', 'L', 'S', '*'], rarity: 'uncommon', field: 'steal' },
-  repair: { id: 'repair', ...FIELD_CHIP, codes: ['A', 'B', 'C', 'D', '*'], rarity: 'common', field: 'repair' },
-  rockcube: { id: 'rockcube', ...FIELD_CHIP, codes: ['*'], rarity: 'common', field: 'rock' },
+  recov80: { id: 'recov80', power: null, kind: 'support', useTime: 'RECOVER', codes: ['D', 'F', 'H', 'J', 'O', '*'], rarity: 'rare', shape: { t: 'self' }, heal: 80 },
+  invis: { id: 'invis', power: null, kind: 'support', useTime: 'RECOVER', codes: ['B', 'E', 'F', 'R', 'S', '*'], rarity: 'uncommon', shape: { t: 'self' }, invis: true },
+  geddon1: { id: 'geddon1', ...FIELD_CHIP, codes: ['D', 'J', 'M', 'O', 'S', '*'], rarity: 'uncommon', field: 'crackAll' },
+  geddon2: { id: 'geddon2', ...FIELD_CHIP, codes: ['F', 'H', 'N', 'O', 'W'], rarity: 'rare', field: 'breakEnemy' },
+  areagrab: { id: 'areagrab', ...FIELD_CHIP, codes: ['E', 'L', 'R', 'S', 'Y', '*'], rarity: 'uncommon', field: 'areaGrab' },
+  panlgrab: { id: 'panlgrab', ...FIELD_CHIP, codes: ['A', 'H', 'L', 'S', 'Y', '*'], rarity: 'common', field: 'grabPanel' },
+  panlout1: { id: 'panlout1', ...FIELD_CHIP, codes: ['A', 'B', 'D', 'L', 'S', '*'], rarity: 'common', field: 'breakAhead' },
+  panlout3: { id: 'panlout3', ...FIELD_CHIP, codes: ['C', 'E', 'N', 'R', 'Y'], rarity: 'uncommon', field: 'breakRowAhead' },
+  repair: { id: 'repair', ...FIELD_CHIP, codes: ['A', 'C', 'D', 'F', 'S', '*'], rarity: 'common', field: 'repair' },
+  rockcube: { id: 'rockcube', ...FIELD_CHIP, codes: ['A', 'C', 'E', 'H', 'R', '*'], rarity: 'common', field: 'rock' },
 };

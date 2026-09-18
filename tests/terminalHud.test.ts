@@ -67,7 +67,7 @@ describe('terminalMode', () => {
     expect(terminalMode('TITLE', 'ACTION')).toBe('MENU');
     expect(terminalMode('PAUSED', 'PAUSED')).toBe('MENU');
     expect(terminalMode('BATTLE', 'ACTION')).toBe('BATTLE');
-    expect(terminalMode('REWARD', 'ACTION')).toBe('CHIP_SELECT');
+    expect(terminalMode('PATH', 'ACTION')).toBe('MENU');
     expect(terminalMode('BATTLE', 'BATTLE_INTRO')).toBe('TRANSITION');
     expect(terminalMode('BATTLE', 'BATTLE_WON')).toBe('TRANSITION');
   });

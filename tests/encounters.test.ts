@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { ELITE_STEPS, RUN_STEPS } from '../src/app/run';
 import { DEFAULT_TUNING, mergeTuning, secondsToTicks, tuning } from '../src/config/tuning';
 import { ENEMY_SEEDS } from '../src/data/enemies';
 import { debugEncounter, encounterById, ENCOUNTERS } from '../src/data/encounters';
@@ -36,11 +37,36 @@ describe('encounters', () => {
     }
   });
 
+  it('stays gentle early: level 1 only before step 7', () => {
+    for (const e of ENCOUNTERS.filter((x) => x.tier !== 'boss' && x.minDepth < 7)) {
+      if (e.tier === 'normal') expect(e.enemies.every((s) => (s.level ?? 1) === 1), e.id).toBe(true);
+      expect(e.enemies.length, e.id).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it('never uses level 3', () => {
+    for (const e of ENCOUNTERS) {
+      expect(e.enemies.every((s) => (s.level ?? 1) !== 3), e.id).toBe(true);
+    }
+  });
+
+  it('has an encounter for every step and tier the run asks for', () => {
+    for (let d = 1; d < RUN_STEPS; d++) {
+      const tier = ELITE_STEPS.includes(d) ? 'elite' : 'normal';
+      expect(ENCOUNTERS.some((e) => e.tier === tier && e.minDepth <= d && d <= e.maxDepth)).toBe(true);
+    }
+  });
+
+  it('the boss encounter is exactly one Monolith', () => {
+    const boss = encounterById('boss')!;
+    expect(boss.enemies).toEqual([{ kind: 'monolith', x: 1, y: 0, level: 1 }]);
+  });
+
   it('cover every depth of every tier', () => {
     for (let depth = 1; depth <= 9; depth++) {
       const normal = ENCOUNTERS.filter((e) => e.tier === 'normal' && e.minDepth <= depth && depth <= e.maxDepth);
       expect(normal.length, `normal ${depth}`).toBeGreaterThanOrEqual(3);
-      if (depth >= 3) {
+      if (ELITE_STEPS.includes(depth)) {
         const elite = ENCOUNTERS.filter((e) => e.tier === 'elite' && e.minDepth <= depth && depth <= e.maxDepth);
         expect(elite.length, `elite ${depth}`).toBeGreaterThanOrEqual(1);
       }
@@ -63,13 +89,10 @@ describe('Monolith', () => {
       encounter: encounterById('boss'),
       skipIntro: true,
       // Long ACTION runs: the Custom Screen would open itself and freeze the tick.
-      cheats: { god: true, aiEnabled: true, buster: false },
+      cheats: { god: true, aiEnabled: true },
     });
     w.chips.attack = [];
     const boss = w.enemies.find((e) => e.kind === 'monolith') as Monolith;
-    // Keep the escort out of the way.
-    const escort = w.enemies.find((e) => e.kind !== 'monolith')!;
-    escort.paralyze(T(999));
     return { w, boss };
   }
 

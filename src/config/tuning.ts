@@ -17,11 +17,6 @@ export const DEFAULT_TUNING = {
     PLAYER_FLINCH_TIME: 0.4,
     PLAYER_IFRAMES: 2.0,
   },
-  /** Auto Buster (roguelite spec §2): a weak instant shot down the player's column. */
-  buster: {
-    BUSTER_INTERVAL: 1.0,
-    BUSTER_DAMAGE: 1,
-  },
   /** Panels (roguelite spec §3). */
   field: {
     PANEL_RESTORE_TIME: 10,
@@ -61,7 +56,7 @@ export const DEFAULT_TUNING = {
     MET_RECOVERY: 1.5,
   },
   canodron: {
-    CANO_HP: 50,
+    CANO_HP: 60,
     CANO_DMG: 10,
     CANO_CURSOR_STEP: 0.15,
     CANO_FIRE_DELAY: 0.3,
@@ -70,7 +65,7 @@ export const DEFAULT_TUNING = {
   },
   spiker: {
     SPK_HP: 90,
-    SPK_DMG: 20,
+    SPK_DMG: 30,
     SPK_WARP_INTERVAL: 0.8,
     SPK_WARPS_MIN: 2,
     SPK_WARPS_MAX: 4,
@@ -79,10 +74,10 @@ export const DEFAULT_TUNING = {
     SPK_ATTACK_TIME: 0.2,
     SPK_RECOVERY: 1.5,
   },
-  /** Roguelite viruses (roguelite spec §5.2). HP and damage: MMBN1; timings: [оценка]. */
+  /** Roguelite viruses (roguelite spec §5.2). HP and damage: MMBN3; timings: [оценка]. */
   hopzap: {
     HOP_HP: 40,
-    HOP_DMG: 20,
+    HOP_DMG: 15,
     HOP_MOVE_INTERVAL: 0.6,
     HOP_TELEGRAPH: 0.5,
     HOP_RING_STEP: 0.2,
@@ -91,7 +86,7 @@ export const DEFAULT_TUNING = {
   },
   bladdy: {
     BLD_HP: 90,
-    BLD_DMG: 80,
+    BLD_DMG: 30,
     BLD_MOVE_INTERVAL: 0.8,
     BLD_TELEGRAPH: 0.6,
     BLD_ATTACK_TIME: 0.25,
@@ -107,7 +102,7 @@ export const DEFAULT_TUNING = {
   },
   helmhead: {
     HELM_HP: 80,
-    HELM_DMG: 30,
+    HELM_DMG: 60,
     HELM_CLOSED: 2.0,
     HELM_TELEGRAPH: 0.6,
     HELM_FLIGHT: 0.6,
@@ -121,17 +116,9 @@ export const DEFAULT_TUNING = {
     FIN_DASH_STEP: 0.08,
     FIN_RECOVERY: 1.5,
   },
-  punchy: {
-    PUN_HP: 60,
-    PUN_DMG: 30,
-    PUN_CHECK: 0.4,
-    PUN_TELEGRAPH: 0.4,
-    PUN_ATTACK_TIME: 0.2,
-    PUN_RECOVERY: 1.5,
-  },
   /** Act boss (roguelite spec §5.3); all values [оценка]. */
   monolith: {
-    MONO_HP: 600,
+    MONO_HP: 400,
     MONO_MOVE_INTERVAL: 1.2,
     MONO_ATTACK_INTERVAL: 2.5,
     MONO_TELEGRAPH: 0.8,
@@ -148,7 +135,6 @@ export const DEFAULT_TUNING = {
     HIT_FLASH: 0.1,
     IFRAME_BLINK_HZ: 15,
     CANNON_TRACER_TIME: 0.18,
-    BUSTER_TRACER_TIME: 0.08,
     SLASH_TIME: 0.15,
     EXPLOSION_TIME: 0.3,
     HEAL_FX_TIME: 0.5,
@@ -172,11 +158,11 @@ export const DEFAULT_TUNING = {
   /** Battle field look, "CRT Occult Vector" (docs/BATTLE_VISUAL.md §9). */
   battleVisual: {
     /** Camera pitch below the horizon and vertical field of view, degrees. */
-    VIEW_PITCH: 38,
-    VIEW_FOV: 50,
+    VIEW_PITCH: 41,
+    VIEW_FOV: 44,
     /** Share of the CRT frame the field may fill. */
     /** Leaves the top band of the picture to the HUD (spec §8). */
-    VIEW_FILL: 0.86,
+    VIEW_FILL: 1,
     /** Gap between cell outlines (share of a cell). */
     CELL_GAP: 0.08,
     /** Brightness of idle grid lines (dithered below 1). */
@@ -207,30 +193,29 @@ export const DEFAULT_TUNING = {
     TERMINAL_ASPECT_MIN: 0.42,
     TERMINAL_ASPECT_MAX: 0.62,
     /** Vertical shares of the terminal, top to bottom (spec §3; sum = 1). */
-    LAYOUT_TOP: 0.02,
-    LAYOUT_CRT: 0.6,
+    LAYOUT_CRT: 0.64,
     LAYOUT_RAIL: 0.15,
     /** Draw queue strip under the rail; it takes its height from the deck. */
-    LAYOUT_DRAW: 0.04,
-    LAYOUT_DECK: 0.19,
+    LAYOUT_DRAW: 0.035,
+    LAYOUT_DECK: 0.175,
     /** Horizontal bezel around the CRT glass, as a share of terminal width on each side. */
-    CRT_MARGIN_X: 0.05,
-    /** Mount tilts toward the player, degrees (spec §3.1). */
-    DECK_TILT: 18,
-    RAIL_TILT: 8,
+    CRT_MARGIN_X: 0.015,
+    /** The control panel (rail, draw strip, trackball, pause) is one plane; its top edge leans away from the player, degrees. */
+    CONTROL_TILT: 25,
+    /** The screen leans back about its lower edge, degrees (spec §3.1). */
     CRT_TILT: 4,
     /** A trackball gesture that never travelled counts as a chip shot within this long (spec §10.2). */
     TAP_MAX_TIME: 0.35,
-    /** Pause key zone width at the right end of the top bar (share of terminal width). */
+    /** Pause key in the bottom-left corner of the control panel: zone side, share of terminal width. */
     PAUSE_ZONE_W: 0.16,
     /** Vertical field of view, degrees. */
-    CAMERA_FOV: 22,
+    CAMERA_FOV: 34,
     /** Glass effects, moderate: the picture must stay readable (spec §5.3). */
     CRT_SCANLINES: 0.3,
     CRT_CURVATURE: 0.06,
     CRT_BLEED: 0.35,
     /** Previous-frame persistence; 0 disables the ghosting pass entirely. */
-    CRT_GHOSTING: 0.2,
+    CRT_GHOSTING: 0.58,
     CRT_FLASH_TIME: 0.12,
     /** RGB phosphor triads across the texel columns. */
     CRT_PHOSPHOR: 0.25,
@@ -251,11 +236,11 @@ export const DEFAULT_TUNING = {
     /** Button travel when pressed, world units. */
     BUTTON_PRESS_DEPTH: 0.12,
     /** Ball diameter and red ring outer diameter, shares of the body width (spec §10.1). */
-    BALL_W: 0.28,
-    RING_W: 0.38,
+    BALL_W: 0.25,
+    RING_W: 0.34,
     RING_SEGMENTS: 16,
     /** Trackball rotation per CSS px of drag, radians. */
-    TRACKBALL_ROLL_GAIN: 0.02,
+    TRACKBALL_ROLL_GAIN: 0.0067,
     /** Trackball spin decay, 1/s. */
     TRACKBALL_FRICTION: 6,
     /** Key spring: stiffness (1/s²) and damping (1/s); low damping gives the release overshoot. */
@@ -268,8 +253,6 @@ export const DEFAULT_TUNING = {
     ARROW_FLASH_TIME: 0.15,
     /** Red blink of the CHIP SELECT ring / EXECUTE when refused. */
     DENIED_BLINK_TIME: 0.4,
-    /** Camera tilt toward the mouse pointer (fine pointers only), degrees. */
-    PARALLAX_DEG: 1.5,
     /** CHIP SELECT glow pulse when the gauge is full. */
     GLOW_PULSE_HZ: 1.5,
     /** Chip rail (spec §9.2): active chip lift and push (world units), animation times (s). */
@@ -279,9 +262,7 @@ export const DEFAULT_TUNING = {
     /** Brightness of the light the active cartridge throws on its own slot. */
     CHIP_ACTIVE_GLOW: 0.7,
     EJECT_LIFT_TIME: 0.06,
-    EJECT_TIME: 0.34,
-    BURN_STAGGER: 0.04,
-    BURN_TIME: 0.6,
+    EJECT_TIME: 0.55,
     LOAD_TIME: 0.18,
     LOAD_STAGGER: 0.05,
     CONTACT_FLASH_TIME: 0.2,

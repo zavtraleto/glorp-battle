@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { Screen } from '../src/app/session';
 import { en } from '../src/i18n/en';
+import { t } from '../src/i18n';
 import { FloaterList, floaterFromEvent } from '../src/terminal/crt/floaters';
 import { PLAYER_ID } from '../src/sim/player';
-import { formatTime, menuFor, menuItemAt, menuLayout, moveCursor, type MenuSession } from '../src/terminal/crt/menuModel';
+import { formatTime, menuFor, menuItemAt, menuLayout, moveCursor, type MenuSession, type MenuSpec } from '../src/terminal/crt/menuModel';
 import { glyphRows, measureText, wrapText } from '../src/terminal/crt/pixelFont';
 
 function session(screen: Screen, over: Partial<MenuSession> = {}): MenuSession {
@@ -13,20 +14,13 @@ function session(screen: Screen, over: Partial<MenuSession> = {}): MenuSession {
   ];
   return {
     screen,
-    generation: 7,
     depth: 4,
     steps: 10,
     hp: 60,
     maxHp: 100,
     folderSize: 21,
-    path: [
-      { kind: 'normal', enemies: 2 },
-      { kind: 'elite', enemies: 3 },
-    ],
-    legacyChoices: [
-      { defId: 'cannon', code: 'A', count: 3 },
-      { defId: 'mcannon', code: 'K', count: 1, legacyGen: 6 },
-    ],
+    next: { kind: 'normal', enemies: 2 },
+    healed: false,
     results,
     lastResult: results[1],
     totalTime: 42.5,
@@ -34,33 +28,42 @@ function session(screen: Screen, over: Partial<MenuSession> = {}): MenuSession {
   };
 }
 
-const manyChoices = Array.from({ length: 12 }, (_, i) => ({ defId: 'recover50' as const, code: 'A' as const, count: i + 1 }));
-
 describe('menuFor', () => {
-  it('has no menu in battle or on the reward tray', () => {
+  it('has no menu in battle', () => {
     expect(menuFor(session('BATTLE'))).toBeNull();
-    expect(menuFor(session('REWARD'))).toBeNull();
   });
 
   it('builds each screen with its actions', () => {
-    expect(menuFor(session('TITLE'))!.items.map((i) => i.action)).toEqual(['start']);
-    expect(menuFor(session('PATH'))!.items.map((i) => i.action)).toEqual(['path:0', 'path:1']);
+    expect(menuFor(session('TITLE'))!.items.map((i) => i.action)).toEqual(['start:basic', 'start:field', 'start:random']);
+    expect(menuFor(session('PATH'))!.items.map((i) => i.action)).toEqual(['fight']);
     expect(menuFor(session('PAUSED'))!.items.map((i) => i.action)).toEqual(['resume', 'abandon']);
-    expect(menuFor(session('LEGACY'))!.items.map((i) => i.action)).toEqual(['legacy:0', 'legacy:1']);
+    expect(menuFor(session('GAME_OVER'))!.items.map((i) => i.action)).toEqual(['title']);
     expect(menuFor(session('COMPLETE'))!.items.map((i) => i.action)).toEqual(['title']);
   });
 
-  it('shows the step, the generation and the path', () => {
-    expect(menuFor(session('TITLE'))!.subtitle).toBe('Generation 07');
+  it('GAME OVER shows the step reached and one Title item', () => {
+    const spec = menuFor(session('GAME_OVER'))!;
+    expect(spec.tone).toBe('lose');
+    expect(spec.title).toBe(t('banner.gameOver'));
+    expect(spec.rows[0]).toEqual([t('result.step'), '04/10']);
+    expect(spec.items).toEqual([{ label: t('btn.title'), action: 'title' }]);
+  });
+
+  it('shows the step and the next battle', () => {
     const path = menuFor(session('PATH'))!;
     expect(path.title).toBe('STEP 04/10');
+    expect(path.subtitle).toBe('Battle x2');
     expect(path.rows).toEqual([
       ['HP', '60/100'],
       ['Folder', '21'],
     ]);
-    expect(path.items.map((i) => i.label)).toEqual(['Battle x2', 'Elite x3']);
-    expect(menuFor(session('PATH', { path: [{ kind: 'boss', enemies: 2 }] }))!.items[0]!.label).toBe('Boss');
-    expect(menuFor(session('LEGACY'))!.items.map((i) => i.label)).toEqual(['Cannon A x3', 'M-Cannon K G06']);
+    expect(path.items.map((i) => i.label)).toEqual(['Fight']);
+    expect(menuFor(session('PATH', { next: { kind: 'boss', enemies: 2 } }))!.subtitle).toBe('Boss');
+    expect(path.hint).toEqual(['HP restores every 3 battles.']);
+    // After a heal the next battle stays in the subtitle; the note joins the hint.
+    const healed = menuFor(session('PATH', { healed: true, depth: 10, next: { kind: 'boss', enemies: 1 } }))!;
+    expect(healed.subtitle).toBe('Boss');
+    expect(healed.hint).toEqual(['HP restored', 'HP restores every 3 battles.']);
     expect(menuFor(session('COMPLETE'))!.rows).toEqual([
       ['Battles', '2'],
       ['Total time', '0:42.50'],
@@ -79,6 +82,19 @@ describe('menuFor', () => {
   });
 });
 
+/** A synthetic long list, to test scrolling independently of any one screen's item count. */
+function manySpec(): MenuSpec {
+  return {
+    key: 'many',
+    tone: 'info',
+    title: 'MANY',
+    subtitle: null,
+    rows: [],
+    items: Array.from({ length: 12 }, (_, i) => ({ label: `Item ${i}`, action: 'title' as const })),
+    hint: [],
+  };
+}
+
 describe('menu cursor and layout', () => {
   it('moves the cursor inside the list', () => {
     expect(moveCursor(0, 'up', 3)).toBe(0);
@@ -88,9 +104,9 @@ describe('menu cursor and layout', () => {
   });
 
   it('fits every screen on a 240×320 CRT without overlaps', () => {
-    const specs = (['TITLE', 'PATH', 'PAUSED', 'LEGACY', 'COMPLETE'] as const).map((screen) => ({
+    const specs = (['TITLE', 'PATH', 'PAUSED', 'GAME_OVER', 'COMPLETE'] as const).map((screen) => ({
       screen,
-      spec: menuFor(session(screen, screen === 'LEGACY' ? { legacyChoices: manyChoices } : {}))!,
+      spec: menuFor(session(screen))!,
     }));
     for (const { screen, spec } of specs) {
       const l = menuLayout(spec, 240, 320, spec.items.length - 1);
@@ -110,7 +126,7 @@ describe('menu cursor and layout', () => {
   });
 
   it('scrolls a long list with the cursor', () => {
-    const spec = menuFor(session('LEGACY', { legacyChoices: manyChoices }))!;
+    const spec = manySpec();
     expect(menuLayout(spec, 240, 320, 0).items.map((i) => i.index)).toEqual([0, 1, 2, 3, 4]);
     const mid = menuLayout(spec, 240, 320, 7);
     expect(mid.items.map((i) => i.index)).toContain(7);
@@ -123,7 +139,7 @@ describe('menu cursor and layout', () => {
     const r = l.items[1]!.rect;
     expect(menuItemAt(l, r.x + 5, r.y + 5)).toBe(1);
     expect(menuItemAt(l, 1, 1)).toBe(-1);
-    const spec = menuFor(session('LEGACY', { legacyChoices: manyChoices }))!;
+    const spec = manySpec();
     const scrolled = menuLayout(spec, 240, 320, 11);
     const first = scrolled.items[0]!.rect;
     expect(menuItemAt(scrolled, first.x + 5, first.y + 5)).toBe(7);

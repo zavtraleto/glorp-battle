@@ -4,13 +4,11 @@ import type { GameState } from '../sim/world';
 // Terminal mode (TERMINAL.md §4) and status lamps (§7.3). Derived every
 // frame from the session and the world, never stored.
 
-export type TerminalMode = 'BATTLE' | 'CHIP_SELECT' | 'MENU' | 'TRANSITION';
+export type TerminalMode = 'BATTLE' | 'MENU' | 'TRANSITION';
 
 export function terminalMode(screen: Screen, state: GameState): TerminalMode {
-  // The reward is picked on the chip tray (roguelite spec §6.3).
-  if (screen === 'REWARD') return 'CHIP_SELECT';
   if (screen !== 'BATTLE') return 'MENU';
-  // Chip selection happens inside ACTION now; the tray only serves rewards.
+  // Chip selection happens inside ACTION (on the rail).
   if (state === 'ACTION') return 'BATTLE';
   return 'TRANSITION';
 }

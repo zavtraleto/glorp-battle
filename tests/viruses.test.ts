@@ -16,7 +16,7 @@ let nextId = 600;
 
 /** Battle 1 with its enemies replaced by one virus; the player stands at (1,4). */
 function arena(kind: EnemyKind, x: number, y: number): { w: World; e: Enemy } {
-  const w = new World({ seed: 3, battleIndex: 1, skipIntro: true, cheats: { god: false, aiEnabled: true, buster: false } });
+  const w = new World({ seed: 3, battleIndex: 1, skipIntro: true, cheats: { god: false, aiEnabled: true } });
   for (const old of w.enemies) w.occupancy.remove(old.id, old.x, old.y);
   w.enemies = [];
   w.chips.attack = [];
@@ -103,24 +103,5 @@ describe('Finnik', () => {
     until(w, () => !e.offField, 3);
     expect(Math.abs(e.x - 1) + Math.abs(e.y)).toBe(1);
     expect(w.occupancy.get(e.x, e.y)).toBe(e.id);
-  });
-});
-
-describe('Punchy', () => {
-  it('waits while the player keeps away from the border', () => {
-    const { w, e } = arena('punchy', 0, 0);
-    for (let i = 0; i < T(2); i++) step(w);
-    expect([e.x, e.y]).toEqual([0, 0]);
-    expect(w.player.hitsTaken).toBe(0);
-  });
-
-  it('jumps in front of the player at the border, punches and knocks back', () => {
-    const { w, e } = arena('punchy', 0, 0);
-    step(w, 'up');
-    expect(w.player.y).toBe(3);
-    until(w, () => w.player.hitsTaken > 0, 3);
-    expect([e.x, e.y]).toEqual([1, 2]);
-    expect(w.player.hp).toBe(100 - tuning.punchy.PUN_DMG);
-    expect(w.player.y).toBe(4);
   });
 });

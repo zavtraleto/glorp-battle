@@ -9,7 +9,6 @@ import { mountCorners, screenBounds } from '../src/terminal/interaction/project'
 import { PointerRouter, type RouterHandlers } from '../src/terminal/interaction/pointerRouter';
 import {
   computeLayout,
-  cssToWorld,
   glassRect,
   railZoneSlots,
   rectContains,
@@ -25,7 +24,7 @@ beforeEach(() => {
 describe('terminal tuning', () => {
   it('has layout shares that sum to 1', () => {
     const t = tuning.terminal;
-    expect(t.LAYOUT_TOP + t.LAYOUT_CRT + t.LAYOUT_RAIL + t.LAYOUT_DRAW + t.LAYOUT_DECK).toBeCloseTo(1, 5);
+    expect(t.LAYOUT_CRT + t.LAYOUT_RAIL + t.LAYOUT_DRAW + t.LAYOUT_DECK).toBeCloseTo(1, 5);
   });
 
   it('keeps the CRT render target portrait', () => {
@@ -62,9 +61,25 @@ describe('terminal layout', () => {
   it('fills a typical phone viewport edge to edge', () => {
     const l = computeLayout(390, 844); // aspect 0.462, inside [0.42, 0.62]
     expect(l.body).toEqual({ x: 0, y: 0, w: 390, h: 844 });
-    expect(l.top.y).toBe(0);
+    // No top bar: the CRT starts at the top edge.
+    expect(l.crt.y).toBe(0);
     expect(l.deck.y + l.deck.h).toBeCloseTo(844, 5);
-    expect(l.top.h + l.crt.h + l.rail.h + l.draw.h + l.deck.h).toBeCloseTo(844, 5);
+    expect(l.crt.h + l.rail.h + l.draw.h + l.deck.h).toBeCloseTo(844, 5);
+  });
+
+  it('gives the CRT almost the whole width of a phone', () => {
+    const l = computeLayout(390, 844);
+    const aspect = tuning.terminal.CRT_RES_W / tuning.terminal.CRT_RES_H;
+    expect(glassRect(l, aspect).w).toBeGreaterThan(390 * 0.9);
+  });
+
+  it('puts the pause key in the bottom-left corner of the deck, clear of the ball', () => {
+    const l = computeLayout(390, 844);
+    const p = l.zones.pause;
+    expect(p.x).toBe(l.body.x);
+    expect(p.y + p.h).toBeCloseTo(l.deck.y + l.deck.h, 5);
+    const ringLeft = l.body.x + l.body.w / 2 - (l.body.w * tuning.terminal.RING_W) / 2;
+    expect(p.x + p.w).toBeLessThan(ringLeft);
   });
 
   it('pillarboxes a wide desktop viewport', () => {
@@ -84,7 +99,7 @@ describe('terminal layout', () => {
   it('normalises layout shares that do not sum to 1', () => {
     tuning.terminal.LAYOUT_DECK = 0.6; // sum > 1
     const l = computeLayout(390, 844);
-    expect(l.top.h + l.crt.h + l.rail.h + l.draw.h + l.deck.h).toBeCloseTo(844, 5);
+    expect(l.crt.h + l.rail.h + l.draw.h + l.deck.h).toBeCloseTo(844, 5);
   });
 
   // The trackball is the only battle organ, so it owns the whole deck (spec §11.2).
@@ -163,8 +178,8 @@ describe('terminal layout', () => {
     expect(w.cy).toBeCloseTo(0, 5);
     expect(w.w).toBeCloseTo(TERMINAL_WORLD_WIDTH, 5);
     expect(w.h).toBeCloseTo(l.worldHeight, 5);
-    const top = rectToWorld(l, l.top);
-    expect(top.cy).toBeGreaterThan(0); // y up
+    const crt = rectToWorld(l, l.crt);
+    expect(crt.cy).toBeGreaterThan(0); // y up
   });
 });
 
@@ -388,17 +403,6 @@ describe('PointerRouter hover and gate', () => {
     router.hoverAt(tb.x + tb.w / 2, tb.y + tb.h / 2);
     router.hoverAt(layout.crt.x + 5, layout.crt.y + 100);
     expect(seen).toEqual(['trackball', null]);
-  });
-});
-
-describe('cssToWorld', () => {
-  it('inverts rectToWorld for points', () => {
-    const l = computeLayout(390, 844);
-    const r = l.zones.trackball;
-    const w = rectToWorld(l, r);
-    const p = cssToWorld(l, r.x + r.w / 2, r.y + r.h / 2);
-    expect(p.x).toBeCloseTo(w.cx, 6);
-    expect(p.y).toBeCloseTo(w.cy, 6);
   });
 });
 

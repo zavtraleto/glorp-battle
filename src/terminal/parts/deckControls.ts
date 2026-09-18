@@ -58,18 +58,18 @@ export class DeckControls {
     this.statics.clear();
     this.keys.pause.object.clear();
 
-    const top = rectToWorld(layout, layout.top);
+    // The key sits in the middle of its corner zone on the control panel.
     const pz = rectToWorld(layout, layout.zones.pause);
-    const pSize = Math.min(pz.w * 0.5, top.h * 0.62);
+    const pSize = Math.min(pz.w, pz.h) * 0.5;
     const frame = new THREE.Mesh(this.unitBox, this.frameMat);
-    frame.position.set(pz.cx, top.cy, 0.02);
+    frame.position.set(pz.cx, pz.cy, 0.02);
     frame.scale.set(pSize * 1.2, pSize * 1.2, 0.06);
     this.statics.add(frame);
 
     const cap = new THREE.Mesh(this.capGeo, this.pauseMat);
     cap.scale.set(pSize, pSize, pSize * 0.3);
     this.keys.pause.object.add(cap);
-    this.keys.pause.place(pz.cx, top.cy, 0.08, 0.05);
+    this.keys.pause.place(pz.cx, pz.cy, 0.08, 0.05);
 
     const icon = new THREE.Mesh(this.unitPlane, this.pauseIconMat);
     icon.scale.set(pSize * 0.6, pSize * 0.6, 1);

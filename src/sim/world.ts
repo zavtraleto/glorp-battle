@@ -10,7 +10,6 @@ import type { FolderChip } from './chips/chipSystem';
 import type { Attack, AttackContext } from './attacks/attack';
 import { PlayerBomb } from './attacks/bomb';
 import { Shockwave } from './attacks/shockwave';
-import { Buster } from './buster';
 import { Field } from './field';
 import { FieldObject, type ObjectKind } from './fieldObject';
 import { ChipSystem, type ChipInstance } from './chips/chipSystem';
@@ -39,8 +38,6 @@ export type GameState =
 export interface Cheats {
   god: boolean;
   aiEnabled: boolean;
-  /** Auto Buster; on unless false. */
-  buster?: boolean;
 }
 
 export interface WorldOptions {
@@ -79,7 +76,6 @@ export class World implements EnemyContext, AttackContext {
   state: GameState = 'BATTLE_INTRO';
   /** uiTick when the current state was entered. */
   stateTick = 0;
-  readonly buster = new Buster();
   readonly chips: ChipSystem;
 
   /** True while the current BATTLE_START phase should show the banner. */
@@ -118,7 +114,7 @@ export class World implements EnemyContext, AttackContext {
     this.rngFolder = root.fork('folder');
     this.rngAi = root.fork('ai');
     this.player = new Player(this.occupancy, this.field, options.playerHp);
-    this.chips = new ChipSystem(options.folder ?? 'mvp', this.rngFolder);
+    this.chips = new ChipSystem(options.folder ?? 'basic', this.rngFolder);
     this.spawnBattle();
     if (options.skipIntro) {
       this.chips.dealHand();
@@ -236,10 +232,6 @@ export class World implements EnemyContext, AttackContext {
     }
     this.events.push({ type: 'enemyShot', x, fromY, toY: ROWS });
     return ROWS;
-  }
-
-  pushPlayer(): boolean {
-    return this.player.alive && this.player.pushBack(this.tick);
   }
 
   paralyzePlayer(ticks: number): void {
@@ -396,12 +388,6 @@ export class World implements EnemyContext, AttackContext {
       if (on.paralyze) e.paralyze(secondsToTicks(tuning.chips.PARALYZE_TIME));
       if (on.push) e.pushBack(this);
     }
-    if (on.panel) {
-      for (const c of cells) {
-        if (on.panel === 'crack') this.field.crack(c.x, c.y);
-        else this.field.breakPanel(c.x, c.y, this.tick, !this.occupancy.isFree(c.x, c.y));
-      }
-    }
   }
 
   /** Starts the next queued chip if the player is free (no buffering, GDD §6.5). */
@@ -495,17 +481,28 @@ export class World implements EnemyContext, AttackContext {
     const free = (x: number, y: number) => this.occupancy.isFree(x, y);
     const p = this.player;
     switch (action) {
-      case 'crackRow':
-      case 'steal': {
+      case 'areaGrab': {
         const y = this.nearestEnemyRow();
         if (y < 0) return;
         for (let x = 0; x < COLS; x++) {
-          if (f.owner(x, y) !== 'enemy') continue;
-          if (action === 'crackRow') f.crack(x, y);
-          else if (free(x, y)) f.setOwner(x, y, 'player', this.tick);
+          if (f.owner(x, y) === 'enemy' && free(x, y)) f.setOwner(x, y, 'player', this.tick);
         }
         return;
       }
+      case 'grabPanel':
+        for (let y = p.y - 1; y >= 0; y--) {
+          if (f.owner(p.x, y) !== 'enemy') continue;
+          if (free(p.x, y)) f.setOwner(p.x, y, 'player', this.tick);
+          return;
+        }
+        return;
+      case 'breakAhead':
+        if (p.y - 1 >= 0) f.breakPanel(p.x, p.y - 1, this.tick, !free(p.x, p.y - 1));
+        return;
+      case 'breakRowAhead':
+        if (p.y - 1 < 0) return;
+        for (let x = 0; x < COLS; x++) f.breakPanel(x, p.y - 1, this.tick, !free(x, p.y - 1));
+        return;
       case 'crackAll':
       case 'breakEnemy':
       case 'repair':
@@ -523,18 +520,6 @@ export class World implements EnemyContext, AttackContext {
       case 'rock':
         if (f.owner(p.x, p.y - 1) === 'player') this.placeObject('rock', p.x, p.y - 1, 'player');
         return;
-    }
-  }
-
-  private fireBuster(): void {
-    const p = this.player;
-    const y = this.firstTargetRow(p.x, p.y);
-    this.events.push({ type: 'busterShot', x: p.x, fromY: p.y, toY: y });
-    const e = y >= 0 ? this.enemyAt(p.x, y) : null;
-    if (e) this.damageEnemy(e, tuning.buster.BUSTER_DAMAGE);
-    else if (y >= 0) {
-      const o = this.objectAt(p.x, y);
-      if (o) this.damageObject(o, tuning.buster.BUSTER_DAMAGE);
     }
   }
 
@@ -617,8 +602,6 @@ export class World implements EnemyContext, AttackContext {
     p.updateMovement(this.tick, moves, input.held);
     this.updateActiveChip();
     this.updateBombs();
-    const busy = p.flinched || p.actionTicks > 0 || p.paralyzeTicks > 0 || this.activeChip !== null;
-    if (this.buster.tick(busy || this.cheats.buster === false)) this.fireBuster();
 
     for (const e of this.enemies) {
       if (!e.alive) continue;
@@ -644,8 +627,12 @@ export class World implements EnemyContext, AttackContext {
       this.setState('BATTLE_WON');
     } else if (this.chips.refreshDue) {
       // Refresh is an event, not a pause: the battle does not stop for it (GDD §5).
+      const reshufflesBefore = this.chips.reshuffles;
       this.chips.refresh();
       this.events.push({ type: 'handRefreshed', refreshes: this.chips.refreshes });
+      if (this.chips.reshuffles > reshufflesBefore) {
+        this.events.push({ type: 'drawReshuffled', count: this.chips.reshuffles });
+      }
     }
   }
 

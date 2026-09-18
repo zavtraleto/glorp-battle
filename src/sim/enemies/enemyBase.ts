@@ -14,7 +14,7 @@ import type { SimEvent } from '../events';
 // IDLE → MOVE → TELEGRAPH → ATTACK → RECOVERY → IDLE; DEAD is terminal.
 // Hits never interrupt an enemy's action; they only flash.
 
-export type EnemyKind = 'mettik' | 'canodron' | 'spiker' | 'hopzap' | 'bladdy' | 'rattik' | 'helmhead' | 'finnik' | 'punchy' | 'monolith';
+export type EnemyKind = 'mettik' | 'canodron' | 'spiker' | 'hopzap' | 'bladdy' | 'rattik' | 'helmhead' | 'finnik' | 'monolith';
 export type EnemyState = 'IDLE' | 'MOVE' | 'TELEGRAPH' | 'ATTACK' | 'RECOVERY' | 'DEAD';
 
 /** What an enemy may read or do during its update. */
@@ -33,8 +33,6 @@ export interface EnemyContext {
   shootLane(x: number, fromY: number, damage: number): number;
   /** Damages the player on (x, y) once per attack record. */
   hitPlayerAt(attack: Attack, x: number, y: number, damage: number): boolean;
-  /** Knocks the player one row back (toward their edge); false if blocked. */
-  pushPlayer(): boolean;
   paralyzePlayer(ticks: number): void;
   placeObject(kind: ObjectKind, x: number, y: number, side: Side): FieldObject | null;
   /** Mettik turn-taking (GDD §8.2). */

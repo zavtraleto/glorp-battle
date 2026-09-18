@@ -1,13 +1,13 @@
-import type { Screen } from '../../app/session';
-import type { LegacyChoice, PathChoice } from '../../app/session';
-import { chipName, t } from '../../i18n';
+import { HEAL_EVERY, type StartFolder } from '../../app/run';
+import type { NextBattle, Screen } from '../../app/session';
+import { t } from '../../i18n';
 import type { Rect } from '../layout';
 import { GLYPH_H, measureText, wrapText } from './pixelFont';
 
 // Session menus drawn inside the CRT (TERMINAL.md §8). Pure: what each screen
 // shows, where it goes on the CRT canvas, and cursor movement.
 
-export type MenuAction = 'start' | 'resume' | 'abandon' | 'title' | `path:${number}` | `legacy:${number}`;
+export type MenuAction = `start:${StartFolder}` | 'resume' | 'abandon' | 'title' | 'fight';
 export type MenuTone = 'title' | 'info' | 'win' | 'lose';
 
 export interface MenuItem {
@@ -34,14 +34,13 @@ export interface MenuResult {
 
 export interface MenuSession {
   screen: Screen;
-  generation: number;
   depth: number;
   steps: number;
   hp: number;
   maxHp: number;
   folderSize: number;
-  path: readonly PathChoice[];
-  legacyChoices: readonly LegacyChoice[];
+  next: NextBattle;
+  healed: boolean;
   results: readonly MenuResult[];
   lastResult: MenuResult | undefined;
   totalTime: number;
@@ -58,14 +57,9 @@ export function formatTime(seconds: number): string {
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
-function pathLabel(p: PathChoice): string {
-  if (p.kind === 'boss') return t('path.boss');
-  return t(p.kind === 'elite' ? 'path.elite' : 'path.normal', { n: p.enemies });
-}
-
-function legacyLabel(c: LegacyChoice): string {
-  const tail = c.legacyGen !== undefined ? t('legacy.gen', { n: pad2(c.legacyGen) }) : `x${c.count}`;
-  return `${chipName(c.defId)} ${c.code} ${tail}`;
+function pathLabel(next: NextBattle): string {
+  if (next.kind === 'boss') return t('path.boss');
+  return t(next.kind === 'elite' ? 'path.elite' : 'path.normal', { n: next.enemies });
 }
 
 export function menuFor(s: MenuSession): MenuSpec | null {
@@ -73,26 +67,31 @@ export function menuFor(s: MenuSession): MenuSpec | null {
   switch (s.screen) {
     case 'TITLE':
       return {
-        key: `title-${s.generation}`,
+        key: 'title',
         tone: 'title',
         title: t('game.title'),
-        subtitle: t('title.generation', { n: pad2(s.generation) }),
+        subtitle: t('title.subtitle'),
         rows: [],
-        items: [{ label: t('title.start'), action: 'start' }],
+        items: [
+          { label: t('title.basic'), action: 'start:basic' },
+          { label: t('title.field'), action: 'start:field' },
+          { label: t('title.random'), action: 'start:random' },
+        ],
         hint: [t('title.hintTerminal'), t('title.hintKeys')],
       };
     case 'PATH':
       return {
-        key: `path-${s.generation}-${s.depth}-${s.results.length}`,
+        key: `path-${s.depth}-${s.results.length}`,
         tone: 'info',
         title: step,
-        subtitle: t('path.subtitle'),
+        subtitle: pathLabel(s.next),
         rows: [
           [t('result.hpNow'), `${s.hp}/${s.maxHp}`],
           [t('result.folder'), String(s.folderSize)],
         ],
-        items: s.path.map((p, i) => ({ label: pathLabel(p), action: `path:${i}` as const })),
-        hint: [t('path.hint')],
+        items: [{ label: t('path.fight'), action: 'fight' }],
+        // The heal note goes above the hint so the next battle stays visible.
+        hint: [...(s.healed ? [t('path.healed')] : []), t('path.hint', { n: HEAL_EVERY })],
       };
     case 'PAUSED':
       return {
@@ -107,22 +106,26 @@ export function menuFor(s: MenuSession): MenuSpec | null {
         ],
         hint: [],
       };
-    case 'LEGACY':
+    case 'GAME_OVER':
       return {
-        key: `legacy-${s.generation}-${s.depth}-${s.results.length}`,
+        key: `gameover-${s.depth}-${s.results.length}`,
         tone: 'lose',
         title: t('banner.gameOver'),
-        subtitle: t('legacy.subtitle'),
-        rows: [],
-        items: s.legacyChoices.map((c, i) => ({ label: legacyLabel(c), action: `legacy:${i}` as const })),
+        subtitle: null,
+        rows: [
+          [t('result.step'), `${pad2(s.depth)}/${pad2(s.steps)}`],
+          [t('result.total'), formatTime(s.totalTime)],
+          [t('result.hits'), String(s.results.reduce((n, x) => n + x.hits, 0))],
+        ],
+        items: [{ label: t('btn.title'), action: 'title' }],
         hint: [],
       };
     case 'COMPLETE':
       return {
-        key: `complete-${s.generation}`,
+        key: `complete-${s.results.length}`,
         tone: 'win',
         title: t('banner.runClear'),
-        subtitle: t('title.generation', { n: pad2(s.generation) }),
+        subtitle: null,
         rows: [
           [t('result.battles'), String(s.results.length)],
           [t('result.total'), formatTime(s.totalTime)],
@@ -133,7 +136,6 @@ export function menuFor(s: MenuSession): MenuSpec | null {
         hint: [],
       };
     case 'BATTLE':
-    case 'REWARD':
       return null;
   }
 }

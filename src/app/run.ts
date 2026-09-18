@@ -1,29 +1,26 @@
 import { tuning } from '../config/tuning';
 import { deriveSeed, Rng } from '../core/rng';
-import { CHIPS, type ChipDef, type ChipId, type Rarity } from '../data/chips';
+import { randomFolder } from './randomFolder';
 import { ENCOUNTERS, type Encounter, type EncounterTier } from '../data/encounters';
-import { STARTER_FOLDER } from '../data/starterFolder';
-import type { FolderChip } from '../sim/chips/chipSystem';
-import type { LegacyChip } from './legacyStore';
+import { folderChips, type FolderChip } from '../sim/chips/chipSystem';
 
-// One roguelite run (roguelite spec §6.1–6.3): ten steps, a choice of 2–3
-// battles per step, a boss at the end, a chip reward after each win. HP and
-// the folder carry over. Pure and deterministic from the seed.
+// One roguelite run (roguelite spec §6.1–6.3, decision Д): ten battles in a
+// fixed linear order, no path choice, a boss at the end. HP and the folder
+// carry over between battles; HP fully restores after winning steps 3, 6 and
+// 9 (decision Г). Pure and deterministic from the seed.
 
 export const RUN_STEPS = 10;
-/** Elite battles show up from this step on. [оценка] */
-export const ELITE_FROM = 3;
-/** Chance of an elite option once allowed. [оценка] */
-export const ELITE_CHANCE = 0.35;
+/** Full heal after every this many won steps (decision 2026-09-18). */
+export const HEAL_EVERY = 3;
+/** Steps that are elite battles. [оценка] */
+export const ELITE_STEPS: readonly number[] = [5, 8];
 
-const WEIGHTS: Record<'normal' | 'elite', Record<Rarity, number>> = {
-  normal: { common: 70, uncommon: 25, rare: 5 },
-  elite: { common: 0, uncommon: 75, rare: 25 },
-};
+/** Starting folder choice (roguelite spec §4.4); the title offers three buttons. */
+export type StartFolder = 'basic' | 'field' | 'random';
 
-export interface PathOption {
-  kind: EncounterTier;
-  encounter: Encounter;
+/** Chips for a starting folder id: BASIC and FIELD are fixed data, RANDOM is rolled. */
+export function startFolder(id: StartFolder, rng: Rng): FolderChip[] {
+  return id === 'random' ? randomFolder(rng) : folderChips(id);
 }
 
 export interface RunStep {
@@ -35,127 +32,75 @@ export interface RunStep {
 export class Run {
   depth = 1;
   hp: number;
-  readonly maxHp: number;
+  readonly maxHp = tuning.player.PLAYER_MAX_HP;
   readonly folder: FolderChip[];
-  options: PathOption[] = [];
-  current: PathOption | null = null;
+  encounter: Encounter;
+  /** True right after a heal step (PATH screen line), cleared on the next `finishBattle`. */
+  healed = false;
   readonly history: RunStep[] = [];
 
   constructor(
     readonly seed: number,
-    readonly generation: number,
-    legacy: LegacyChip | null,
+    readonly folderId: StartFolder,
   ) {
-    this.maxHp = tuning.player.PLAYER_MAX_HP;
     this.hp = this.maxHp;
-    this.folder = STARTER_FOLDER.map((c) => ({ ...c }));
-    if (legacy) this.folder.push({ defId: legacy.defId, code: legacy.code, legacyGen: legacy.gen });
-    this.options = this.makeOptions();
+    this.folder = startFolder(folderId, new Rng(deriveSeed(seed, 'folder')));
+    this.encounter = this.pick();
   }
 
   get complete(): boolean {
     return this.history.some((s) => s.kind === 'boss' && s.won);
   }
 
-  private rng(stream: string): Rng {
-    return new Rng(deriveSeed(this.seed, `${stream}/${this.depth}`));
+  private tierAt(depth: number): EncounterTier {
+    if (depth >= RUN_STEPS) return 'boss';
+    return ELITE_STEPS.includes(depth) ? 'elite' : 'normal';
   }
 
-  /** Encounters for a tier at this depth, never one already offered now; unplayed ones first. */
-  private pool(tier: EncounterTier, offered: ReadonlySet<string>): Encounter[] {
+  /**
+   * Seeded pick from the encounters that fit this step's tier and depth;
+   * unplayed ones first. Falls back to the other non-boss tier, then to any
+   * non-boss encounter that fits, so thin encounter data never crashes.
+   */
+  private pick(): Encounter {
+    const tier = this.tierAt(this.depth);
     const played = new Set(this.history.map((s) => s.id));
-    const fits = ENCOUNTERS.filter(
-      (e) => e.tier === tier && e.minDepth <= this.depth && this.depth <= e.maxDepth && !offered.has(e.id),
-    );
-    const fresh = fits.filter((e) => !played.has(e.id));
-    return fresh.length > 0 ? fresh : fits;
-  }
-
-  private makeOptions(): PathOption[] {
-    if (this.depth >= RUN_STEPS) return this.pool('boss', new Set()).slice(0, 1).map((encounter) => ({ kind: 'boss', encounter }));
-    const rng = this.rng('path');
-    const offered = new Set<string>();
-    const count = rng.int(2, 3);
-    const options: PathOption[] = [];
-    for (let i = 0; i < count; i++) {
-      let kind: EncounterTier = this.depth >= ELITE_FROM && rng.next() < ELITE_CHANCE ? 'elite' : 'normal';
-      let pool = this.pool(kind, offered);
-      if (pool.length === 0 && kind === 'elite') {
-        kind = 'normal';
-        pool = this.pool(kind, offered);
-      }
-      if (pool.length === 0) continue;
-      const encounter = rng.pick(pool);
-      offered.add(encounter.id);
-      options.push({ kind, encounter });
+    const fitsTier = (t: EncounterTier) =>
+      ENCOUNTERS.filter((e) => e.tier === t && e.minDepth <= this.depth && this.depth <= e.maxDepth);
+    let fits = fitsTier(tier);
+    if (fits.length === 0 && tier !== 'boss') {
+      fits = fitsTier(tier === 'elite' ? 'normal' : 'elite');
     }
-    return options;
-  }
-
-  choose(index: number): PathOption {
-    const option = this.options[Math.max(0, Math.min(this.options.length - 1, index))] as PathOption;
-    this.current = option;
-    return option;
+    if (fits.length === 0) {
+      fits = ENCOUNTERS.filter((e) => e.tier !== 'boss' && e.minDepth <= this.depth && this.depth <= e.maxDepth);
+    }
+    const fresh = fits.filter((e) => !played.has(e.id));
+    const rng = new Rng(deriveSeed(this.seed, `path/${this.depth}`));
+    return rng.pick(fresh.length > 0 ? fresh : fits);
   }
 
   battleSeed(): number {
     return deriveSeed(this.seed, `battle/${this.depth}`);
   }
 
-  /** Three different chips for the current step's reward. */
-  rewardChoices(): FolderChip[] {
-    const rng = this.rng('reward');
-    const elite = this.current?.kind === 'elite';
-    const all = Object.values(CHIPS);
-    const picked: ChipDef[] = [];
-    for (let i = 0; i < 3; i++) {
-      const weights = WEIGHTS[elite && i === 0 ? 'elite' : 'normal'];
-      const pool = all.filter((d) => !picked.includes(d));
-      const total = pool.reduce((s, d) => s + weights[d.rarity], 0);
-      let roll = rng.next() * total;
-      let chosen = pool[pool.length - 1] as ChipDef;
-      for (const d of pool) {
-        roll -= weights[d.rarity];
-        if (roll < 0) {
-          chosen = d;
-          break;
-        }
-      }
-      picked.push(chosen);
-    }
-    return picked.map((d) => ({ defId: d.id, code: rng.pick(d.codes) }));
-  }
-
-  addChip(chip: FolderChip): void {
-    this.folder.push({ ...chip });
-  }
-
-  /** Records the battle; a win moves on to the next step. */
+  /** Records the battle; a win moves to the next step and heals every HEAL_EVERY steps. */
   finishBattle(won: boolean, hpLeft: number): void {
-    if (!this.current) return;
-    this.history.push({ id: this.current.encounter.id, kind: this.current.kind, won });
+    this.history.push({ id: this.encounter.id, kind: this.encounter.tier, won });
     this.hp = Math.max(0, Math.min(this.maxHp, hpLeft));
-    this.current = null;
+    this.healed = false;
     if (!won || this.complete) return;
+    if (this.depth % HEAL_EVERY === 0) {
+      this.hp = this.maxHp;
+      this.healed = true;
+    }
     this.depth++;
-    this.options = this.makeOptions();
+    this.encounter = this.pick();
   }
 
-  /** Debug: jump to a step with fresh options. */
+  /** Debug: jump to a step with a freshly picked encounter. */
   jumpTo(depth: number): void {
     this.depth = Math.max(1, Math.min(RUN_STEPS, Math.floor(depth)));
-    this.current = null;
-    this.options = this.makeOptions();
-  }
-
-  /** Folder chips grouped for display: id, code, count, legacy mark. */
-  folderSummary(): { defId: ChipId; code: FolderChip['code']; count: number; legacyGen?: number; index: number }[] {
-    const out: { defId: ChipId; code: FolderChip['code']; count: number; legacyGen?: number; index: number }[] = [];
-    this.folder.forEach((c, index) => {
-      const same = out.find((o) => o.defId === c.defId && o.code === c.code && o.legacyGen === c.legacyGen);
-      if (same) same.count++;
-      else out.push({ defId: c.defId, code: c.code, count: 1, legacyGen: c.legacyGen, index });
-    });
-    return out;
+    this.healed = false;
+    this.encounter = this.pick();
   }
 }

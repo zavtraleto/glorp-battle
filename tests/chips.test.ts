@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_TUNING, mergeTuning, secondsToTicks, tuning } from '../src/config/tuning';
 import type { Command } from '../src/core/input/commands';
-import { CHIPS } from '../src/data/chips';
+import { CHIPS, type ChipId } from '../src/data/chips';
 import { FOLDERS, FOLDER_SIZE } from '../src/data/folders';
 import { isValidSelection, type ChipKey } from '../src/sim/chips/selection';
 import { Mettik } from '../src/sim/enemies/mettik';
 import { World } from '../src/sim/world';
+import { chipDesc, chipName } from '../src/i18n';
+import { CHIP_ICONS } from '../src/terminal/chips/chipIcons';
 
 const DT = 1 / 60;
 const T = (s: number) => secondsToTicks(s);
@@ -17,15 +19,31 @@ beforeEach(() => {
 const k = (defId: ChipKey['defId'], code: ChipKey['code']): ChipKey => ({ defId, code });
 
 describe('folders', () => {
-  it('contain exactly 30 chips', () => {
-    for (const folder of Object.values(FOLDERS)) {
-      expect(folder.reduce((n, e) => n + e.count, 0)).toBe(FOLDER_SIZE);
+  it('the starting folders contain exactly 30 chips', () => {
+    for (const id of ['basic', 'field'] as const) {
+      expect(FOLDERS[id].reduce((n, e) => n + e.count, 0)).toBe(FOLDER_SIZE);
     }
   });
 
   it('use codes the chip can have', () => {
     for (const folder of Object.values(FOLDERS)) {
       for (const e of folder) expect(CHIPS[e.chip].codes, `${e.chip} ${e.code}`).toContain(e.code);
+    }
+  });
+});
+
+describe('chip catalogue (MMBN3)', () => {
+  it.each([
+    ['cannon', 40], ['hicannon', 60], ['mcannon', 80], ['longsword', 80], ['minibomb', 50], ['shockwave', 60], ['zapring', 20],
+  ] as const)('%s deals %i (MMBN3)', (id, power) => {
+    expect(CHIPS[id].power).toBe(power);
+  });
+
+  it('every chip has a name, a description and an icon', () => {
+    for (const id of Object.keys(CHIPS) as ChipId[]) {
+      expect(chipName(id).length).toBeLessThanOrEqual(9);
+      expect(chipDesc(id).length).toBeGreaterThan(0);
+      expect(CHIP_ICONS[id]).toBeDefined();
     }
   });
 });
@@ -115,6 +133,29 @@ describe('battle flow', () => {
     run(w, 1);
     expect(w.state).toBe('ACTION');
     expect(w.chips.usedSinceRefresh).toBe(0);
+    expect(w.chips.hand.every((c) => c !== null)).toBe(true);
+  });
+
+  it('reshuffles spent chips and emits drawReshuffled once the draw pile runs dry', () => {
+    // Small folder so a couple of Refreshes exhaust the draw pile.
+    const smallFolder = Array.from({ length: 8 }, () => ({ defId: 'cannon' as const, code: 'A' as const }));
+    const w = new World({
+      seed: 1,
+      battleIndex: 1,
+      folder: smallFolder,
+      skipIntro: true,
+      cheats: { god: true, aiEnabled: false },
+    });
+    for (const e of w.enemies) e.hp = 100_000;
+    let seenReshuffled = false;
+    for (let i = 0; i < 2000 && w.chips.reshuffles === 0; i++) {
+      const slot = w.chips.hand.findIndex((c, j) => c !== null && w.chips.canSelect(j));
+      if (slot >= 0 && w.chips.attack.length === 0) step(w, [{ type: 'selectChip', slot }]);
+      step(w, [{ type: 'useChip' }]);
+      for (const e of w.drainEvents()) if (e.type === 'drawReshuffled') seenReshuffled = true;
+    }
+    expect(w.chips.reshuffles).toBe(1);
+    expect(seenReshuffled).toBe(true);
     expect(w.chips.hand.every((c) => c !== null)).toBe(true);
   });
 

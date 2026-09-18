@@ -2,7 +2,7 @@ import type { ChipCode } from '../../data/chips';
 
 // Colour of a chip's code letter (spec §9.1). Codes decide which chips can be
 // selected together, so the letter carries a colour of its own and matching
-// codes are spotted across the tray without reading them.
+// codes are spotted across the rail without reading them.
 
 /** Wildcard: neutral steel, deliberately outside the letter hues. */
 const WILDCARD = '#d8d8d8';

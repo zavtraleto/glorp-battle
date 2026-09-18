@@ -5,8 +5,6 @@ import {
   cursorKind,
   organForKey,
   shotAvailability,
-  stepFocus,
-  trayKeyAction,
   type ControlWorld,
 } from '../src/terminal/controlRules';
 
@@ -70,7 +68,6 @@ describe('control rules', () => {
     expect(acceptsPress('TRANSITION', 'trackball')).toBe(false);
     expect(acceptsPress('TRANSITION', 'pause')).toBe(true);
     expect(acceptsPress('MENU', 'trackball')).toBe(true);
-    expect(acceptsPress('CHIP_SELECT', 'trackball')).toBe(false);
   });
 
   // There is no EXECUTE key any more: the shot keys animate the ball (spec §11.2).
@@ -95,27 +92,5 @@ describe('control rules', () => {
     expect(cursorKind(true, false)).toBe('point');
     expect(cursorKind(true, true)).toBe('press');
     expect(cursorKind(false, true)).toBe('press');
-  });
-});
-
-describe('tray keyboard', () => {
-  it('maps keys to tray actions', () => {
-    expect(trayKeyAction('ArrowRight', 5)).toEqual({ kind: 'focus', delta: 1 });
-    expect(trayKeyAction('KeyW', 5)).toEqual({ kind: 'focus', delta: -5 });
-    expect(trayKeyAction('Space', 5)).toEqual({ kind: 'pick' });
-    expect(trayKeyAction('Backspace', 5)).toEqual({ kind: 'removeLast' });
-    expect(trayKeyAction('Enter', 5)).toEqual({ kind: 'ok' });
-    expect(trayKeyAction('KeyR', 5)).toEqual({ kind: 'add' });
-    expect(trayKeyAction('KeyZ', 5)).toBeNull();
-  });
-
-  it('moves the focus over filled slots only', () => {
-    const filled = [true, false, true, true, false, true];
-    expect(stepFocus(0, 1, filled)).toBe(2);
-    expect(stepFocus(3, 1, filled)).toBe(5);
-    expect(stepFocus(5, 1, filled)).toBe(5);
-    expect(stepFocus(0, -1, filled)).toBe(0);
-    expect(stepFocus(0, 5, filled)).toBe(5);
-    expect(stepFocus(3, -5, filled)).toBe(3);
   });
 });

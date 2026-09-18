@@ -1,132 +1,103 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_TUNING, mergeTuning, tuning } from '../src/config/tuning';
-import { clearLegacy, LEGACY_KEY, loadLegacy, saveLegacy, type LegacyStorage } from '../src/app/legacyStore';
-import { ELITE_FROM, Run, RUN_STEPS } from '../src/app/run';
-import { CHIPS } from '../src/data/chips';
-import { STARTER_FOLDER } from '../src/data/starterFolder';
-import { ChipSystem } from '../src/sim/chips/chipSystem';
-import { Rng } from '../src/core/rng';
+import { ELITE_STEPS, HEAL_EVERY, Run, RUN_STEPS } from '../src/app/run';
+import { ENCOUNTERS } from '../src/data/encounters';
+import { FOLDER_SIZE } from '../src/data/folders';
 
 beforeEach(() => mergeTuning(tuning, JSON.parse(JSON.stringify(DEFAULT_TUNING))));
 
-/** Plays a run to the end, always taking the first option and winning. */
-function playThrough(run: Run): string[] {
-  const kinds: string[] = [];
-  for (let i = 0; i < RUN_STEPS; i++) {
-    const o = run.choose(0);
-    kinds.push(o.kind);
-    run.finishBattle(true, run.hp);
-  }
-  return kinds;
-}
-
-class MemoryStorage implements LegacyStorage {
-  data = new Map<string, string>();
-  getItem(k: string) {
-    return this.data.get(k) ?? null;
-  }
-  setItem(k: string, v: string) {
-    this.data.set(k, v);
-  }
-  removeItem(k: string) {
-    this.data.delete(k);
-  }
+/** True when at least one non-boss encounter of this tier fits this depth
+ * (Task 8 will guarantee coverage; until then some depths may lack a tier). */
+function tierFits(tier: 'normal' | 'elite', depth: number): boolean {
+  return ENCOUNTERS.some((e) => e.tier === tier && e.minDepth <= depth && depth <= e.maxDepth);
 }
 
 describe('Run', () => {
-  it('is deterministic for a seed', () => {
-    const a = new Run(42, 1, null);
-    const b = new Run(42, 1, null);
-    const ids = (r: Run) => r.options.map((o) => o.encounter.id);
-    expect(ids(a)).toEqual(ids(b));
-    a.choose(0);
-    b.choose(0);
-    expect(a.rewardChoices()).toEqual(b.rewardChoices());
+  it('is ten battles in a fixed order for a seed, boss last, no repeats', () => {
+    const a = new Run(5, 'basic');
+    const b = new Run(5, 'basic');
+    const ids: string[] = [];
+    for (let d = 1; d <= RUN_STEPS; d++) {
+      expect(a.encounter.id).toBe(b.encounter.id);
+      ids.push(a.encounter.id);
+      a.finishBattle(true, a.hp);
+      b.finishBattle(true, b.hp);
+    }
+    expect(ids[RUN_STEPS - 1]).toBe('boss');
+    expect(new Set(ids).size).toBe(RUN_STEPS);
   });
 
-  it('has ten steps with 2–3 options, no early elites, and a boss at the end', () => {
-    for (const seed of [1, 2, 3, 4, 5]) {
-      const run = new Run(seed, 1, null);
-      for (let depth = 1; depth < RUN_STEPS; depth++) {
-        expect(run.options.length).toBeGreaterThanOrEqual(2);
-        expect(run.options.length).toBeLessThanOrEqual(3);
-        if (depth < ELITE_FROM) expect(run.options.every((o) => o.kind === 'normal')).toBe(true);
-        const ids = run.options.map((o) => o.encounter.id);
-        expect(new Set(ids).size).toBe(ids.length);
-        run.choose(0);
-        run.finishBattle(true, run.hp);
+  it('puts elites on ELITE_STEPS only', () => {
+    const r = new Run(9, 'basic');
+    for (let d = 1; d < RUN_STEPS; d++) {
+      const wantElite = ELITE_STEPS.includes(d);
+      // Assert the tier rule only where the encounter data can satisfy it
+      // (Task 8 rebuilds encounter data and adds a coverage test).
+      if (tierFits(wantElite ? 'elite' : 'normal', d)) {
+        expect(r.encounter.tier).toBe(wantElite ? 'elite' : 'normal');
       }
-      expect(run.options.map((o) => o.kind)).toEqual(['boss']);
-      run.choose(0);
-      run.finishBattle(true, run.hp);
-      expect(run.complete).toBe(true);
+      r.finishBattle(true, r.hp);
     }
   });
 
   it('does not repeat encounters it has already played when others fit', () => {
-    const run = new Run(9, 1, null);
-    const kinds = playThrough(run);
-    expect(kinds[kinds.length - 1]).toBe('boss');
-    const ids = run.history.map((s) => s.id);
+    const r = new Run(9, 'basic');
+    const ids: string[] = [];
+    for (let d = 1; d <= RUN_STEPS; d++) {
+      ids.push(r.encounter.id);
+      r.finishBattle(true, r.hp);
+    }
+    expect(ids[ids.length - 1]).toBe('boss');
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('starts from the starter folder plus the legacy chip', () => {
-    expect(new Run(1, 1, null).folder).toHaveLength(STARTER_FOLDER.length);
-    expect(STARTER_FOLDER).toHaveLength(18);
-    const run = new Run(1, 8, { defId: 'mcannon', code: 'K', gen: 7 });
-    expect(run.folder).toHaveLength(19);
-    expect(run.folder[18]).toEqual({ defId: 'mcannon', code: 'K', legacyGen: 7 });
-    const chips = new ChipSystem(run.folder, new Rng(1));
-    expect(chips.chips.find((c) => c.defId === 'mcannon')?.legacyGen).toBe(7);
+  it('starts from the starter folder', () => {
+    expect(new Run(1, 'basic').folder).toHaveLength(FOLDER_SIZE);
   });
 
-  it('offers three different chips with valid codes; elite rewards lead with a rare find', () => {
-    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
-      const run = new Run(seed, 1, null);
-      run.choose(0);
-      const r = run.rewardChoices();
-      expect(r).toHaveLength(3);
-      expect(new Set(r.map((c) => c.defId)).size).toBe(3);
-      for (const c of r) expect(CHIPS[c.defId].codes).toContain(c.code);
-      run.jumpTo(5);
-      run.current = { kind: 'elite', encounter: run.options[0]!.encounter };
-      expect(CHIPS[run.rewardChoices()[0]!.defId].rarity).not.toBe('common');
-    }
+  it('carries HP and heals fully after steps 3, 6 and 9', () => {
+    const r = new Run(1, 'basic');
+    r.finishBattle(true, 40); // step 1
+    expect(r.hp).toBe(40);
+    r.finishBattle(true, 30); // step 2
+    r.finishBattle(true, 20); // step 3 → heal
+    expect(r.hp).toBe(r.maxHp);
+    expect(r.healed).toBe(true);
+    r.finishBattle(true, 70); // step 4
+    expect(r.healed).toBe(false);
+    expect(r.hp).toBe(70);
   });
 
-  it('carries HP and grows the folder; a loss ends the climb', () => {
-    const run = new Run(3, 1, null);
-    run.choose(0);
-    run.finishBattle(true, 64);
-    expect(run.hp).toBe(64);
-    expect(run.depth).toBe(2);
-    run.addChip({ defId: 'spreader', code: 'M' });
-    expect(run.folder).toHaveLength(19);
-    run.choose(1);
-    run.finishBattle(false, 0);
-    expect(run.depth).toBe(2);
-    expect(run.history.map((s) => s.won)).toEqual([true, false]);
-  });
-});
-
-describe('legacy store', () => {
-  it('saves and loads the generation and the chip', () => {
-    const s = new MemoryStorage();
-    expect(loadLegacy(s)).toEqual({ generation: 1, chip: null });
-    saveLegacy({ generation: 7, chip: { defId: 'steal', code: 'S', gen: 6 } }, s);
-    expect(loadLegacy(s)).toEqual({ generation: 7, chip: { defId: 'steal', code: 'S', gen: 6 } });
-    clearLegacy(s);
-    expect(loadLegacy(s).generation).toBe(1);
+  it('HEAL_EVERY matches the decision (every 3 won steps)', () => {
+    expect(HEAL_EVERY).toBe(3);
   });
 
-  it('survives broken data and a missing store', () => {
-    const s = new MemoryStorage();
-    s.setItem(LEGACY_KEY, '{nope');
-    expect(loadLegacy(s)).toEqual({ generation: 1, chip: null });
-    s.setItem(LEGACY_KEY, JSON.stringify({ generation: 3, chip: { defId: 'nochip', code: 'A', gen: 1 } }));
-    expect(loadLegacy(s)).toEqual({ generation: 3, chip: null });
-    expect(loadLegacy(null)).toEqual({ generation: 1, chip: null });
-    expect(() => saveLegacy({ generation: 2, chip: null }, null)).not.toThrow();
+  it('a loss ends the climb without advancing the step', () => {
+    const r = new Run(3, 'basic');
+    r.finishBattle(true, 64);
+    expect(r.hp).toBe(64);
+    expect(r.depth).toBe(2);
+    expect(r.folder).toHaveLength(FOLDER_SIZE);
+    r.finishBattle(false, 0);
+    expect(r.depth).toBe(2);
+    expect(r.history.map((s) => s.won)).toEqual([true, false]);
+    expect(r.complete).toBe(false);
+  });
+
+  it('jumpTo re-picks the encounter for the target step', () => {
+    const r = new Run(1, 'basic');
+    r.jumpTo(RUN_STEPS);
+    expect(r.depth).toBe(RUN_STEPS);
+    expect(r.encounter.id).toBe('boss');
+    r.jumpTo(1);
+    expect(r.depth).toBe(1);
+    expect(r.encounter.tier).toBe('normal');
+  });
+
+  it('jumpTo clears the heal note', () => {
+    const r = new Run(1, 'basic');
+    r.healed = true;
+    r.jumpTo(5);
+    expect(r.healed).toBe(false);
   });
 });

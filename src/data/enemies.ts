@@ -13,7 +13,6 @@ export const ENEMY_SEEDS: Record<EnemyKind, number> = {
   rattik: 77,
   helmhead: 91,
   finnik: 103,
-  punchy: 118,
   monolith: 131,
 };
 
@@ -28,6 +27,6 @@ export interface LevelStats {
 
 export const ENEMY_LEVELS: Record<EnemyLevel, LevelStats> = {
   1: { hp: 1, damage: 1, speed: 1 },
-  2: { hp: 2, damage: 2, speed: 1.2 },
-  3: { hp: 3, damage: 3, speed: 1.35 },
+  2: { hp: 1.5, damage: 1.5, speed: 1.1 },
+  3: { hp: 2, damage: 2, speed: 1.2 },
 };

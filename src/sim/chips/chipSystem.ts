@@ -21,15 +21,14 @@ export interface ChipInstance {
   readonly defId: ChipId;
   readonly code: ChipCode;
   state: ChipState;
-  /** Generation of the player who left this chip (roguelite spec §6.4). */
-  readonly legacyGen?: number;
+  /** Serial of the draw that put this chip in the hand (0 = never drawn); a re-dealt chip gets a new one. */
+  deal: number;
 }
 
-/** A chip in a run's folder (roguelite spec §6.1). */
+/** A chip in a run's folder. */
 export interface FolderChip {
   defId: ChipId;
   code: ChipCode;
-  legacyGen?: number;
 }
 
 /** A debug folder as a flat chip list. */
@@ -44,7 +43,7 @@ export function chipDef(chip: ChipInstance): ChipDef {
 export class ChipSystem {
   /** Every chip of the folder, in folder order. */
   readonly chips: ChipInstance[] = [];
-  /** Shuffled draw order (shuffled once per battle). */
+  /** Draw order: shuffled once per battle, then reshuffled from spent chips when it runs dry. */
   private readonly drawPile: ChipInstance[];
   private drawIndex = 0;
   /** Hand slots; null = spent or the folder ran out. Length is HAND_SIZE. */
@@ -62,12 +61,19 @@ export class ChipSystem {
   usedSinceRefresh = 0;
   /** Completed Refreshes. */
   refreshes = 0;
+  /** Times the spent chips went back into the draw pile (GDD §7.5). */
+  reshuffles = 0;
+  /** Draws so far; each draw stamps its chip with the next serial. */
+  private deals = 0;
 
-  constructor(folder: FolderId | readonly FolderChip[], rng: Rng) {
+  constructor(
+    folder: FolderId | readonly FolderChip[],
+    private readonly rng: Rng,
+  ) {
     const list = typeof folder === 'string' ? folderChips(folder) : folder;
     let uid = 1;
     for (const c of list) {
-      this.chips.push({ uid: uid++, defId: c.defId, code: c.code, state: 'folder', legacyGen: c.legacyGen });
+      this.chips.push({ uid: uid++, defId: c.defId, code: c.code, state: 'folder', deal: 0 });
     }
     this.drawPile = rng.shuffle([...this.chips]);
     this.hand = new Array<ChipInstance | null>(tuning.chips.HAND_SIZE).fill(null);
@@ -91,11 +97,24 @@ export class ChipSystem {
   }
 
   private draw(): ChipInstance | null {
+    if (this.drawIndex >= this.drawPile.length) this.reshuffleSpent();
     const chip = this.drawPile[this.drawIndex];
     if (!chip) return null;
     this.drawIndex++;
     chip.state = 'hand';
+    chip.deal = ++this.deals;
     return chip;
+  }
+
+  /** Empty pile: every spent chip is shuffled back in (GDD §7.5). */
+  private reshuffleSpent(): void {
+    const spent = this.chips.filter((c) => c.state === 'used');
+    if (spent.length === 0) return;
+    for (const c of spent) c.state = 'folder';
+    this.drawPile.length = 0;
+    this.drawPile.push(...this.rng.shuffle(spent));
+    this.drawIndex = 0;
+    this.reshuffles++;
   }
 
   /** Fills the hand at the start of the battle (GDD §7.6). */

@@ -168,7 +168,8 @@ describe('refresh', () => {
     expect(s.hand[4]).toBe(keep);
   });
 
-  it('still resets the counter when the draw queue is empty', () => {
+  it('reshuffles spent chips back instead of leaving the queue empty', () => {
+    // The whole folder fits in one hand, so nothing is left in the draw pile.
     const s = sys(FIVE);
     for (let i = 0; i < tuning.chips.REFRESH_AT; i++) {
       s.toggleSelect(i);
@@ -176,7 +177,48 @@ describe('refresh', () => {
     }
     s.refresh();
     expect(s.usedSinceRefresh).toBe(0);
-    expect(s.drawRemaining).toBe(0);
-    expect(s.hand.filter((c) => c === null)).toHaveLength(tuning.chips.REFRESH_AT);
+    expect(s.reshuffles).toBe(1);
+    expect(s.hand.every((c) => c !== null)).toBe(true);
+    expect(s.count('used')).toBe(0);
+  });
+});
+
+describe('reshuffle', () => {
+  it('reshuffles spent chips into the draw pile when it runs dry', () => {
+    const folder = Array.from({ length: 6 }, () => ({ defId: 'cannon' as const, code: 'A' as const }));
+    const cs = new ChipSystem(folder, new Rng(1));
+    cs.dealHand(); // 5 in hand, 1 in the pile
+    for (let i = 0; i < 3; i++) {
+      cs.toggleSelect(i);
+      cs.takeNext();
+    }
+    cs.refresh(); // draws the last pile chip, then the 3 spent ones come back
+    expect(cs.hand.every((c) => c !== null)).toBe(true);
+    expect(cs.reshuffles).toBe(1);
+    expect(cs.count('used')).toBe(0);
+  });
+
+  it('gives a re-dealt chip a new deal serial', () => {
+    // One chip: firing it and refreshing reshuffles it straight back into slot 0.
+    const cs = new ChipSystem([chip('cannon', 'A')], new Rng(1));
+    cs.dealHand();
+    const first = cs.hand[0];
+    expect(first).not.toBeNull();
+    const deal = first?.deal ?? 0;
+    expect(deal).toBeGreaterThan(0);
+    cs.toggleSelect(0);
+    cs.takeNext();
+    cs.refresh();
+    expect(cs.reshuffles).toBe(1);
+    expect(cs.hand[0]?.uid).toBe(first?.uid);
+    expect(cs.hand[0]?.deal).toBeGreaterThan(deal);
+  });
+
+  it('keeps empty slots when nothing was spent yet', () => {
+    const folder = Array.from({ length: 3 }, () => ({ defId: 'cannon' as const, code: 'A' as const }));
+    const cs = new ChipSystem(folder, new Rng(1));
+    cs.dealHand();
+    expect(cs.hand.filter((c) => c === null)).toHaveLength(2);
+    expect(cs.reshuffles).toBe(0);
   });
 });

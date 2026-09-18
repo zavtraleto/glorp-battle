@@ -15,7 +15,7 @@ export const FACE_H = 88;
 /** Side of the cut corner, texels. Shared with the cartridge geometry. */
 export const FACE_CUT = 12;
 /** Bumped whenever the face design changes, so cached textures are not reused. */
-const FACE_GEN = 2;
+const FACE_GEN = 3;
 
 const GROUP_COLOR: Record<UseTimeGroup, { frame: string; backdrop: string }> = {
   CANNON: { frame: '#5f86ff', backdrop: '#1d2a4d' },
@@ -31,15 +31,13 @@ const COLOR = {
   power: '#ffd166',
   contact: '#c9a24a',
   contactShade: '#6b5424',
-  legacy: '#ff6b6b',
-  legacyBack: '#2a0d0d',
 };
 
 const ICON_SCALE = 2;
 const cache = new Map<string, THREE.CanvasTexture>();
 
-export function chipFaceTexture(defId: ChipId, code: ChipCode, legacyGen?: number): THREE.CanvasTexture {
-  const key = `${defId}:${code}:${legacyGen ?? ''}:${FACE_GEN}`;
+export function chipFaceTexture(defId: ChipId, code: ChipCode): THREE.CanvasTexture {
+  const key = `${defId}:${code}:${FACE_GEN}`;
   let tex = cache.get(key);
   if (tex) return tex;
 
@@ -97,14 +95,6 @@ export function chipFaceTexture(defId: ChipId, code: ChipCode, legacyGen?: numbe
   ctx.fillStyle = COLOR.card;
   ctx.fillRect(FACE_W - 18, rowY + 1, 12, 12);
   drawText(sink, code, FACE_W - 15, rowY + 4, 1, plaque);
-  // Legacy mark: the generation that left this chip (roguelite spec §6.4).
-  if (legacyGen !== undefined) {
-    const mark = `G${String(legacyGen).padStart(2, '0')}`;
-    const mx = Math.round((FACE_W - measureText(mark)) / 2) + 1;
-    ctx.fillStyle = COLOR.legacyBack;
-    ctx.fillRect(mx - 1, rowY + 2, measureText(mark) + 2, 9);
-    drawText(sink, mark, mx, rowY + 3, 1, COLOR.legacy);
-  }
 
   // Gold contacts.
   for (let i = 0; i < 7; i++) {

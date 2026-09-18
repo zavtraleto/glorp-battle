@@ -1,4 +1,4 @@
-import type { ChipCode, ChipId } from '../../data/chips';
+import type { ChipCode } from '../../data/chips';
 import type { MenuSpec } from './menuModel';
 
 // What the CRT HUD layer shows (spec §8). Everything the player needs lives on
@@ -42,17 +42,13 @@ export interface HudStatus {
 export interface HudModel {
   labels: HudLabel[];
   bars: HpBar[];
-  /** Battle status; null in menus and on the Custom Screen. */
+  /** Battle status; null in menus. */
   status: HudStatus | null;
-  /** Chip described on the Custom Screen (the focused tray chip). */
-  info: { defId: ChipId; code: ChipCode } | null;
   /** A session menu covers the whole CRT (TERMINAL.md §8). */
   menu: { spec: MenuSpec; cursor: number } | null;
-  /** Heading over the chip description (REWARD). */
-  title: string | null;
 }
 
-export const EMPTY_HUD: HudModel = { labels: [], bars: [], status: null, info: null, menu: null, title: null };
+export const EMPTY_HUD: HudModel = { labels: [], bars: [], status: null, menu: null };
 
 /**
  * Lit segments of a gauge. The last one lights only at a truly full gauge, so
@@ -66,13 +62,11 @@ export function gaugeSegments(value: number, total: number): number {
 /** Redraw key: changes whenever the drawn HUD would change. */
 export function hudKey(m: HudModel, blinkOn: boolean): string {
   return [
-    m.info ? `${m.info.defId}${m.info.code}` : '',
     m.status
       ? `${m.status.hp}${m.status.hpLow ? 'L' : ''}${m.status.hpHit ? (blinkOn ? 'H1' : 'H0') : ''}` +
         `:${m.status.gaugeLit}/${m.status.gaugeTotal}` +
         `${m.status.gaugeFull ? (blinkOn ? 'F1' : 'F0') : ''}:${m.status.chip ? m.status.chip.name + m.status.chip.code : '-'}`
       : '',
-    m.title ?? '',
     m.menu ? `${m.menu.spec.key}:${m.menu.cursor}:${blinkOn ? 1 : 0}` : '',
     m.labels.map((l) => `${l.text}@${Math.round(l.x)},${Math.round(l.y)}`).join(';'),
     m.bars.map((b) => `${b.filled}/${b.total}L${b.level}@${Math.round(b.x)},${Math.round(b.y)}`).join(';'),

@@ -1,13 +1,11 @@
 import * as THREE from 'three';
 import { tuning } from '../../config/tuning';
-import { CHIPS } from '../../data/chips';
-import { chipDesc, chipName, t } from '../../i18n';
+import { t } from '../../i18n';
 import { PALETTE } from '../../render/palette';
-import { CHIP_ICONS, ICON_PALETTE } from '../chips/chipIcons';
 import { blinkPhase } from '../terminalMode';
 import { hudKey, type HpBar, type HudLabel, type HudModel, type HudStatus, type LabelTone } from './hudModel';
 import { menuLayout, type MenuSpec, type MenuTone } from './menuModel';
-import { drawText, measureText, wrapText, type PixelSink } from './pixelFont';
+import { drawText, measureText, type PixelSink } from './pixelFont';
 
 // HUD layer of the CRT (TERMINAL.md §7.1): drawn at the CRT resolution with the
 // pixel font and composited over the battle by the CRT shader.
@@ -15,10 +13,6 @@ import { drawText, measureText, wrapText, type PixelSink } from './pixelFont';
 const hex = (v: number) => `#${v.toString(16).padStart(6, '0')}`;
 
 const COLOR = {
-  shade: 'rgba(4, 8, 12, 0.9)',
-  infoName: '#e8dfc4',
-  infoText: '#9fe8ff',
-  infoPower: '#ffd166',
   red: hex(PALETTE.red),
   accent: hex(PALETTE.accent),
   outline: hex(PALETTE.bg),
@@ -109,14 +103,6 @@ export class CrtCanvas {
     if (m.status) this.drawStatus(ctx, sink, m.status, W, H, s, M, blinkOn);
     this.drawBars(ctx, m.bars, s);
     this.drawLabels(sink, m.labels);
-    if (m.info) this.drawInfo(ctx, sink, m.info, W, H, s, M);
-    if (m.title) {
-      if (!m.info) {
-        ctx.fillStyle = COLOR.shade;
-        ctx.fillRect(0, 0, W, H);
-      }
-      drawText(sink, m.title, Math.round((W - measureText(m.title, s + 1)) / 2), M + 4 * s, s + 1, COLOR.infoPower);
-    }
     this.texture.needsUpdate = true;
   }
 
@@ -236,49 +222,5 @@ export class CrtCanvas {
       drawText(sink, item.text.text, item.text.x, item.text.y, item.text.scale, active ? MENU.itemActive : MENU.item);
     });
     for (const h of l.hint) drawText(sink, h.text, h.x, h.y, h.scale, MENU.hint);
-  }
-
-  /** Custom Screen: the focused chip, large, over the dimmed field (TERMINAL.md §6.4). */
-  private drawInfo(
-    ctx: CanvasRenderingContext2D,
-    sink: PixelSink,
-    info: NonNullable<HudModel['info']>,
-    W: number,
-    H: number,
-    s: number,
-    M: number,
-  ): void {
-    const top = M + 18 * s;
-    ctx.fillStyle = COLOR.shade;
-    ctx.fillRect(0, top - 2 * s, W, H - top + 2 * s);
-
-    const icon = CHIP_ICONS[info.defId];
-    const scale = 3 * s;
-    const ix = Math.round((W - 16 * scale) / 2);
-    const iy = top + 6 * s;
-    icon.forEach((row, y) => {
-      for (let x = 0; x < row.length; x++) {
-        const color = ICON_PALETTE[row[x] as string];
-        if (!color) continue;
-        ctx.fillStyle = color;
-        ctx.fillRect(ix + x * scale, iy + y * scale, scale, scale);
-      }
-    });
-
-    let y = iy + 16 * scale + 6 * s;
-    const name = `${chipName(info.defId).toUpperCase()} ${info.code}`;
-    const nameScale = measureText(name, s + 1) <= W - 2 * M ? s + 1 : s;
-    drawText(sink, name, Math.round((W - measureText(name, nameScale)) / 2), y, nameScale, COLOR.infoName);
-    y += 7 * nameScale + 4 * s;
-    const power = CHIPS[info.defId].power;
-    if (power !== null) {
-      const p = String(power);
-      drawText(sink, p, Math.round((W - measureText(p, s)) / 2), y, s, COLOR.infoPower);
-      y += 11 * s;
-    }
-    for (const line of wrapText(chipDesc(info.defId).toUpperCase(), Math.floor((W - 2 * M) / (6 * s)))) {
-      drawText(sink, line, M, y, s, COLOR.infoText);
-      y += 9 * s;
-    }
   }
 }

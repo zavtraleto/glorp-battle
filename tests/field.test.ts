@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_TUNING, mergeTuning, secondsToTicks, tuning } from '../src/config/tuning';
+import { CHIPS } from '../src/data/chips';
 import type { SimEvent } from '../src/sim/events';
 import { Shockwave } from '../src/sim/attacks/shockwave';
 import { Field } from '../src/sim/field';
@@ -82,7 +83,7 @@ function battle(): World {
     seed: 7,
     battleIndex: 1,
     // Long ACTION runs: the Custom Screen would open itself and freeze the tick.
-    cheats: { god: true, aiEnabled: false, buster: false },
+    cheats: { god: true, aiEnabled: false },
     skipIntro: true,
   });
 }
@@ -90,6 +91,12 @@ const stepMove = (w: World, dir: 'up' | 'down' | 'left' | 'right') =>
   w.step(DT, { commands: [{ type: 'move', dir }], held: null });
 const wait = (w: World, n: number) => {
   for (let i = 0; i < n; i++) w.step(DT);
+};
+let uid = 8000;
+/** Gives the player a chip already selected in the attack queue, then uses it. */
+const useNow = (w: World, defId: 'cannon') => {
+  w.giveChip({ uid: uid++, defId, code: '*', state: 'queued', deal: 0 });
+  w.step(DT, { commands: [{ type: 'useChip' }], held: null });
 };
 
 describe('panels in battle', () => {
@@ -114,7 +121,7 @@ describe('panels in battle', () => {
   });
 
   it('keeps enemies off holes', () => {
-    const w = new World({ seed: 7, battleIndex: 1, cheats: { god: true, aiEnabled: true, buster: false }, skipIntro: true });
+    const w = new World({ seed: 7, battleIndex: 1, cheats: { god: true, aiEnabled: true }, skipIntro: true });
     const met = w.enemies[0]!; // (1,1), steps toward the player's column
     w.occupancy.move(met.id, met.x, met.y, 2, 1);
     met.x = 2;
@@ -153,13 +160,14 @@ describe('field objects', () => {
     expect(w.placeObject('rock', 0, 3, 'player')).toBeNull();
   });
 
-  it('stops the Buster and enemy shots, and breaks at 0 HP', () => {
+  it('stops chips and enemy shots, and breaks at 0 HP', () => {
     const w = new World({ seed: 7, battleIndex: 1, cheats: { god: true, aiEnabled: false }, skipIntro: true });
     const rock = w.placeObject('rock', 1, 3, 'player')!;
-    const met = w.enemies[0]!;
-    wait(w, T(tuning.buster.BUSTER_INTERVAL));
+    const met = w.enemies[0]!; // (1,1), behind the rock in the player's lane
+    useNow(w, 'cannon');
+    wait(w, T(tuning.chips.CHIP_HIT_FRAME) + 1);
     expect(met.hp).toBe(tuning.mettik.MET_HP);
-    expect(rock.hp).toBe(tuning.field.ROCK_HP - tuning.buster.BUSTER_DAMAGE);
+    expect(rock.hp).toBe(tuning.field.ROCK_HP - CHIPS.cannon.power!);
     expect(w.shootLane(1, 2, 500)).toBe(3);
     expect(rock.alive).toBe(false);
     expect(w.objects).toHaveLength(0);

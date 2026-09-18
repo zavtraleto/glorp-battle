@@ -16,7 +16,6 @@ export type ZoneId = 'pause' | 'rail' | 'trackball';
 export interface TerminalLayout {
   viewport: { w: number; h: number };
   body: Rect;
-  top: Rect;
   crt: Rect;
   rail: Rect;
   /** Draw queue strip: a display, never a tap target (spec §11.3). */
@@ -63,11 +62,10 @@ export function computeLayout(viewportW: number, viewportH: number): TerminalLay
     body = { x: 0, y: 0, w: vw, h: vh };
   }
 
-  const sum = t.LAYOUT_TOP + t.LAYOUT_CRT + t.LAYOUT_RAIL + t.LAYOUT_DRAW + t.LAYOUT_DECK;
+  const sum = t.LAYOUT_CRT + t.LAYOUT_RAIL + t.LAYOUT_DRAW + t.LAYOUT_DECK;
   const share = (v: number) => (sum > 0 ? v / sum : 0.25) * body.h;
   const row = (y: number, h: number): Rect => ({ x: body.x, y, w: body.w, h });
-  const top = row(body.y, share(t.LAYOUT_TOP));
-  const crtRow = row(top.y + top.h, share(t.LAYOUT_CRT));
+  const crtRow = row(body.y, share(t.LAYOUT_CRT));
   const rail = row(crtRow.y + crtRow.h, share(t.LAYOUT_RAIL));
   const draw = row(rail.y + rail.h, share(t.LAYOUT_DRAW));
   const deck = row(draw.y + draw.h, body.y + body.h - (draw.y + draw.h));
@@ -75,11 +73,11 @@ export function computeLayout(viewportW: number, viewportH: number): TerminalLay
   const margin = body.w * t.CRT_MARGIN_X;
   const crt: Rect = { x: body.x + margin, y: crtRow.y, w: body.w - 2 * margin, h: crtRow.h };
 
-  const pauseW = Math.max(body.w * t.PAUSE_ZONE_W, MIN_ZONE_PX);
+  const pauseW = Math.min(Math.max(body.w * t.PAUSE_ZONE_W, MIN_ZONE_PX), deck.h);
   const zones: Record<ZoneId, Rect> = {
-    // Clamped so the key stays tappable on a thin top bar; it may overlap the
-    // top of the CRT row, which has no zone.
-    pause: { x: body.x + body.w - pauseW, y: top.y, w: pauseW, h: Math.max(top.h, MIN_ZONE_PX) },
+    // A square in the bottom-left corner of the control panel, clear of the
+    // trackball ring; it is tested before the trackball, so it wins its corner.
+    pause: { x: body.x, y: deck.y + deck.h - pauseW, w: pauseW, h: pauseW },
     // The chip rail is tapped while dodging, so its zone is taller than the
     // cartridges and reaches into the gaps around them (spec §11.2).
     rail: {
@@ -96,7 +94,6 @@ export function computeLayout(viewportW: number, viewportH: number): TerminalLay
   return {
     viewport: { w: vw, h: vh },
     body,
-    top,
     crt,
     rail,
     draw,
@@ -126,15 +123,6 @@ export function rectToWorld(layout: TerminalLayout, r: Rect): { cx: number; cy: 
     cy: -(r.y + r.h / 2 - bodyCy) * k,
     w: r.w * k,
     h: r.h * k,
-  };
-}
-
-/** CSS px point → world point on the z=0 face (inverse of rectToWorld). */
-export function cssToWorld(layout: TerminalLayout, x: number, y: number): { x: number; y: number } {
-  const k = layout.worldWidth / layout.body.w;
-  return {
-    x: (x - (layout.body.x + layout.body.w / 2)) * k,
-    y: -(y - (layout.body.y + layout.body.h / 2)) * k,
   };
 }
 

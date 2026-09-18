@@ -4,22 +4,23 @@ import type { ChipCode, ChipId } from '../../data/chips';
 import { Spring } from '../anim/spring';
 import { Cartridge, cartridgeGlow } from '../chips/cartridge';
 import type { SlotState } from '../../sim/chips/chipSystem';
-import { ejectPose } from '../chips/ejectArc';
-import { activeSlot } from '../chips/railPlan';
-import { CHIP_TEXELS_H, CHIP_TEXELS_W, RAIL_LEFT, RAIL_SLOTS, RAIL_SPAN } from '../chips/trayLayout';
+import { ejectPose, type EjectAim } from '../chips/ejectArc';
+import { activeSlot, railChanges } from '../chips/railPlan';
+import { CHIP_TEXELS_H, CHIP_TEXELS_W, RAIL_LEFT, RAIL_SLOTS, RAIL_SPAN } from '../chips/railLayout';
 import { rectToWorld, type TerminalLayout } from '../layout';
 
 // Chip rail (TERMINAL.md §6.3–6.5): five slots with contacts and chip
-// cartridges. In battle it mirrors the chip queue (used chips eject, slots stay
-// empty); on the Custom Screen it mirrors the selection, packed from the left.
+// cartridges. It mirrors the hand slot for slot: used chips eject, new ones
+// load in.
 
 export { RAIL_SLOTS };
 
 export interface RailChip {
   uid: number;
+  /** Draw serial: a chip dealt again gets a new one, so the rail reloads it. */
+  deal: number;
   defId: ChipId;
   code: ChipCode;
-  legacyGen?: number;
 }
 
 /** How a rail slot looks, straight from the simulation (GDD §7.1). */
@@ -30,21 +31,9 @@ export interface RailSlotView {
   order: number;
 }
 
-export interface RailSyncOptions {
-  /** `select`: the reward tray drives a packed row. */
-  mode: 'select';
-  /** The Custom Screen is open: chips leaving the queue burn. */
-  burning: boolean;
-  /** A chip that is (back) in the hand returns to the tray instead of ejecting. */
-  inHand(uid: number): boolean;
-  /** Where a newly selected chip flies in from (its tray cartridge), if anywhere. */
-  spawnFrom(uid: number): THREE.Vector3 | null;
-}
-
-type Phase = 'load' | 'fly' | 'idle' | 'drag' | 'eject' | 'burn' | 'return';
+type Phase = 'load' | 'idle' | 'eject';
 
 interface Cart {
-  uid: number;
   cart: Cartridge;
   slot: number;
   phase: Phase;
@@ -52,6 +41,7 @@ interface Cart {
   delay: number;
   lift: Spring;
   pos: THREE.Vector3;
+  /** Where the eject started, in world space: the flight ignores the panel tilt. */
   origin: THREE.Vector3;
   drift: number;
   spin: number;
@@ -66,7 +56,6 @@ const COLOR = {
   faceIdle: new THREE.Color(0x9a9a9a),
   /** Refused by the code rule: dark and cold, clearly out of play. */
   faceBlocked: new THREE.Color(0x2f3a44),
-  faceBurnt: new THREE.Color(0x2a1a14),
 };
 
 const REST_Z = 0.14;
@@ -77,17 +66,15 @@ const ACTIVE_CONTACT = 0.55;
 /** Tremble of the active cartridge: radians and rate. */
 const ACTIVE_TREMBLE = 0.005;
 const ACTIVE_TREMBLE_HZ = 6;
-/** Burn: launch speed and gravity (world units per s / s²). */
-const BURN_UP = 3;
-const BURN_GRAVITY = 30;
 const LOAD_HEIGHT = 1.2;
 const GLOW_PULSE_HZ = 2;
 /** Cartridges slide to a new slot at this rate (1/s). */
 const SLIDE_RATE = 22;
-/** Height of a flying / dragged cartridge above the rail. */
-const CARRY_Z = 0.9;
-const FLY_TIME = 0.16;
-const RETURN_TIME = 0.12;
+/** Cartridge width as a share of its slot pitch. */
+const CART_FILL = 0.92;
+/** An ejected cartridge ends this far in front of the camera and this far below its axis. */
+const EJECT_LENS_GAP = 2.5;
+const EJECT_UNDER_LENS = 1.4;
 
 function contactTexture(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
@@ -108,16 +95,20 @@ function contactTexture(): THREE.CanvasTexture {
 export class ChipRail {
   readonly group = new THREE.Group();
   private readonly statics = new THREE.Group();
+  /** Deal serial per slot (null = empty). */
   private slots: (number | null)[] = new Array<number | null>(RAIL_SLOTS).fill(null);
   private carts: Cart[] = [];
   private slotPos: THREE.Vector3[] = [];
   private contacts: { mat: THREE.MeshBasicMaterial; left: number }[] = [];
-  private mode: 'queue' | 'select' = 'queue';
   private slotViews: readonly RailSlotView[] | null = null;
   private readonly activeAt = new THREE.Vector3();
   private hasActive = false;
   private texel = 0.02;
   private maxH = Infinity;
+  /** World point the ejected cartridges fly at: just under the camera (set from it). */
+  private readonly aimAt = new THREE.Vector3(0, 0, 30);
+  private readonly aim: EjectAim = { x: 0, y: 0, z: 0 };
+  private readonly flight = new THREE.Vector3();
   private time = 0;
   private readonly unitBox = new THREE.BoxGeometry(1, 1, 1);
   private readonly unitPlane = new THREE.PlaneGeometry(1, 1);
@@ -132,10 +123,13 @@ export class ChipRail {
     this.statics.clear();
     for (const c of this.contacts) c.mat.dispose();
     this.contacts = [];
-    this.texel = texel;
     const rail = rectToWorld(layout, layout.rail);
     const pitch = (rail.w * RAIL_SPAN) / RAIL_SLOTS;
     this.maxH = rail.h * 0.86;
+    // Cartridges fill their slot: scale the texel until the width or the height runs out.
+    const grow = Math.min((pitch * CART_FILL) / (CHIP_TEXELS_W * texel), this.maxH / (CHIP_TEXELS_H * texel));
+    this.texel = texel * grow;
+    texel = this.texel;
     const w = CHIP_TEXELS_W * texel;
     const h = Math.min(CHIP_TEXELS_H * texel, this.maxH);
     this.slotPos = [];
@@ -156,27 +150,16 @@ export class ChipRail {
     for (const c of this.carts) c.cart.shape(texel, this.maxH);
   }
 
-  /** World position of the active cartridge, for the light that follows it. */
+  /** Ejected cartridges fly at the camera: `camera` is its world position. */
+  setCamera(camera: THREE.Vector3): void {
+    this.aimAt.set(camera.x, camera.y - EJECT_UNDER_LENS, Math.max(1, camera.z - EJECT_LENS_GAP));
+  }
+
+  /** Position of the active cartridge in the rail's space, for the light that follows it. */
   activePosition(out: THREE.Vector3): boolean {
     if (!this.hasActive) return false;
     out.copy(this.activeAt);
     return true;
-  }
-
-  slotWorld(i: number): THREE.Vector3 {
-    return (this.slotPos[i] ?? new THREE.Vector3()).clone();
-  }
-
-  cartPosition(uid: number): THREE.Vector3 | null {
-    const c = this.carts.find((x) => x.uid === uid && x.slot >= 0);
-    return c ? c.cart.object.position.clone() : null;
-  }
-
-  /** Reward tray: a packed row of picked chips. */
-  sync(list: readonly RailChip[], o: RailSyncOptions): void {
-    this.mode = 'select';
-    this.slotViews = null;
-    this.syncSelect(list, o);
   }
 
   /**
@@ -184,34 +167,21 @@ export class ChipRail {
    * chip is gone ejects it; a slot that gained one loads it in.
    */
   syncHand(slots: readonly RailSlotView[]): void {
-    this.mode = 'queue';
     this.slotViews = slots;
+    const next = slots.map((view) => (view.chip ? view.chip.deal : null));
     let loaded = 0;
-    slots.forEach((view, slot) => {
-      const want = view.chip ? view.chip.uid : null;
-      if (this.slots[slot] === want) return;
+    for (const change of railChanges(this.slots, next)) {
+      const { slot } = change;
       const old = this.carts.find((c) => c.slot === slot);
       if (old) {
-        this.startLeave(old, 'eject', 0);
+        this.startLeave(old);
         this.flashContacts(slot);
       }
-      this.slots[slot] = want;
-      if (view.chip) {
-        this.carts.push(this.makeCart(view.chip, slot, 'load', loaded++ * tuning.terminal.LOAD_STAGGER, null));
+      this.slots[slot] = next[slot] ?? null;
+      const chip = slots[slot]?.chip;
+      if (change.load && chip) {
+        this.carts.push(this.makeCart(chip, slot, loaded++ * tuning.terminal.LOAD_STAGGER));
         this.flashContacts(slot);
-      }
-    });
-  }
-
-  /** Makes a rail chip follow the pointer (null releases it back to its slot). */
-  setDrag(uid: number | null, at: THREE.Vector3 | null): void {
-    for (const c of this.carts) {
-      if (c.slot < 0) continue;
-      if (c.uid === uid && at) {
-        c.phase = 'drag';
-        c.pos.set(at.x, at.y, REST_Z + CARRY_Z);
-      } else if (c.phase === 'drag') {
-        c.phase = 'idle';
       }
     }
   }
@@ -226,7 +196,7 @@ export class ChipRail {
   update(dt: number): void {
     const t = tuning.terminal;
     this.time += dt;
-    const active = this.mode === 'queue' ? activeSlot(this.slots) : -1;
+    const active = activeSlot(this.slots);
     this.hasActive = false;
     const pulse = 0.75 + 0.25 * Math.sin(this.time * Math.PI * 2 * GLOW_PULSE_HZ);
     cartridgeGlow.color.copy(COLOR.glow).multiplyScalar(pulse);
@@ -248,27 +218,10 @@ export class ChipRail {
           if (k >= 1) this.land(c);
           break;
         }
-        case 'fly': {
-          if (!rest) break;
-          const k = Math.min(1, c.t / FLY_TIME);
-          o.position.lerpVectors(c.origin, rest, k);
-          o.position.z += Math.sin(k * Math.PI) * CARRY_Z;
-          c.pos.copy(o.position);
-          if (k >= 1) this.land(c);
-          break;
-        }
-        case 'drag':
-          o.position.lerp(c.pos, slide);
-          o.rotation.set(0, 0, 0);
-          face.copy(COLOR.faceActive);
-          c.cart.glow.visible = false;
-          break;
         case 'idle': {
           if (!rest) break;
           const view = this.slotViews?.[c.slot];
-          // In battle the state comes from the hand; the reward tray keeps the
-          // old "first chip is the active one" rule.
-          const isActive = view ? view.state === 'queued' : c.slot === active;
+          const isActive = view?.state === 'queued';
           const blocked = view?.state === 'blocked';
           c.cart.setOrder(view?.order ?? 0);
           c.lift.target = isActive ? t.CHIP_ACTIVE_LIFT : 0;
@@ -285,13 +238,13 @@ export class ChipRail {
             this.hasActive = true;
           }
           c.cart.glow.visible = isActive;
-          face.copy(blocked ? COLOR.faceBlocked : isActive || this.mode === 'select' ? COLOR.faceActive : COLOR.faceIdle);
+          face.copy(blocked ? COLOR.faceBlocked : isActive ? COLOR.faceActive : COLOR.faceIdle);
           break;
         }
         case 'eject': {
           const lt = t.EJECT_LIFT_TIME;
           if (c.t < lt) {
-            o.position.z = c.origin.z + EJECT_POP * (c.t / lt);
+            o.position.z = c.pos.z + EJECT_POP * (c.t / lt);
             break;
           }
           const p = t.EJECT_TIME > 0 ? (c.t - lt) / t.EJECT_TIME : 1;
@@ -299,33 +252,15 @@ export class ChipRail {
             this.drop(c);
             break;
           }
-          const pose = ejectPose(p, c.drift, c.spin);
-          o.position.set(c.origin.x + pose.x, c.origin.y + pose.y, c.origin.z + EJECT_POP + pose.z);
-          o.rotation.set(pose.rotX, 0, pose.rotZ);
+          this.aim.x = this.aimAt.x - c.origin.x;
+          this.aim.y = this.aimAt.y - c.origin.y;
+          this.aim.z = this.aimAt.z - c.origin.z;
+          const pose = ejectPose(p, this.aim, c.drift, c.spin);
+          this.flight.set(c.origin.x + pose.x, c.origin.y + pose.y, c.origin.z + pose.z);
+          o.position.copy(this.group.worldToLocal(this.flight));
+          o.rotation.set(pose.rotX, pose.rotY, pose.rotZ);
           o.scale.setScalar(pose.scale);
           face.copy(COLOR.faceActive);
-          break;
-        }
-        case 'burn': {
-          const tt = c.t - c.delay;
-          if (tt < 0) break;
-          if (tt >= t.BURN_TIME) {
-            this.drop(c);
-            break;
-          }
-          o.position.set(
-            c.origin.x + c.drift * tt,
-            c.origin.y + BURN_UP * tt - 0.5 * BURN_GRAVITY * tt * tt,
-            c.origin.z + Math.min(1, tt * 5) * 0.4,
-          );
-          o.rotation.set(0, 0, c.spin * tt * 4);
-          face.copy(COLOR.faceIdle).lerp(COLOR.faceBurnt, Math.min(1, tt / t.BURN_TIME));
-          break;
-        }
-        case 'return': {
-          const k = Math.min(1, c.t / RETURN_TIME);
-          o.scale.setScalar(1 - k);
-          if (k >= 1) this.drop(c);
           break;
         }
       }
@@ -341,39 +276,22 @@ export class ChipRail {
     });
   }
 
-  private syncSelect(list: readonly RailChip[], o: RailSyncOptions): void {
-    const uids = list.map((c) => c.uid);
-    const occupied = this.slots.filter((s) => s !== null).length;
-    if (uids.length === occupied && uids.every((u, i) => this.slots[i] === u)) return;
-    let burnIndex = 0;
-    for (const c of this.carts) {
-      if (c.slot < 0 || uids.includes(c.uid)) continue;
-      if (o.inHand(c.uid)) this.startLeave(c, 'return', 0);
-      else this.startLeave(c, o.burning ? 'burn' : 'eject', burnIndex++);
-    }
-    list.forEach((chip, i) => {
-      const c = this.carts.find((x) => x.uid === chip.uid && x.slot >= 0);
-      if (c) {
-        c.slot = i;
-        return;
-      }
-      const from = o.spawnFrom(chip.uid);
-      this.carts.push(this.makeCart(chip, i, from ? 'fly' : 'load', 0, from));
-    });
-    this.slots = Array.from({ length: RAIL_SLOTS }, (_, i) => uids[i] ?? null);
-  }
-
-  private startLeave(c: Cart, how: 'eject' | 'burn' | 'return', index: number): void {
+  private startLeave(c: Cart): void {
+    // Start from the popped-out position; the flight runs in world space.
+    c.cart.object.position.z += EJECT_POP;
     c.origin.copy(c.cart.object.position);
+    this.group.localToWorld(c.origin);
+    c.cart.object.position.z -= EJECT_POP;
     const slot = c.slot;
     c.slot = -1;
     c.t = 0;
-    c.phase = how;
+    c.phase = 'eject';
     c.drift = (slot - 2) * 0.15;
-    c.spin = how === 'burn' ? (index % 2 === 0 ? 1 : -1) * (1 + index * 0.3) : 0.4;
-    c.delay = how === 'burn' ? index * tuning.terminal.BURN_STAGGER : 0;
+    c.spin = 0.4;
+    c.delay = 0;
     c.cart.glow.visible = false;
-    if (how === 'eject') this.flashContacts(slot);
+    c.cart.setFlying(true);
+    this.flashContacts(slot);
   }
 
   private land(c: Cart): void {
@@ -388,24 +306,22 @@ export class ChipRail {
     if (c) c.left = tuning.terminal.CONTACT_FLASH_TIME;
   }
 
-  private makeCart(chip: RailChip, slot: number, phase: 'load' | 'fly', delay: number, from: THREE.Vector3 | null): Cart {
-    const cart = new Cartridge(chip.defId, chip.code, chip.legacyGen);
+  private makeCart(chip: RailChip, slot: number, delay: number): Cart {
+    const cart = new Cartridge(chip.defId, chip.code);
     cart.shape(this.texel, this.maxH);
     cart.faceMat.color.copy(COLOR.faceIdle);
     const o = cart.object;
-    if (from) o.position.copy(from);
-    o.visible = phase === 'fly';
+    o.visible = false;
     this.group.add(o);
     return {
-      uid: chip.uid,
       cart,
       slot,
-      phase,
+      phase: 'load',
       t: 0,
       delay,
       lift: new Spring(0),
       pos: o.position.clone(),
-      origin: from ? from.clone() : new THREE.Vector3(),
+      origin: new THREE.Vector3(),
       drift: 0,
       spin: 0,
     };

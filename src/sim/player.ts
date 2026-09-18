@@ -28,7 +28,7 @@ export class Player {
   iframeTicks = 0;
   /** Remaining ticks of Invis: enemy attacks pass through. */
   invisTicks = 0;
-  /** Remaining ticks of paralysis: no movement, chips or Buster, no i-frames. */
+  /** Remaining ticks of paralysis: no movement or chips, no i-frames. */
   paralyzeTicks = 0;
   /** Remaining ticks of a chip animation: no movement. */
   actionTicks = 0;
@@ -52,19 +52,6 @@ export class Player {
 
   get flinched(): boolean {
     return this.flinchTicks > 0;
-  }
-
-  /** Knock-back one row toward the player's edge (+y); blocked by holes, others and the edge. */
-  pushBack(tick: number): boolean {
-    const ny = this.y + 1;
-    if (!this.field.canStand('player', this.x, ny) || !this.occupancy.isFree(this.x, ny)) return false;
-    this.prevX = this.x;
-    this.prevY = this.y;
-    this.occupancy.move(this.id, this.x, this.y, this.x, ny);
-    this.y = ny;
-    this.lastMoveTick = tick;
-    this.field.onLeave(this.prevX, this.prevY, tick);
-    return true;
   }
 
   get invulnerable(): boolean {
