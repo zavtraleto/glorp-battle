@@ -3,7 +3,9 @@ import { tuning } from '../../config/tuning';
 import type { ChipCode, ChipId } from '../../data/chips';
 import { Spring } from '../anim/spring';
 import { Cartridge, cartridgeGlow } from '../chips/cartridge';
-import { activeSlot, planRail } from '../chips/railPlan';
+import type { SlotState } from '../../sim/chips/chipSystem';
+import { ejectPose } from '../chips/ejectArc';
+import { activeSlot } from '../chips/railPlan';
 import { CHIP_TEXELS_H, CHIP_TEXELS_W, RAIL_LEFT, RAIL_SLOTS, RAIL_SPAN } from '../chips/trayLayout';
 import { rectToWorld, type TerminalLayout } from '../layout';
 
@@ -20,9 +22,17 @@ export interface RailChip {
   legacyGen?: number;
 }
 
+/** How a rail slot looks, straight from the simulation (GDD §7.1). */
+export interface RailSlotView {
+  chip: RailChip | null;
+  state: SlotState;
+  /** 1-based place in the Attack Queue, 0 when not queued. */
+  order: number;
+}
+
 export interface RailSyncOptions {
-  /** `queue`: battle; `select`: Custom Screen selection (packed). */
-  mode: 'queue' | 'select';
+  /** `select`: the reward tray drives a packed row. */
+  mode: 'select';
   /** The Custom Screen is open: chips leaving the queue burn. */
   burning: boolean;
   /** A chip that is (back) in the hand returns to the tray instead of ejecting. */
@@ -54,15 +64,19 @@ const COLOR = {
   contactOn: new THREE.Color(0xffe9a8),
   faceActive: new THREE.Color(0xffffff),
   faceIdle: new THREE.Color(0x9a9a9a),
+  /** Refused by the code rule: dark and cold, clearly out of play. */
+  faceBlocked: new THREE.Color(0x2f3a44),
   faceBurnt: new THREE.Color(0x2a1a14),
 };
 
 const REST_Z = 0.14;
 /** Eject: height of the pop, flight toward the camera and drop (world units), tilt (radians). */
 const EJECT_POP = 0.25;
-const EJECT_TOWARD = 5;
-const EJECT_DROP = 2.5;
-const EJECT_TILT = 0.8;
+/** How lit the active slot's contacts sit between flashes. */
+const ACTIVE_CONTACT = 0.55;
+/** Tremble of the active cartridge: radians and rate. */
+const ACTIVE_TREMBLE = 0.005;
+const ACTIVE_TREMBLE_HZ = 6;
 /** Burn: launch speed and gravity (world units per s / s²). */
 const BURN_UP = 3;
 const BURN_GRAVITY = 30;
@@ -98,7 +112,10 @@ export class ChipRail {
   private carts: Cart[] = [];
   private slotPos: THREE.Vector3[] = [];
   private contacts: { mat: THREE.MeshBasicMaterial; left: number }[] = [];
-  private mode: RailSyncOptions['mode'] = 'queue';
+  private mode: 'queue' | 'select' = 'queue';
+  private slotViews: readonly RailSlotView[] | null = null;
+  private readonly activeAt = new THREE.Vector3();
+  private hasActive = false;
   private texel = 0.02;
   private maxH = Infinity;
   private time = 0;
@@ -139,6 +156,13 @@ export class ChipRail {
     for (const c of this.carts) c.cart.shape(texel, this.maxH);
   }
 
+  /** World position of the active cartridge, for the light that follows it. */
+  activePosition(out: THREE.Vector3): boolean {
+    if (!this.hasActive) return false;
+    out.copy(this.activeAt);
+    return true;
+  }
+
   slotWorld(i: number): THREE.Vector3 {
     return (this.slotPos[i] ?? new THREE.Vector3()).clone();
   }
@@ -148,11 +172,35 @@ export class ChipRail {
     return c ? c.cart.object.position.clone() : null;
   }
 
-  /** Brings the rail in line with the queue (battle) or the selection (Custom Screen). */
+  /** Reward tray: a packed row of picked chips. */
   sync(list: readonly RailChip[], o: RailSyncOptions): void {
-    this.mode = o.mode;
-    if (o.mode === 'select') this.syncSelect(list, o);
-    else this.syncQueue(list, o);
+    this.mode = 'select';
+    this.slotViews = null;
+    this.syncSelect(list, o);
+  }
+
+  /**
+   * Battle: the rail mirrors the hand slot for slot (GDD §7.1). A slot whose
+   * chip is gone ejects it; a slot that gained one loads it in.
+   */
+  syncHand(slots: readonly RailSlotView[]): void {
+    this.mode = 'queue';
+    this.slotViews = slots;
+    let loaded = 0;
+    slots.forEach((view, slot) => {
+      const want = view.chip ? view.chip.uid : null;
+      if (this.slots[slot] === want) return;
+      const old = this.carts.find((c) => c.slot === slot);
+      if (old) {
+        this.startLeave(old, 'eject', 0);
+        this.flashContacts(slot);
+      }
+      this.slots[slot] = want;
+      if (view.chip) {
+        this.carts.push(this.makeCart(view.chip, slot, 'load', loaded++ * tuning.terminal.LOAD_STAGGER, null));
+        this.flashContacts(slot);
+      }
+    });
   }
 
   /** Makes a rail chip follow the pointer (null releases it back to its slot). */
@@ -179,6 +227,7 @@ export class ChipRail {
     const t = tuning.terminal;
     this.time += dt;
     const active = this.mode === 'queue' ? activeSlot(this.slots) : -1;
+    this.hasActive = false;
     const pulse = 0.75 + 0.25 * Math.sin(this.time * Math.PI * 2 * GLOW_PULSE_HZ);
     cartridgeGlow.color.copy(COLOR.glow).multiplyScalar(pulse);
     const slide = 1 - Math.exp(-dt * SLIDE_RATE);
@@ -216,15 +265,27 @@ export class ChipRail {
           break;
         case 'idle': {
           if (!rest) break;
-          const isActive = c.slot === active;
+          const view = this.slotViews?.[c.slot];
+          // In battle the state comes from the hand; the reward tray keeps the
+          // old "first chip is the active one" rule.
+          const isActive = view ? view.state === 'queued' : c.slot === active;
+          const blocked = view?.state === 'blocked';
+          c.cart.setOrder(view?.order ?? 0);
           c.lift.target = isActive ? t.CHIP_ACTIVE_LIFT : 0;
           c.lift.step(dt, t.SPRING_STIFFNESS, t.SPRING_DAMPING);
-          c.pos.set(rest.x, rest.y + c.lift.value * 0.4, rest.z + c.lift.value);
+          const out = c.lift.value / Math.max(1e-6, t.CHIP_ACTIVE_LIFT);
+          c.pos.set(rest.x, rest.y + c.lift.value * 0.4, rest.z + c.lift.value + out * t.CHIP_ACTIVE_PUSH);
           o.position.lerp(c.pos, slide);
+          // A barely visible tremble: the active chip is live, not just lit.
+          o.rotation.set(0, 0, isActive ? ACTIVE_TREMBLE * Math.sin(this.time * Math.PI * 2 * ACTIVE_TREMBLE_HZ) : 0);
           o.scale.setScalar(1);
           o.visible = true;
+          if (isActive) {
+            this.activeAt.copy(o.position);
+            this.hasActive = true;
+          }
           c.cart.glow.visible = isActive;
-          face.copy(isActive || this.mode === 'select' ? COLOR.faceActive : COLOR.faceIdle);
+          face.copy(blocked ? COLOR.faceBlocked : isActive || this.mode === 'select' ? COLOR.faceActive : COLOR.faceIdle);
           break;
         }
         case 'eject': {
@@ -238,13 +299,10 @@ export class ChipRail {
             this.drop(c);
             break;
           }
-          o.position.set(
-            c.origin.x + c.drift * p,
-            c.origin.y - EJECT_DROP * p * p,
-            c.origin.z + EJECT_POP + EJECT_TOWARD * p * p,
-          );
-          o.rotation.set(-EJECT_TILT * p, 0, c.spin * p);
-          o.scale.setScalar(1 + 0.8 * p);
+          const pose = ejectPose(p, c.drift, c.spin);
+          o.position.set(c.origin.x + pose.x, c.origin.y + pose.y, c.origin.z + EJECT_POP + pose.z);
+          o.rotation.set(pose.rotX, 0, pose.rotZ);
+          o.scale.setScalar(pose.scale);
           face.copy(COLOR.faceActive);
           break;
         }
@@ -274,33 +332,12 @@ export class ChipRail {
     }
 
     const flash = t.CONTACT_FLASH_TIME;
-    for (const ct of this.contacts) {
+    this.contacts.forEach((ct, i) => {
       ct.left = Math.max(0, ct.left - dt);
-      ct.mat.color.copy(COLOR.contactOff).lerp(COLOR.contactOn, flash > 0 ? ct.left / flash : 0);
-    }
-  }
-
-  private syncQueue(list: readonly RailChip[], o: RailSyncOptions): void {
-    // Coming from the Custom Screen the selection was packed from slot 0 — same as the queue.
-    const plan = planRail(
-      this.slots,
-      list.map((c) => c.uid),
-      o.burning,
-    );
-    if (plan.remove.length === 0 && plan.add.length === 0) return;
-    let burnIndex = 0;
-    for (const r of plan.remove) {
-      const c = this.carts.find((x) => x.slot === r.slot);
-      this.slots[r.slot] = null;
-      if (!c) continue;
-      if (o.inHand(c.uid)) this.startLeave(c, 'return', 0);
-      else this.startLeave(c, r.how, r.how === 'burn' ? burnIndex++ : 0);
-    }
-    plan.add.forEach((a, i) => {
-      const chip = list.find((c) => c.uid === a.uid);
-      if (!chip) return;
-      this.slots[a.slot] = a.uid;
-      this.carts.push(this.makeCart(chip, a.slot, 'load', i * tuning.terminal.LOAD_STAGGER, null));
+      // The active slot's contacts stay live; the rest only flash on eject.
+      const base = i === active ? ACTIVE_CONTACT : 0;
+      const k = Math.max(base, flash > 0 ? ct.left / flash : 0);
+      ct.mat.color.copy(COLOR.contactOff).lerp(COLOR.contactOn, k);
     });
   }
 

@@ -15,7 +15,7 @@ export interface CreatureBitmap {
   elements: string[];
 }
 
-export const CREATURE_SIZE = 32;
+export const CREATURE_SIZE = 48;
 const MIN_COVERAGE = 0.25;
 const MAX_ELEMENTS = 3;
 

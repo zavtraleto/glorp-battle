@@ -1,12 +1,14 @@
 import { tuning } from '../../config/tuning';
 import type { Dir } from '../../core/input/commands';
 import { SwipeRecognizer } from '../../core/input/swipe';
-import { zoneAt, type TerminalLayout, type ZoneId } from '../layout';
+import type { ZoneId } from '../layout';
 import { attachPointers } from './pointerEvents';
 
-// Pointer Events → terminal controls (TERMINAL.md §5). Each pointer captures
-// the zone it went down in until it is lifted; a trackball gesture continues
-// outside its zone. Action controls fire on press, in the same frame.
+// Pointer Events → terminal controls (spec §10.2). Each pointer captures the
+// zone it went down in until it is lifted; a trackball gesture continues
+// outside its zone. The pause key fires on press, in the same frame. The
+// trackball fires on release: only then is it known whether the gesture was a
+// step or a tap, and a started shot cannot be taken back.
 
 export interface RouterHandlers {
   /** A control was pressed (visual reaction, same frame). */
@@ -16,8 +18,12 @@ export interface RouterHandlers {
   move(dir: Dir): void;
   /** Trackball drag delta in CSS px, for the rolling visual. */
   roll(dx: number, dy: number): void;
-  /** Action controls fire on press. */
-  action(zone: 'execute' | 'chipSelect' | 'pause'): void;
+  /**
+   * The pause key and the chip rail on press; the trackball on release, when
+   * the gesture was a tap. `x`, `y` are where the pointer went down, so a zone
+   * split into parts (the rail's slots) can tell which part was hit.
+   */
+  action(zone: ZoneId, x: number, y: number): void;
   /** Mouse hover (no button held): the zone under the pointer, and the pointer position. */
   hover?(zone: ZoneId | null, x: number, y: number): void;
   /** Presses on zones that return false are ignored (not captured). */
@@ -26,6 +32,8 @@ export interface RouterHandlers {
 
 interface Capture {
   zone: ZoneId;
+  downX: number;
+  downY: number;
   lastX: number;
   lastY: number;
   swipe: SwipeRecognizer | null;
@@ -35,23 +43,25 @@ export class PointerRouter {
   private readonly captures = new Map<number, Capture>();
 
   constructor(
-    private getLayout: () => TerminalLayout,
+    /** Screen point → organ. The terminal projects tilted zones through the camera. */
+    private zoneAt: (x: number, y: number) => ZoneId | null,
     private handlers: RouterHandlers,
+    private now: () => number = () => performance.now() / 1000,
   ) {}
 
   /** Returns true if a zone captured the pointer. */
   down(id: number, x: number, y: number): boolean {
     if (this.captures.has(id)) return true;
-    const zone = zoneAt(this.getLayout(), x, y);
+    const zone = this.zoneAt(x, y);
     if (!zone || this.handlers.accepts?.(zone) === false) return false;
     let swipe: SwipeRecognizer | null = null;
     if (zone === 'trackball') {
-      swipe = new SwipeRecognizer(tuning.input.SWIPE_MIN_PX);
-      swipe.begin(x, y);
+      swipe = new SwipeRecognizer(tuning.input.SWIPE_MIN_PX, tuning.terminal.TAP_MAX_TIME);
+      swipe.begin(x, y, this.now());
     }
-    this.captures.set(id, { zone, lastX: x, lastY: y, swipe });
+    this.captures.set(id, { zone, downX: x, downY: y, lastX: x, lastY: y, swipe });
     this.handlers.press(zone);
-    if (zone !== 'trackball') this.handlers.action(zone);
+    if (zone !== 'trackball') this.handlers.action(zone, x, y);
     return true;
   }
 
@@ -68,7 +78,7 @@ export class PointerRouter {
 
   /** Reports the zone under a free (not captured) mouse pointer. */
   hoverAt(x: number, y: number): void {
-    this.handlers.hover?.(zoneAt(this.getLayout(), x, y), x, y);
+    this.handlers.hover?.(this.zoneAt(x, y), x, y);
   }
 
   get anyCaptured(): boolean {
@@ -79,7 +89,7 @@ export class PointerRouter {
     const c = this.captures.get(id);
     if (!c) return;
     this.captures.delete(id);
-    c.swipe?.end();
+    if (c.swipe?.end(this.now()) === 'tap') this.handlers.action(c.zone, c.downX, c.downY);
     this.handlers.release(c.zone);
   }
 

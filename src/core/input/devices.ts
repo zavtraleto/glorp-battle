@@ -18,13 +18,14 @@ function isTextField(target: EventTarget | null): boolean {
   return target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement;
 }
 
-/** Keys that use the next chip (GDD §12) and open the Custom Screen (MMBN1: L / R). */
+/** Keys that fire the first chip of the Attack Queue (GDD §12). */
 const CHIP_KEYS = new Set(['Space', 'KeyF']);
-const CUSTOM_KEYS = new Set(['KeyQ', 'KeyE']);
+/** Digits 1..5 pick the chip in that hand slot. */
+const SLOT_KEYS = 5;
 
 /**
  * Keyboard: a movement press steps once; holding the key repeats
- * (HOLD_REPEAT_DELAY / HOLD_REPEAT). Space / F use a chip, Q / E open the Custom Screen.
+ * (HOLD_REPEAT_DELAY / HOLD_REPEAT). Space / F fire, digits 1..5 pick chips.
  */
 export function attachKeyboard(input: InputState, target: Window = window): () => void {
   const down: Dir[] = [];
@@ -33,9 +34,17 @@ export function attachKeyboard(input: InputState, target: Window = window): () =
 
   const onDown = (e: KeyboardEvent) => {
     if (isTextField(e.target)) return;
-    if (CHIP_KEYS.has(e.code) || CUSTOM_KEYS.has(e.code)) {
+    if (CHIP_KEYS.has(e.code)) {
       e.preventDefault();
-      if (!e.repeat) input.push({ type: CHIP_KEYS.has(e.code) ? 'useChip' : 'openCustom' });
+      if (!e.repeat) input.push({ type: 'useChip' });
+      return;
+    }
+    const digit = /^Digit([1-9])$/.exec(e.code);
+    if (digit) {
+      const slot = Number(digit[1]) - 1;
+      if (slot >= SLOT_KEYS) return;
+      e.preventDefault();
+      if (!e.repeat) input.push({ type: 'selectChip', slot });
       return;
     }
     const dir = KEY_DIRS[e.code];

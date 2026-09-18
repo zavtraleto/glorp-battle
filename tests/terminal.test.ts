@@ -1,11 +1,22 @@
+import * as THREE from 'three';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_TUNING, mergeTuning, tuning } from '../src/config/tuning';
 import type { Dir } from '../src/core/input/commands';
 import { BenchAutopilot, formatBench } from '../src/debug/bench';
 import { parseDebugParams } from '../src/debug/params';
 import { PerfProbe, percentile } from '../src/debug/perfProbe';
+import { mountCorners, screenBounds } from '../src/terminal/interaction/project';
 import { PointerRouter, type RouterHandlers } from '../src/terminal/interaction/pointerRouter';
-import { computeLayout, cssToWorld, glassRect, rectContains, rectToWorld, zoneAt, TERMINAL_WORLD_WIDTH } from '../src/terminal/layout';
+import {
+  computeLayout,
+  cssToWorld,
+  glassRect,
+  railZoneSlots,
+  rectContains,
+  rectToWorld,
+  zoneAt,
+  TERMINAL_WORLD_WIDTH,
+} from '../src/terminal/layout';
 
 beforeEach(() => {
   mergeTuning(tuning, JSON.parse(JSON.stringify(DEFAULT_TUNING)));
@@ -14,7 +25,7 @@ beforeEach(() => {
 describe('terminal tuning', () => {
   it('has layout shares that sum to 1', () => {
     const t = tuning.terminal;
-    expect(t.LAYOUT_TOP + t.LAYOUT_CRT + t.LAYOUT_RAIL + t.LAYOUT_DECK).toBeCloseTo(1, 5);
+    expect(t.LAYOUT_TOP + t.LAYOUT_CRT + t.LAYOUT_RAIL + t.LAYOUT_DRAW + t.LAYOUT_DECK).toBeCloseTo(1, 5);
   });
 
   it('keeps the CRT render target portrait', () => {
@@ -53,7 +64,7 @@ describe('terminal layout', () => {
     expect(l.body).toEqual({ x: 0, y: 0, w: 390, h: 844 });
     expect(l.top.y).toBe(0);
     expect(l.deck.y + l.deck.h).toBeCloseTo(844, 5);
-    expect(l.top.h + l.crt.h + l.rail.h + l.deck.h).toBeCloseTo(844, 5);
+    expect(l.top.h + l.crt.h + l.rail.h + l.draw.h + l.deck.h).toBeCloseTo(844, 5);
   });
 
   it('pillarboxes a wide desktop viewport', () => {
@@ -71,21 +82,63 @@ describe('terminal layout', () => {
   });
 
   it('normalises layout shares that do not sum to 1', () => {
-    tuning.terminal.LAYOUT_DECK = 0.6; // sum 1.3
+    tuning.terminal.LAYOUT_DECK = 0.6; // sum > 1
     const l = computeLayout(390, 844);
-    expect(l.top.h + l.crt.h + l.rail.h + l.deck.h).toBeCloseTo(844, 5);
+    expect(l.top.h + l.crt.h + l.rail.h + l.draw.h + l.deck.h).toBeCloseTo(844, 5);
   });
 
-  it('splits the deck into three non-overlapping zones that cover it', () => {
+  // The trackball is the only battle organ, so it owns the whole deck (spec §11.2).
+  it('gives the trackball the whole deck', () => {
     const l = computeLayout(390, 844);
-    const { chipSelect, trackball, execute } = l.zones;
-    expect(chipSelect.x + chipSelect.w).toBeCloseTo(trackball.x, 5);
-    expect(trackball.x + trackball.w).toBeCloseTo(execute.x, 5);
-    expect(execute.x + execute.w).toBeCloseTo(l.body.x + l.body.w, 5);
-    for (const z of [chipSelect, trackball, execute]) {
-      expect(z.y).toBeCloseTo(l.deck.y, 5);
-      expect(z.h).toBeCloseTo(l.deck.h, 5);
+    const { trackball } = l.zones;
+    expect(trackball.x).toBeCloseTo(l.deck.x, 5);
+    expect(trackball.w).toBeCloseTo(l.deck.w, 5);
+    expect(trackball.y).toBeCloseTo(l.deck.y, 5);
+    expect(trackball.h).toBeCloseTo(l.deck.h, 5);
+  });
+
+  it('has three organs: pause, the chip rail and the trackball', () => {
+    const l = computeLayout(390, 844);
+    expect(Object.keys(l.zones).sort()).toEqual(['pause', 'rail', 'trackball']);
+  });
+
+  // The draw queue strip sits between the rail and the deck (spec §11.3).
+  it('gives the draw queue its own row under the rail', () => {
+    const l = computeLayout(390, 844);
+    expect(l.draw.y).toBeCloseTo(l.rail.y + l.rail.h, 5);
+    expect(l.deck.y).toBeCloseTo(l.draw.y + l.draw.h, 5);
+    expect(l.draw.h).toBeGreaterThan(0);
+    expect(l.draw.h).toBeLessThan(l.rail.h);
+  });
+
+  it('never lets the draw strip take a tap', () => {
+    const l = computeLayout(390, 844);
+    expect(zoneAt(l, l.draw.x + l.draw.w / 2, l.draw.y + l.draw.h / 2)).not.toBe('trackball');
+  });
+
+  // The rail is tapped mid-dodge, so its zone reaches past the cartridges.
+  it('gives the rail a zone taller than the cartridges themselves', () => {
+    const l = computeLayout(390, 844);
+    expect(l.zones.rail.y).toBeLessThanOrEqual(l.rail.y);
+    expect(l.zones.rail.y + l.zones.rail.h).toBeGreaterThan(l.rail.y + l.rail.h);
+    expect(l.zones.rail.h).toBeGreaterThan(l.rail.h);
+  });
+
+  // A rail zone reaching into the deck would eat trackball gestures.
+  it('keeps the rail zone clear of the trackball', () => {
+    const l = computeLayout(390, 844);
+    expect(l.zones.rail.y + l.zones.rail.h).toBeLessThan(l.zones.trackball.y + l.deck.h * 0.15);
+    expect(zoneAt(l, l.zones.trackball.x + l.zones.trackball.w / 2, l.zones.trackball.y + l.deck.h / 2)).toBe('trackball');
+  });
+
+  it('splits the rail zone into five slots that do not overlap', () => {
+    const l = computeLayout(390, 844);
+    const slots = railZoneSlots(l);
+    expect(slots).toHaveLength(5);
+    for (let i = 1; i < slots.length; i++) {
+      expect(slots[i]!.x).toBeGreaterThanOrEqual(slots[i - 1]!.x + slots[i - 1]!.w - 1e-6);
     }
+    for (const r of slots) expect(r.w).toBeGreaterThanOrEqual(48);
   });
 
   it('keeps every zone at least 56 px on its short side on a 360×640 phone', () => {
@@ -126,29 +179,58 @@ function makeRouter() {
     roll: (dx, dy) => rolls.push([dx, dy]),
     action: (z) => log.push(`action:${z}`),
   };
-  const router = new PointerRouter(() => layout, handlers);
+  const clock = { now: 0 };
+  const router = new PointerRouter(
+    (x, y) => zoneAt(layout, x, y),
+    handlers,
+    () => clock.now,
+  );
   const center = (z: keyof typeof layout.zones) => {
     const r = layout.zones[z];
     return [r.x + r.w / 2, r.y + r.h / 2] as const;
   };
-  return { layout, log, rolls, router, center };
+  return { layout, log, rolls, router, center, clock };
 }
 
 describe('PointerRouter', () => {
-  it('fires execute on press and releases on up', () => {
+  it('fires pause on press', () => {
     const { router, log, center } = makeRouter();
-    const [x, y] = center('execute');
+    const [x, y] = center('pause');
     expect(router.down(1, x, y)).toBe(true);
     router.up(1);
-    expect(log).toEqual(['press:execute', 'action:execute', 'release:execute']);
+    expect(log).toEqual(['press:pause', 'action:pause', 'release:pause']);
   });
 
-  it('fires chip select and pause on press', () => {
-    const { router, log, center } = makeRouter();
-    router.down(1, ...center('chipSelect'));
-    router.down(2, ...center('pause'));
-    expect(log).toContain('action:chipSelect');
-    expect(log).toContain('action:pause');
+  // A tap on the ball is the chip shot; it can only fire on release, because a
+  // gesture that turns into a step must not also shoot (spec §11.2).
+  it('turns a tap on the trackball into an action on release', () => {
+    const { router, log, center, clock } = makeRouter();
+    const [x, y] = center('trackball');
+    router.down(1, x, y);
+    router.move(1, x + 2, y + 1);
+    expect(log).toEqual(['press:trackball']);
+    clock.now = 0.1;
+    router.up(1);
+    expect(log).toEqual(['press:trackball', 'action:trackball', 'release:trackball']);
+  });
+
+  it('does not shoot when the gesture produced a step', () => {
+    const { router, log, center, clock } = makeRouter();
+    const [x, y] = center('trackball');
+    router.down(1, x, y);
+    router.move(1, x + 90, y);
+    clock.now = 0.1;
+    router.up(1);
+    expect(log).not.toContain('action:trackball');
+  });
+
+  it('does not shoot when the finger rested past the tap window', () => {
+    const { router, log, center, clock } = makeRouter();
+    const [x, y] = center('trackball');
+    router.down(1, x, y);
+    clock.now = 1.0;
+    router.up(1);
+    expect(log).not.toContain('action:trackball');
   });
 
   it('turns one trackball gesture into exactly one step', () => {
@@ -180,30 +262,30 @@ describe('PointerRouter', () => {
     expect(log).toEqual([]);
   });
 
-  it('tracks two pointers independently (trackball + execute)', () => {
+  it('tracks two pointers independently (trackball + pause)', () => {
     const { router, log, center } = makeRouter();
     const [tx, ty] = center('trackball');
     router.down(1, tx, ty);
-    router.down(2, ...center('execute'));
+    router.down(2, ...center('pause'));
     router.move(1, tx - 40, ty);
     router.up(2);
     router.up(1);
     expect(log).toEqual([
       'press:trackball',
-      'press:execute',
-      'action:execute',
+      'press:pause',
+      'action:pause',
       'move:left',
-      'release:execute',
+      'release:pause',
       'release:trackball',
     ]);
   });
 
   it('releases everything on cancelAll', () => {
     const { router, log, center } = makeRouter();
-    router.down(1, ...center('execute'));
+    router.down(1, ...center('trackball'));
     router.cancelAll();
     router.up(1);
-    expect(log.filter((l) => l.startsWith('release:'))).toEqual(['release:execute']);
+    expect(log.filter((l) => l.startsWith('release:'))).toEqual(['release:trackball']);
   });
 });
 
@@ -276,7 +358,7 @@ describe('PointerRouter hover and gate', () => {
   it('ignores presses on refused zones', () => {
     const layout = computeLayout(390, 844);
     const log: string[] = [];
-    const router = new PointerRouter(() => layout, {
+    const router = new PointerRouter((x, y) => zoneAt(layout, x, y), {
       press: (z) => log.push(`press:${z}`),
       release: () => {},
       move: () => {},
@@ -284,8 +366,8 @@ describe('PointerRouter hover and gate', () => {
       action: (z) => log.push(`action:${z}`),
       accepts: (z) => z === 'pause',
     });
-    const ex = layout.zones.execute;
-    expect(router.down(1, ex.x + 5, ex.y + 5)).toBe(false);
+    const tb = layout.zones.trackball;
+    expect(router.down(1, tb.x + 5, tb.y + 5)).toBe(false);
     const p = layout.zones.pause;
     expect(router.down(2, p.x + 5, p.y + 5)).toBe(true);
     expect(log).toEqual(['press:pause', 'action:pause']);
@@ -294,7 +376,7 @@ describe('PointerRouter hover and gate', () => {
   it('reports the hovered zone', () => {
     const layout = computeLayout(390, 844);
     const seen: (string | null)[] = [];
-    const router = new PointerRouter(() => layout, {
+    const router = new PointerRouter((x, y) => zoneAt(layout, x, y), {
       press: () => {},
       release: () => {},
       move: () => {},
@@ -303,7 +385,7 @@ describe('PointerRouter hover and gate', () => {
       hover: (z) => seen.push(z),
     });
     const tb = layout.zones.trackball;
-    router.hoverAt(tb.x + 5, tb.y + 5);
+    router.hoverAt(tb.x + tb.w / 2, tb.y + tb.h / 2);
     router.hoverAt(layout.crt.x + 5, layout.crt.y + 100);
     expect(seen).toEqual(['trackball', null]);
   });
@@ -312,7 +394,7 @@ describe('PointerRouter hover and gate', () => {
 describe('cssToWorld', () => {
   it('inverts rectToWorld for points', () => {
     const l = computeLayout(390, 844);
-    const r = l.zones.execute;
+    const r = l.zones.trackball;
     const w = rectToWorld(l, r);
     const p = cssToWorld(l, r.x + r.w / 2, r.y + r.h / 2);
     expect(p.x).toBeCloseTo(w.cx, 6);
@@ -328,5 +410,84 @@ describe('glassRect', () => {
     expect(g.x + g.w / 2).toBeCloseTo(l.crt.x + l.crt.w / 2, 5);
     expect(g.y + g.h / 2).toBeCloseTo(l.crt.y + l.crt.h / 2, 5);
     expect(g.w).toBeLessThanOrEqual(l.crt.w);
+  });
+});
+
+describe('zone projection', () => {
+  // Tilted mounts and a moving camera mean a zone's screen rect is no longer
+  // its plan rect (spec §3.1), so presses are tested against the projection.
+  function camera(): THREE.PerspectiveCamera {
+    const c = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
+    c.position.set(0, 0, 10);
+    c.lookAt(0, 0, 0);
+    c.updateMatrixWorld(true);
+    c.updateProjectionMatrix();
+    return c;
+  }
+  const square = (z = 0) => [
+    new THREE.Vector3(-1, -1, z),
+    new THREE.Vector3(1, -1, z),
+    new THREE.Vector3(1, 1, z),
+    new THREE.Vector3(-1, 1, z),
+  ];
+
+  it('centres a square facing the camera', () => {
+    const r = screenBounds(square(), camera(), 400, 400);
+    expect(r.x + r.w / 2).toBeCloseTo(200, 3);
+    expect(r.y + r.h / 2).toBeCloseTo(200, 3);
+    expect(r.w).toBeCloseTo(r.h, 3);
+  });
+
+  it('puts world +y at the top of the screen', () => {
+    const top = screenBounds([new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 1, 0)], camera(), 400, 400);
+    const bottom = screenBounds([new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, -1, 0)], camera(), 400, 400);
+    expect(top.y).toBeLessThan(bottom.y);
+  });
+
+  it('foreshortens a tilted rect but keeps it centred', () => {
+    const flat = screenBounds(square(), camera(), 400, 400);
+    // Push the far edge away from the viewer, as a tilted deck does.
+    const tilted = square();
+    tilted[2]!.z = -1.2;
+    tilted[3]!.z = -1.2;
+    const r = screenBounds(tilted, camera(), 400, 400);
+    expect(r.h).toBeLessThan(flat.h);
+    expect(r.x + r.w / 2).toBeCloseTo(200, 3);
+  });
+
+  it('leaves a plan rect untouched at zero tilt', () => {
+    const c = mountCorners({ cx: 0, cy: -2, w: 4, h: 2 }, 0, 0);
+    expect(c.map((p) => [p.x, p.y, p.z])).toEqual([
+      [-2, -1, 0],
+      [2, -1, 0],
+      [2, -3, 0],
+      [-2, -3, 0],
+    ]);
+  });
+
+  it('leans the lower edge toward the viewer and keeps the pivot put', () => {
+    const c = mountCorners({ cx: 0, cy: -2, w: 4, h: 2 }, Math.PI / 6, -1);
+    // Top edge sits on the pivot line and does not move.
+    expect(c[0]!.y).toBeCloseTo(-1, 6);
+    expect(c[0]!.z).toBeCloseTo(0, 6);
+    // Bottom edge comes forward and rises toward the pivot.
+    expect(c[2]!.z).toBeGreaterThan(0);
+    expect(c[2]!.y).toBeGreaterThan(-3);
+  });
+
+  it('covers every corner of the rect it projects', () => {
+    const tilted = square();
+    tilted[0]!.z = 1.5;
+    tilted[1]!.z = 1.5;
+    const r = screenBounds(tilted, camera(), 400, 400);
+    for (const corner of tilted) {
+      const p = corner.clone().project(camera());
+      const x = ((p.x + 1) / 2) * 400;
+      const y = ((1 - p.y) / 2) * 400;
+      expect(x).toBeGreaterThanOrEqual(r.x - 1e-6);
+      expect(x).toBeLessThanOrEqual(r.x + r.w + 1e-6);
+      expect(y).toBeGreaterThanOrEqual(r.y - 1e-6);
+      expect(y).toBeLessThanOrEqual(r.y + r.h + 1e-6);
+    }
   });
 });

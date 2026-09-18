@@ -2,13 +2,20 @@ import * as THREE from 'three';
 import { CHIPS, type ChipCode, type ChipId, type UseTimeGroup } from '../../data/chips';
 import { chipName } from '../../i18n';
 import { drawText, measureText, type PixelSink } from '../crt/pixelFont';
+import { codeColor } from './codeColor';
 import { CHIP_ICONS, ICON_PALETTE } from './chipIcons';
 
-// Chip cartridge face (TERMINAL.md §6.1): 58×72 texels, drawn once per chip id
-// and code: frame in the chip family colour, name, icon, power and code.
+// Chip cartridge face (spec §9.1): 64×88 texels, drawn once per chip id and
+// code — frame in the chip family colour, big icon, name, power and a code
+// letter in its own colour. The top-right corner is cut like an SD card: those
+// texels are left transparent so the body's cut silhouette shows through.
 
-export const FACE_W = 58;
-export const FACE_H = 72;
+export const FACE_W = 64;
+export const FACE_H = 88;
+/** Side of the cut corner, texels. Shared with the cartridge geometry. */
+export const FACE_CUT = 12;
+/** Bumped whenever the face design changes, so cached textures are not reused. */
+const FACE_GEN = 2;
 
 const GROUP_COLOR: Record<UseTimeGroup, { frame: string; backdrop: string }> = {
   CANNON: { frame: '#5f86ff', backdrop: '#1d2a4d' },
@@ -22,7 +29,6 @@ const COLOR = {
   card: '#141619',
   name: '#e8dfc4',
   power: '#ffd166',
-  codeText: '#141414',
   contact: '#c9a24a',
   contactShade: '#6b5424',
   legacy: '#ff6b6b',
@@ -33,7 +39,7 @@ const ICON_SCALE = 2;
 const cache = new Map<string, THREE.CanvasTexture>();
 
 export function chipFaceTexture(defId: ChipId, code: ChipCode, legacyGen?: number): THREE.CanvasTexture {
-  const key = `${defId}:${code}:${legacyGen ?? ''}`;
+  const key = `${defId}:${code}:${legacyGen ?? ''}:${FACE_GEN}`;
   let tex = cache.get(key);
   if (tex) return tex;
 
@@ -53,14 +59,24 @@ export function chipFaceTexture(defId: ChipId, code: ChipCode, legacyGen?: numbe
   ctx.fillRect(0, FACE_H - 2, FACE_W, 2);
   ctx.fillRect(0, 0, 2, FACE_H);
   ctx.fillRect(FACE_W - 2, 0, 2, FACE_H);
+  // The cut corner: clear the square, then put back what stays left of the
+  // diagonal and run the frame along it.
+  ctx.clearRect(FACE_W - FACE_CUT, 0, FACE_CUT, FACE_CUT);
+  for (let y = 0; y < FACE_CUT; y++) {
+    if (y === 0) continue;
+    ctx.fillStyle = COLOR.card;
+    ctx.fillRect(FACE_W - FACE_CUT, y, y, 1);
+    ctx.fillStyle = group.frame;
+    ctx.fillRect(FACE_W - FACE_CUT + Math.max(0, y - 2), y, Math.min(2, y), 1);
+  }
 
   const name = chipName(defId).toUpperCase();
-  drawText(sink, name, Math.round((FACE_W - measureText(name)) / 2), 4, 1, COLOR.name);
+  drawText(sink, name, Math.round((FACE_W - measureText(name)) / 2), 5, 1, COLOR.name);
 
   // Icon on a tinted backdrop.
   const iconSize = 16 * ICON_SCALE;
   const ix = Math.round((FACE_W - iconSize) / 2);
-  const iy = 14;
+  const iy = 18;
   ctx.fillStyle = group.backdrop;
   ctx.fillRect(ix - 2, iy - 2, iconSize + 4, iconSize + 4);
   CHIP_ICONS[defId].forEach((row, y) => {
@@ -73,23 +89,26 @@ export function chipFaceTexture(defId: ChipId, code: ChipCode, legacyGen?: numbe
   });
 
   // Power (bottom-left) and code plaque (bottom-right).
-  const rowY = 52;
-  if (def.power !== null) drawText(sink, String(def.power), 5, rowY + 2, 1, COLOR.power);
-  ctx.fillStyle = group.frame;
-  ctx.fillRect(FACE_W - 16, rowY, 11, 11);
-  drawText(sink, code, FACE_W - 13, rowY + 2, 1, COLOR.codeText);
+  const rowY = 64;
+  if (def.power !== null) drawText(sink, String(def.power), 5, rowY + 3, 1, COLOR.power);
+  const plaque = codeColor(code);
+  ctx.fillStyle = plaque;
+  ctx.fillRect(FACE_W - 19, rowY, 14, 14);
+  ctx.fillStyle = COLOR.card;
+  ctx.fillRect(FACE_W - 18, rowY + 1, 12, 12);
+  drawText(sink, code, FACE_W - 15, rowY + 4, 1, plaque);
   // Legacy mark: the generation that left this chip (roguelite spec §6.4).
   if (legacyGen !== undefined) {
     const mark = `G${String(legacyGen).padStart(2, '0')}`;
-    const mx = Math.round((FACE_W - measureText(mark)) / 2) + 2;
+    const mx = Math.round((FACE_W - measureText(mark)) / 2) + 1;
     ctx.fillStyle = COLOR.legacyBack;
-    ctx.fillRect(mx - 1, rowY + 1, measureText(mark) + 2, 9);
-    drawText(sink, mark, mx, rowY + 2, 1, COLOR.legacy);
+    ctx.fillRect(mx - 1, rowY + 2, measureText(mark) + 2, 9);
+    drawText(sink, mark, mx, rowY + 3, 1, COLOR.legacy);
   }
 
   // Gold contacts.
-  for (let i = 0; i < 6; i++) {
-    const x = 5 + i * 8;
+  for (let i = 0; i < 7; i++) {
+    const x = 4 + i * 8;
     ctx.fillStyle = COLOR.contact;
     ctx.fillRect(x, FACE_H - 8, 5, 5);
     ctx.fillStyle = COLOR.contactShade;

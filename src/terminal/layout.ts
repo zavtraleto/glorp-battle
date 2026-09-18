@@ -11,7 +11,7 @@ export interface Rect {
   h: number;
 }
 
-export type ZoneId = 'pause' | 'chipSelect' | 'trackball' | 'execute';
+export type ZoneId = 'pause' | 'rail' | 'trackball';
 
 export interface TerminalLayout {
   viewport: { w: number; h: number };
@@ -19,6 +19,8 @@ export interface TerminalLayout {
   top: Rect;
   crt: Rect;
   rail: Rect;
+  /** Draw queue strip: a display, never a tap target (spec §11.3). */
+  draw: Rect;
   deck: Rect;
   zones: Record<ZoneId, Rect>;
   worldWidth: number;
@@ -30,7 +32,19 @@ export const TERMINAL_WORLD_WIDTH = 9;
 /** Minimum short side of a pointer zone, CSS px (TERMINAL.md §3). */
 const MIN_ZONE_PX = 56;
 
-const ZONE_ORDER: readonly ZoneId[] = ['pause', 'chipSelect', 'trackball', 'execute'];
+/**
+ * How far the rail's tap zone reaches past the cartridges, in shares of the
+ * rail height. It grows mostly upward, into the gap under the CRT: growing
+ * downward would take the top of the trackball and steal its gestures.
+ */
+const RAIL_ZONE_PAD_UP = 0.35;
+const RAIL_ZONE_PAD_DOWN = 0.12;
+
+/** Slots the chip rail is divided into. */
+export const RAIL_ZONE_SLOTS = 5;
+
+
+export const ZONE_ORDER: readonly ZoneId[] = ['pause', 'rail', 'trackball'];
 
 export function computeLayout(viewportW: number, viewportH: number): TerminalLayout {
   const t = tuning.terminal;
@@ -49,27 +63,34 @@ export function computeLayout(viewportW: number, viewportH: number): TerminalLay
     body = { x: 0, y: 0, w: vw, h: vh };
   }
 
-  const sum = t.LAYOUT_TOP + t.LAYOUT_CRT + t.LAYOUT_RAIL + t.LAYOUT_DECK;
+  const sum = t.LAYOUT_TOP + t.LAYOUT_CRT + t.LAYOUT_RAIL + t.LAYOUT_DRAW + t.LAYOUT_DECK;
   const share = (v: number) => (sum > 0 ? v / sum : 0.25) * body.h;
   const row = (y: number, h: number): Rect => ({ x: body.x, y, w: body.w, h });
   const top = row(body.y, share(t.LAYOUT_TOP));
   const crtRow = row(top.y + top.h, share(t.LAYOUT_CRT));
   const rail = row(crtRow.y + crtRow.h, share(t.LAYOUT_RAIL));
-  const deck = row(rail.y + rail.h, body.y + body.h - (rail.y + rail.h));
+  const draw = row(rail.y + rail.h, share(t.LAYOUT_DRAW));
+  const deck = row(draw.y + draw.h, body.y + body.h - (draw.y + draw.h));
 
   const margin = body.w * t.CRT_MARGIN_X;
   const crt: Rect = { x: body.x + margin, y: crtRow.y, w: body.w - 2 * margin, h: crtRow.h };
 
-  const xL = body.x + body.w * t.DECK_SPLIT_LEFT;
-  const xR = body.x + body.w * t.DECK_SPLIT_RIGHT;
   const pauseW = Math.max(body.w * t.PAUSE_ZONE_W, MIN_ZONE_PX);
   const zones: Record<ZoneId, Rect> = {
     // Clamped so the key stays tappable on a thin top bar; it may overlap the
     // top of the CRT row, which has no zone.
     pause: { x: body.x + body.w - pauseW, y: top.y, w: pauseW, h: Math.max(top.h, MIN_ZONE_PX) },
-    chipSelect: { x: body.x, y: deck.y, w: xL - body.x, h: deck.h },
-    trackball: { x: xL, y: deck.y, w: xR - xL, h: deck.h },
-    execute: { x: xR, y: deck.y, w: body.x + body.w - xR, h: deck.h },
+    // The chip rail is tapped while dodging, so its zone is taller than the
+    // cartridges and reaches into the gaps around them (spec §11.2).
+    rail: {
+      x: body.x,
+      y: rail.y - rail.h * RAIL_ZONE_PAD_UP,
+      w: body.w,
+      h: rail.h * (1 + RAIL_ZONE_PAD_UP + RAIL_ZONE_PAD_DOWN),
+    },
+    // The trackball is the only other battle organ and owns the whole deck: a
+    // gesture steps, a tap shoots (spec §10.2).
+    trackball: { ...deck },
   };
 
   return {
@@ -78,6 +99,7 @@ export function computeLayout(viewportW: number, viewportH: number): TerminalLay
     top,
     crt,
     rail,
+    draw,
     deck,
     zones,
     worldWidth: TERMINAL_WORLD_WIDTH,
@@ -116,10 +138,25 @@ export function cssToWorld(layout: TerminalLayout, x: number, y: number): { x: n
   };
 }
 
-/** CRT glass rect in CSS px: 90% of the CRT row height, `aspect` = w/h of the CRT image. */
+/** Share of the CRT row height the glass may use; the rest is the frame. */
+const GLASS_FILL = 0.97;
+
+/**
+ * CRT glass rect in CSS px, `aspect` = w/h of the CRT image. The aspect is
+ * always kept: a stretched picture would break the square texel the whole
+ * pixel look depends on, so the glass shrinks instead.
+ */
 export function glassRect(layout: TerminalLayout, aspect: number): Rect {
   const c = layout.crt;
-  const h = c.h * 0.9;
-  const w = Math.min(c.w * 0.94, h * aspect);
+  const w = Math.min(c.w, c.h * GLASS_FILL * aspect);
+  const h = w / aspect;
   return { x: c.x + (c.w - w) / 2, y: c.y + (c.h - h) / 2, w, h };
+}
+
+
+/** The rail zone split into per-slot tap targets, left to right. */
+export function railZoneSlots(layout: TerminalLayout): Rect[] {
+  const z = layout.zones.rail;
+  const w = z.w / RAIL_ZONE_SLOTS;
+  return Array.from({ length: RAIL_ZONE_SLOTS }, (_, i) => ({ x: z.x + i * w, y: z.y, w, h: z.h }));
 }

@@ -78,7 +78,13 @@ describe('Field', () => {
 
 const DT = 1 / 60;
 function battle(): World {
-  return new World({ seed: 7, battleIndex: 1, cheats: { god: true, aiEnabled: false, buster: false }, skipIntro: true });
+  return new World({
+    seed: 7,
+    battleIndex: 1,
+    // Long ACTION runs: the Custom Screen would open itself and freeze the tick.
+    cheats: { god: true, aiEnabled: false, buster: false },
+    skipIntro: true,
+  });
 }
 const stepMove = (w: World, dir: 'up' | 'down' | 'left' | 'right') =>
   w.step(DT, { commands: [{ type: 'move', dir }], held: null });

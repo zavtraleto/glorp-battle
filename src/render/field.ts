@@ -5,7 +5,7 @@ import type { World } from '../sim/world';
 import { LineBatch, QuadBatch } from './batch';
 import { NO_SIGNAL, type GridSignal } from './battleSignals';
 import { cellKey, cellStates, type AttackMark, type AttackTone, type CellView, type DebugCellState } from './cellStates';
-import { signal } from './palette';
+import { dimSignal, signal } from './palette';
 import { makeLabelTexture } from './sprites';
 
 // Battle field (BATTLE_VISUAL.md §3–4): a phosphor grid of cells, each drawn
@@ -33,8 +33,10 @@ const col = {
   phosphor: new THREE.Color(),
   dim: new THREE.Color(),
   red: new THREE.Color(),
-  dimRed: new THREE.Color(),
+  blue: new THREE.Color(),
+  dimBlue: new THREE.Color(),
   accent: new THREE.Color(),
+  purple: new THREE.Color(),
   tmp: new THREE.Color(),
 };
 
@@ -121,8 +123,10 @@ export class FieldView {
     signal('phosphor', 1, col.phosphor);
     signal('phosphor', v.GRID_DIM, col.dim);
     signal('red', 1, col.red);
-    signal('red', v.GRID_DIM, col.dimRed);
+    signal('blue', 1, col.blue);
+    signal('blue', v.GRID_DIM, col.dimBlue);
     signal('accent', 1, col.accent);
+    signal('purple', 1, col.purple);
     const views = this.views(world, spawns);
     const time = world.tick + alpha;
     const pulse = 0.5 + 0.5 * Math.sin((time / tuning.sim.SIM_HZ) * Math.PI * 2 * v.DANGER_PULSE_HZ);
@@ -143,11 +147,12 @@ export class FieldView {
         cellToWorld(x, y, c);
         const state = fx.broken(x, y) && view.state !== 'EMPTY' ? 'BROKEN' : view.state;
         const flash = fx.flash(x, y);
-        // Enemy territory is drawn in red (BATTLE_VISUAL.md §3).
+        // Enemy territory is blue; red stays with attacks so an enemy shot
+        // never blends into the enemy half of the field (spec §6.2).
         const enemySide = view.owner === 'enemy';
-        const line = fx.red || enemySide ? col.red : col.phosphor;
-        const dim = enemySide ? col.dimRed : col.dim;
-        const base = flash > 0 ? col.tmp.copy(col.accent).multiplyScalar(Math.min(1, flash)) : line;
+        const line = fx.red ? col.red : enemySide ? col.blue : col.phosphor;
+        const dim = enemySide ? col.dimBlue : col.dim;
+        const base = flash > 0 ? dimSignal(col.accent, Math.min(1, flash), col.tmp) : line;
         const s = reveal < 1 ? reveal : 1;
         const cellHw = hw * s;
         const cellHd = hd * s;
@@ -157,7 +162,7 @@ export class FieldView {
             this.corners(c, cellHw, cellHd, dim, 0.08);
             break;
           case 'BROKEN':
-            this.brokenOutline(c, cellHw, cellHd, base, (x * 7 + y * 3 + Math.floor(time / 3)) % 5);
+            this.brokenOutline(c, cellHw, cellHd, col.purple, (x * 7 + y * 3 + Math.floor(time / 3)) % 5);
             break;
           case 'ATTACK': {
             const tone = view.tone === 'red' ? col.red : col.accent;
@@ -169,25 +174,25 @@ export class FieldView {
           case 'DANGER':
             this.outline(c, cellHw, cellHd, col.red);
             this.outline(c, cellHw * 0.9, cellHd * 0.9, col.red);
-            this.fills.flat(c.x, c.z, cellHw, cellHd, FILL_Y, col.tmp.copy(col.red).multiplyScalar(0.3 + 0.35 * pulse));
+            this.fills.flat(c.x, c.z, cellHw, cellHd, FILL_Y, dimSignal(col.red, 0.3 + 0.35 * pulse, col.tmp));
             break;
           case 'SPAWN': {
             this.outline(c, cellHw, cellHd, base);
             const t = view.age / spawnTicks;
             for (let r = 0; r < SPAWN_RINGS; r++) {
               const k = 1 - ((r / SPAWN_RINGS + t * 2) % 1);
-              this.outline(c, cellHw * k, cellHd * k, col.red);
+              this.outline(c, cellHw * k, cellHd * k, col.purple);
             }
             break;
           }
           case 'OBJECT':
             this.outline(c, cellHw, cellHd, base);
-            this.box(c, cellHw * 0.55, OBJECT_HEIGHT, cellHd * 0.55, base);
+            this.box(c, cellHw * 0.55, OBJECT_HEIGHT, cellHd * 0.55, col.blue);
             break;
           case 'ACTIVE':
             this.outline(c, cellHw, cellHd, base);
             this.outline(c, cellHw * 0.92, cellHd * 0.92, base);
-            this.fills.flat(c.x, c.z, cellHw, cellHd, FILL_Y, col.tmp.copy(base).multiplyScalar(v.ACTIVE_FILL));
+            this.fills.flat(c.x, c.z, cellHw, cellHd, FILL_Y, dimSignal(base, v.ACTIVE_FILL, col.tmp));
             break;
           case 'AFTER': {
             const on = Math.floor(view.age / 2) % 2 === 0;
@@ -295,7 +300,7 @@ export class FieldView {
         const step = CELL_WIDTH / dashes;
         for (let i = 0; i < dashes; i++) {
           const x0 = left + i * step + step * 0.2;
-          this.lines.line(x0, LINE_Y, z, x0 + step * 0.6 * reveal, LINE_Y, z, col.red);
+          this.lines.line(x0, LINE_Y, z, x0 + step * 0.6 * reveal, LINE_Y, z, col.purple);
         }
       }
     }

@@ -2,11 +2,19 @@ import { tuning } from '../../config/tuning';
 import type { Rng } from '../../core/rng';
 import { CHIPS, type ChipCode, type ChipDef, type ChipId } from '../../data/chips';
 import { FOLDERS, type FolderId } from '../../data/folders';
-import { canAddToSelection } from './selection';
+import { canAddToSelection, type ChipKey } from './selection';
 
-// Folder, hand, selection and queue for one battle (GDD §6, §7).
+// Folder, hand, Attack Queue and Refresh for one battle (GDD §5, §7).
+//
+// There is no Custom Screen: the hand of five sits in the rail for the whole
+// battle and the player builds a series of chips while dodging. A fired chip
+// leaves its slot empty; every REFRESH_AT fired chips the empty slots refill
+// from the draw queue.
 
 export type ChipState = 'folder' | 'hand' | 'queued' | 'used';
+
+/** What a hand slot shows right now; derived, never stored. */
+export type SlotState = 'empty' | 'ready' | 'queued' | 'blocked';
 
 export interface ChipInstance {
   readonly uid: number;
@@ -39,16 +47,21 @@ export class ChipSystem {
   /** Shuffled draw order (shuffled once per battle). */
   private readonly drawPile: ChipInstance[];
   private drawIndex = 0;
-  /** Hand slots; null = empty slot (chip taken or folder exhausted). */
+  /** Hand slots; null = spent or the folder ran out. Length is HAND_SIZE. */
   hand: (ChipInstance | null)[] = [];
-  /** Hand slot indices in selection order. */
-  selection: number[] = [];
-  /** Chips waiting to be used in the action phase, first = next. */
-  queue: ChipInstance[] = [];
-  /** Consecutive ADD presses (GDD §7.5). */
-  addStreak = 0;
-  /** Number of completed Custom Screen turns. */
-  turns = 0;
+  /** Hand slot indices in firing order — the Attack Queue. */
+  attack: number[] = [];
+  /**
+   * Keys of every chip added to the current series, including the ones already
+   * fired: the code rule belongs to the series, not to what is still unfired.
+   */
+  private series: ChipKey[] = [];
+  /** A shot has been fired from this series, so chips can no longer be taken back. */
+  private fired = false;
+  /** Chips spent since the last Refresh. */
+  usedSinceRefresh = 0;
+  /** Completed Refreshes. */
+  refreshes = 0;
 
   constructor(folder: FolderId | readonly FolderChip[], rng: Rng) {
     const list = typeof folder === 'string' ? folderChips(folder) : folder;
@@ -57,15 +70,20 @@ export class ChipSystem {
       this.chips.push({ uid: uid++, defId: c.defId, code: c.code, state: 'folder', legacyGen: c.legacyGen });
     }
     this.drawPile = rng.shuffle([...this.chips]);
+    this.hand = new Array<ChipInstance | null>(tuning.chips.HAND_SIZE).fill(null);
   }
 
-  get handSize(): number {
-    const c = tuning.chips;
-    return Math.min(c.HAND_MAX, c.HAND_BASE + c.HAND_ADD_STEP * Math.min(this.addStreak, 2));
-  }
-
-  get folderRemaining(): number {
+  get drawRemaining(): number {
     return this.drawPile.length - this.drawIndex;
+  }
+
+  /** True once the first chip of the current series has been fired. */
+  get locked(): boolean {
+    return this.fired;
+  }
+
+  get refreshDue(): boolean {
+    return this.usedSinceRefresh >= tuning.chips.REFRESH_AT;
   }
 
   count(state: ChipState): number {
@@ -80,96 +98,96 @@ export class ChipSystem {
     return chip;
   }
 
-  /**
-   * Called when the Custom Screen opens (GDD §7.2):
-   * 1) unused queued chips burn, 2) kept hand chips stay in their slots,
-   * 3) empty/new slots are refilled from the draw pile.
-   */
-  openTurn(): void {
-    for (const c of this.queue) c.state = 'used';
-    this.queue = [];
-    this.selection = [];
-
-    const kept = this.hand.filter((c): c is ChipInstance => c !== null).length;
-    // The hand never discards chips: if more are kept than the current size allows, show them all.
-    const target = Math.max(this.handSize, kept);
-    const slots = [...this.hand];
-    // Shrink by dropping empty slots, trailing ones first.
-    for (let i = slots.length - 1; slots.length > target && i >= 0; i--) {
-      if (slots[i] === null) slots.splice(i, 1);
-    }
-    while (slots.length < target) slots.push(null);
-    for (let i = 0; i < slots.length; i++) {
-      if (slots[i] === null) slots[i] = this.draw();
-    }
-    this.hand = slots;
+  /** Fills the hand at the start of the battle (GDD §7.6). */
+  dealHand(): void {
+    this.hand = Array.from({ length: tuning.chips.HAND_SIZE }, () => this.draw());
   }
 
-  selectedChips(): ChipInstance[] {
-    return this.selection.map((i) => this.hand[i] as ChipInstance);
+  /** The next chips of the draw queue, for the preview strip (GDD §7.5). */
+  drawPreview(n: number): ChipInstance[] {
+    return this.drawPile.slice(this.drawIndex, this.drawIndex + Math.max(0, n));
   }
 
-  isSelected(slot: number): boolean {
-    return this.selection.includes(slot);
+  attackChips(): ChipInstance[] {
+    return this.attack.map((i) => this.hand[i] as ChipInstance);
   }
 
-  /** Whether tapping this slot would add it to the selection. */
-  canSelect(slot: number): boolean {
+  queueIndexOf(slot: number): number {
+    return this.attack.indexOf(slot);
+  }
+
+  /** 1-based position in the Attack Queue, or 0 when the slot is not queued. */
+  queuePosition(slot: number): number {
+    return this.queueIndexOf(slot) + 1;
+  }
+
+  slotState(slot: number): SlotState {
     const chip = this.hand[slot];
-    if (!chip || this.isSelected(slot)) return false;
-    return canAddToSelection(this.selectedChips(), chip, tuning.chips.SELECT_MAX);
+    if (!chip) return 'empty';
+    if (this.queueIndexOf(slot) >= 0) return 'queued';
+    return this.fitsSeries(chip) ? 'ready' : 'blocked';
   }
 
-  select(slot: number): boolean {
-    return this.selectAt(slot, this.selection.length);
+  /** Whether this chip could join the current series (GDD §7.3). */
+  private fitsSeries(chip: ChipKey): boolean {
+    return canAddToSelection(this.series, chip, tuning.chips.HAND_SIZE);
+  }
+
+  /** Whether tapping this slot would add it to the Attack Queue. */
+  canSelect(slot: number): boolean {
+    return this.slotState(slot) === 'ready';
   }
 
   /**
-   * Inserts a hand chip at a selection position; later chips move right
-   * (TERMINAL.md §6.4). Order never affects validity.
+   * One tap on a hand slot (GDD §7.2): adds the chip to the Attack Queue, or
+   * takes it back out while the series has not fired yet. Returns whether
+   * anything changed.
    */
-  selectAt(slot: number, index: number): boolean {
+  toggleSelect(slot: number): boolean {
+    const at = this.queueIndexOf(slot);
+    if (at >= 0) {
+      // Taking a chip back is refused once the series has started firing.
+      if (this.fired) return false;
+      this.attack.splice(at, 1);
+      this.rebuildSeries();
+      return true;
+    }
     if (!this.canSelect(slot)) return false;
-    const at = Math.max(0, Math.min(this.selection.length, Math.floor(index)));
-    this.selection.splice(at, 0, slot);
+    this.attack.push(slot);
+    this.series.push(this.hand[slot] as ChipInstance);
     return true;
   }
 
-  /** Removes any selected chip; a subset of a valid selection stays valid. */
-  unselect(index: number): boolean {
-    if (index < 0 || index >= this.selection.length) return false;
-    this.selection.splice(index, 1);
-    return true;
+  /** After a removal the series is exactly what is queued (nothing has fired). */
+  private rebuildSeries(): void {
+    this.series = this.attackChips();
   }
 
-  /** Removes the last selected chip (MMBN1: B cancels the last choice). */
-  cancelLast(): boolean {
-    return this.unselect(this.selection.length - 1);
-  }
-
-  /** OK: selected chips become the queue, in selection order (GDD §7.4). */
-  confirm(): void {
-    const picked = this.selectedChips();
-    for (const c of picked) c.state = 'queued';
-    for (const i of this.selection) this.hand[i] = null;
-    this.queue = picked;
-    if (picked.length > 0) this.addStreak = 0;
-    this.selection = [];
-    this.turns++;
-  }
-
-  /** ADD: drop the selection, grow the next hand, leave with an empty queue (GDD §7.5). */
-  add(): void {
-    this.selection = [];
-    this.queue = [];
-    this.addStreak = Math.min(this.addStreak + 1, 2);
-    this.turns++;
-  }
-
-  /** Removes and returns the next queued chip (used by chip execution, M4). */
+  /** Fires the first chip of the Attack Queue (GDD §7.4). */
   takeNext(): ChipInstance | null {
-    const chip = this.queue.shift() ?? null;
-    if (chip) chip.state = 'used';
+    const slot = this.attack.shift();
+    if (slot === undefined) return null;
+    const chip = this.hand[slot];
+    if (!chip) return null;
+    chip.state = 'used';
+    this.hand[slot] = null;
+    this.usedSinceRefresh++;
+    if (this.attack.length === 0) {
+      // The series is spent: the next one may start with any chip.
+      this.series = [];
+      this.fired = false;
+    } else {
+      this.fired = true;
+    }
     return chip;
+  }
+
+  /** Refills every empty slot from the draw queue and clears the counter (GDD §5). */
+  refresh(): void {
+    for (let i = 0; i < this.hand.length; i++) {
+      if (this.hand[i] === null) this.hand[i] = this.draw();
+    }
+    this.usedSinceRefresh = 0;
+    this.refreshes++;
   }
 }

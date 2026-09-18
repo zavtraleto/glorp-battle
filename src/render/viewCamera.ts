@@ -9,12 +9,14 @@ export interface ViewParams {
   aspect: number;
   /** Share of the frame (NDC half-extent) the field may occupy. */
   fill: number;
+  /** Where the field is centred vertically, NDC: negative drops it below the HUD band. */
+  offsetY: number;
 }
 
 const OUTER = 5;
 const BISECT = 32;
 
-/** Places `camera` so every point is inside the frame, filling `fill`, centred. */
+/** Places `camera` so every point is inside the frame, filling `fill`, centred on `offsetY`. */
 export function fitView(camera: THREE.PerspectiveCamera, points: readonly THREE.Vector3[], p: ViewParams): void {
   const pitch = THREE.MathUtils.degToRad(p.pitchDeg);
   const forward = new THREE.Vector3(0, -Math.sin(pitch), -Math.cos(pitch));
@@ -76,7 +78,7 @@ export function fitView(camera: THREE.PerspectiveCamera, points: readonly THREE.
     const b = bounds();
     // Shift sideways/up so the field sits in the middle of the frame.
     offset.x += ((b.minX + b.maxX) / 2) * dist * tanV * p.aspect;
-    offset.y += ((b.minY + b.maxY) / 2) * dist * tanV;
+    offset.y += ((b.minY + b.maxY) / 2 - p.offsetY) * dist * tanV;
   }
   place(dist);
 }

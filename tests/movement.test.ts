@@ -133,7 +133,7 @@ describe('player movement', () => {
 
   it('ignores input outside ACTION', () => {
     const w = freshWorld();
-    w.state = 'CUSTOM';
+    w.state = 'PAUSED';
     tick(w, ['up'], 'up');
     idle(w, 60, 'up');
     expect(pos(w)).toEqual([1, 4]);
@@ -159,20 +159,20 @@ describe('Occupancy', () => {
 
 describe('SwipeRecognizer', () => {
   it('fires once the threshold is crossed, by dominant axis', () => {
-    const s = new SwipeRecognizer(24);
-    s.begin(100, 100);
+    const s = new SwipeRecognizer(24, 0.35);
+    s.begin(100, 100, 0);
     expect(s.move(110, 105)).toBeNull();
     expect(s.move(126, 110)).toBe('right');
   });
 
   it('one gesture yields exactly one step', () => {
-    const s = new SwipeRecognizer(24);
-    s.begin(0, 0);
+    const s = new SwipeRecognizer(24, 0.35);
+    s.begin(0, 0, 0);
     expect(s.move(30, 0)).toBe('right');
     expect(s.move(80, 0)).toBeNull();
     expect(s.move(30, -60)).toBeNull();
-    s.end();
-    s.begin(0, 0);
+    s.end(0.1);
+    s.begin(0, 0, 1);
     expect(s.move(0, -30)).toBe('up');
   });
 
@@ -184,18 +184,45 @@ describe('SwipeRecognizer', () => {
       [30, 0, 'right'],
     ];
     for (const [dx, dy, dir] of cases) {
-      const s = new SwipeRecognizer(24);
-      s.begin(50, 50);
+      const s = new SwipeRecognizer(24, 0.35);
+      s.begin(50, 50, 0);
       expect(s.move(50 + dx, 50 + dy)).toBe(dir);
     }
   });
 
   it('ignores movement when no gesture is active', () => {
-    const s = new SwipeRecognizer(24);
+    const s = new SwipeRecognizer(24, 0.35);
     expect(s.move(100, 100)).toBeNull();
-    s.begin(0, 0);
-    s.end();
+    s.begin(0, 0, 0);
+    s.end(0.1);
     expect(s.move(100, 0)).toBeNull();
+  });
+
+  // The trackball is the only battle control: a gesture that never travelled
+  // is the chip shot (spec §10.2).
+  it('reports a tap when the gesture ends without a step', () => {
+    const s = new SwipeRecognizer(24, 0.35);
+    s.begin(50, 50, 1.0);
+    expect(s.move(52, 51)).toBeNull();
+    expect(s.end(1.1)).toBe('tap');
+  });
+
+  it('reports a step, not a tap, once the threshold was crossed', () => {
+    const s = new SwipeRecognizer(24, 0.35);
+    s.begin(50, 50, 1.0);
+    expect(s.move(90, 50)).toBe('right');
+    expect(s.end(1.1)).toBe('step');
+  });
+
+  it('reports nothing when the finger rested past the tap window', () => {
+    const s = new SwipeRecognizer(24, 0.35);
+    s.begin(50, 50, 1.0);
+    expect(s.end(1.4)).toBe('none');
+  });
+
+  it('reports nothing when no gesture was active', () => {
+    const s = new SwipeRecognizer(24, 0.35);
+    expect(s.end(1)).toBe('none');
   });
 });
 

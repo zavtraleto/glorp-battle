@@ -1,10 +1,19 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { ENEMY_SEEDS } from '../src/data/enemies';
-import { generateCreature } from '../src/render/creatureGen';
+import { CREATURE_SIZE, generateCreature } from '../src/render/creatureGen';
 import { battleSignal, hpSegments, NO_SIGNAL } from '../src/render/battleSignals';
 import { cellKey, cellStates, type CellInputs } from '../src/render/cellStates';
-import { bayer4, paletteIndex, signal } from '../src/render/palette';
+import {
+  bayer4,
+  dimSignal,
+  paletteIndex,
+  signal,
+  PALETTE,
+  PALETTE_COLORS,
+  ROLE_INDEX,
+  type Role,
+} from '../src/render/palette';
 import { fitView } from '../src/render/viewCamera';
 import { texelScale } from '../src/render/pixelSprite';
 import { PLAYER_ROWS, playerBitmap } from '../src/render/playerSprite';
@@ -19,32 +28,51 @@ describe('palette', () => {
     expect(bayer4(5, 6)).toBe(bayer4(1, 2));
   });
 
-  it('maps signals to flat palette colours', () => {
-    for (let y = 0; y < 4; y++) {
-      for (let x = 0; x < 4; x++) {
-        expect(paletteIndex(0, 1, 0, x, y)).toBe(1);
-        expect(paletteIndex(1, 0, 0, x, y)).toBe(2);
-        expect(paletteIndex(0, 0, 1, x, y)).toBe(3);
-        expect(paletteIndex(0, 0, 0, x, y)).toBe(0);
-      }
+  // The material writes an index, not a role-per-channel (spec §6.1).
+  it('reads back every palette index at full brightness', () => {
+    for (const [role, index] of Object.entries(ROLE_INDEX)) {
+      const c = signal(role as Role, 1);
+      for (let y = 0; y < 4; y++)
+        for (let x = 0; x < 4; x++) expect(paletteIndex(c.r, c.g, c.b, x, y)).toBe(index);
     }
+  });
+
+  it('has six palette entries, background first', () => {
+    expect(PALETTE_COLORS).toHaveLength(6);
+    expect(PALETTE_COLORS[0]).toBe(PALETTE.bg);
+    expect(new Set(Object.values(ROLE_INDEX)).size).toBe(5);
+  });
+
+  it('reads zero brightness as background whatever the index', () => {
+    for (const index of Object.values(ROLE_INDEX))
+      for (let y = 0; y < 4; y++)
+        for (let x = 0; x < 4; x++) expect(paletteIndex(index / 255, 0, 0, x, y)).toBe(0);
   });
 
   it('dithers partial brightness in proportion', () => {
     let lit = 0;
-    for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) if (paletteIndex(0, 0.5, 0, x, y)) lit++;
+    const c = signal('phosphor', 0.5);
+    for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) if (paletteIndex(c.r, c.g, c.b, x, y)) lit++;
     expect(lit).toBe(8);
   });
 
-  it('prefers accent, then red, when channels tie', () => {
-    expect(paletteIndex(1, 1, 1, 0, 0)).toBe(3);
-    expect(paletteIndex(1, 1, 0, 0, 0)).toBe(2);
+  // Scaling the whole colour would scale the index too and repaint the pixel.
+  it('dims a signal without touching its index', () => {
+    const half = dimSignal(signal('purple', 1), 0.5);
+    expect(half.r).toBe(ROLE_INDEX.purple / 255);
+    expect(half.g).toBeCloseTo(0.5, 6);
+    expect(paletteIndex(half.r, half.g, half.b, 0, 0)).toBe(ROLE_INDEX.purple);
   });
 
-  it('builds signal colours on one channel', () => {
-    expect(signal('red', 0.5).toArray()).toEqual([0.5, 0, 0]);
-    expect(signal('phosphor', 2).toArray()).toEqual([0, 1, 0]);
-    expect(signal('accent').toArray()).toEqual([0, 0, 1]);
+  it('clamps a dimmed signal to the unit range', () => {
+    expect(dimSignal(signal('red', 1), 4).g).toBe(1);
+    expect(dimSignal(signal('red', 1), -1).g).toBe(0);
+  });
+
+  it('builds signal colours as index and brightness', () => {
+    expect(signal('red', 0.5).toArray()).toEqual([ROLE_INDEX.red / 255, 0.5, 0]);
+    expect(signal('purple', 2).toArray()).toEqual([ROLE_INDEX.purple / 255, 1, 0]);
+    expect(signal('blue', 0).toArray()).toEqual([ROLE_INDEX.blue / 255, 0, 0]);
   });
 });
 
@@ -143,7 +171,7 @@ describe('fitView', () => {
   for (const pitch of [20, 28, 45]) {
     it(`fits and centres the field at ${pitch}°`, () => {
       const cam = new THREE.PerspectiveCamera();
-      fitView(cam, corners, { pitchDeg: pitch, fovDeg: 40, aspect: 0.75, fill: 0.92 });
+      fitView(cam, corners, { pitchDeg: pitch, fovDeg: 40, aspect: 0.75, fill: 0.92, offsetY: 0 });
       let minX = Infinity;
       let maxX = -Infinity;
       let minY = Infinity;
@@ -169,9 +197,44 @@ describe('fitView', () => {
       expect(nearW).toBeGreaterThan(farW * 1.3);
     });
   }
+
+  // The HUD band lives across the top of the picture, so the field is pushed
+  // down by half the band instead of sitting dead centre (spec §8).
+  it('drops the field below the HUD band', () => {
+    const cam = new THREE.PerspectiveCamera();
+    fitView(cam, corners, { pitchDeg: 28, fovDeg: 40, aspect: 0.727, fill: 0.86, offsetY: -0.11 });
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const c of corners) {
+      const p = c.clone().project(cam);
+      minY = Math.min(minY, p.y);
+      maxY = Math.max(maxY, p.y);
+    }
+    expect((minY + maxY) / 2).toBeCloseTo(-0.11, 2);
+    expect(maxY).toBeLessThan(0.86);
+  });
+
+  it('centres the field when no offset is asked for', () => {
+    const cam = new THREE.PerspectiveCamera();
+    fitView(cam, corners, { pitchDeg: 28, fovDeg: 40, aspect: 0.727, fill: 0.86, offsetY: 0 });
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const c of corners) {
+      const p = c.clone().project(cam);
+      minY = Math.min(minY, p.y);
+      maxY = Math.max(maxY, p.y);
+    }
+    expect((minY + maxY) / 2).toBeCloseTo(0, 2);
+  });
 });
 
 describe('generateCreature', () => {
+  it('draws creatures at 48 texels', () => {
+    const c = generateCreature(1);
+    expect([c.w, c.h]).toEqual([CREATURE_SIZE, CREATURE_SIZE]);
+    expect(CREATURE_SIZE).toBe(48);
+  });
+
   it('is deterministic per seed and varies between seeds', () => {
     const a = generateCreature(7);
     expect(generateCreature(7).px).toEqual(a.px);
@@ -198,10 +261,11 @@ describe('generateCreature', () => {
 });
 
 describe('player sprite and texel scale', () => {
-  it('draws the player as a 24×32 bitmap with feet on the bottom row', () => {
-    for (const row of PLAYER_ROWS) expect(row).toMatch(/^[.ov]{24}$/);
+  // Bigger bitmaps for the higher CRT resolution (spec §7).
+  it('draws the player as a 36×48 bitmap with feet on the bottom row', () => {
+    for (const row of PLAYER_ROWS) expect(row).toMatch(/^[.ov]{36}$/);
     const b = playerBitmap();
-    expect([b.w, b.h]).toEqual([24, 32]);
+    expect([b.w, b.h]).toEqual([36, 48]);
     const bottom = Array.from(b.px.slice((b.h - 1) * b.w));
     expect(bottom.some((p) => p === 1)).toBe(true);
     expect(Array.from(b.px).some((p) => p === 2)).toBe(true);
@@ -223,14 +287,6 @@ describe('battle signals', () => {
     expect(early.reveal(0)).toBe(0);
     const done = battleSignal({ ...base, state: 'BATTLE_INTRO', elapsed: 48 });
     for (let y = 0; y < 6; y++) expect(done.reveal(y)).toBe(1);
-  });
-
-  it('sweeps an accent wave into the depth at the first BATTLE START only', () => {
-    const near = battleSignal({ ...base, state: 'BATTLE_START', elapsed: 9 });
-    const far = battleSignal({ ...base, state: 'BATTLE_START', elapsed: 45 });
-    expect(near.flash(0, 5)).toBeGreaterThan(near.flash(0, 0));
-    expect(far.flash(0, 0)).toBeGreaterThan(far.flash(0, 5));
-    expect(battleSignal({ ...base, firstStart: false, state: 'BATTLE_START', elapsed: 9 })).toBe(NO_SIGNAL);
   });
 
   it('blinks the enemy side on a win', () => {

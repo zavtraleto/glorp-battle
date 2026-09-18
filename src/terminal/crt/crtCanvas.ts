@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import { tuning } from '../../config/tuning';
 import { CHIPS } from '../../data/chips';
-import { chipDesc, chipName } from '../../i18n';
+import { chipDesc, chipName, t } from '../../i18n';
 import { PALETTE } from '../../render/palette';
 import { CHIP_ICONS, ICON_PALETTE } from '../chips/chipIcons';
 import { blinkPhase } from '../terminalMode';
-import { hudKey, type HpBar, type HudLabel, type HudModel, type LabelTone } from './hudModel';
+import { hudKey, type HpBar, type HudLabel, type HudModel, type HudStatus, type LabelTone } from './hudModel';
 import { menuLayout, type MenuSpec, type MenuTone } from './menuModel';
 import { drawText, measureText, wrapText, type PixelSink } from './pixelFont';
 
@@ -22,6 +22,14 @@ const COLOR = {
   red: hex(PALETTE.red),
   accent: hex(PALETTE.accent),
   outline: hex(PALETTE.bg),
+  hp: hex(PALETTE.phosphor),
+  hpLow: hex(PALETTE.accent),
+  gaugeLabel: '#9fe8ff',
+  gaugeOn: hex(PALETTE.phosphor),
+  gaugeFull: hex(PALETTE.accent),
+  gaugeOff: '#16323a',
+  chipLine: '#e8dfc4',
+  noChip: '#7d8aa3',
 };
 
 const MENU_COLOR: Record<MenuTone, string> = {
@@ -98,6 +106,7 @@ export class CrtCanvas {
       return;
     }
 
+    if (m.status) this.drawStatus(ctx, sink, m.status, W, H, s, M, blinkOn);
     this.drawBars(ctx, m.bars, s);
     this.drawLabels(sink, m.labels);
     if (m.info) this.drawInfo(ctx, sink, m.info, W, H, s, M);
@@ -109,6 +118,48 @@ export class CrtCanvas {
       drawText(sink, m.title, Math.round((W - measureText(m.title, s + 1)) / 2), M + 4 * s, s + 1, COLOR.infoPower);
     }
     this.texture.needsUpdate = true;
+  }
+
+  /**
+   * The battle status band (spec §8): HP on the left, the Refresh counter
+   * across the middle and the first queued chip on the bottom line. All of it
+   * is the old cabinet's indicators, moved onto the screen.
+   */
+  private drawStatus(
+    ctx: CanvasRenderingContext2D,
+    sink: PixelSink,
+    st: HudStatus,
+    W: number,
+    H: number,
+    s: number,
+    M: number,
+    blinkOn: boolean,
+  ): void {
+    const big = s + 1;
+    // A hit blinks the number; otherwise low HP just sits amber.
+    const hpColor = st.hpHit && blinkOn ? COLOR.red : st.hpLow ? COLOR.hpLow : COLOR.hp;
+    drawText(sink, String(st.hp), M, M, big, hpColor);
+
+    const barW = Math.round(W * 0.68);
+    const x0 = Math.round((W - barW) / 2);
+    const label = `${t('hud.refresh')} ${st.gaugeLit}/${st.gaugeTotal}`;
+    drawText(sink, label, Math.round((W - measureText(label, s)) / 2), M, s, COLOR.gaugeLabel);
+    const barY = M + 9 * s;
+    const barH = 4 * s;
+    // Few, wide divisions: the counter must be countable at a glance.
+    const gap = 2 * s;
+    const cell = (barW - (st.gaugeTotal - 1) * gap) / st.gaugeTotal;
+    // A full gauge blinks: it is the only cue that the Custom Screen is coming.
+    const onColor = st.gaugeFull && !blinkOn ? COLOR.gaugeFull : st.gaugeFull ? COLOR.hp : COLOR.gaugeOn;
+    ctx.fillStyle = COLOR.outline;
+    ctx.fillRect(x0 - 1, barY - 1, barW + 2, barH + 2);
+    for (let i = 0; i < st.gaugeTotal; i++) {
+      ctx.fillStyle = i < st.gaugeLit ? onColor : COLOR.gaugeOff;
+      ctx.fillRect(Math.round(x0 + i * (cell + gap)), barY, Math.max(1, Math.round(cell)), barH);
+    }
+
+    const line = st.chip ? `${st.chip.name} ${st.chip.code}` : t('hud.noChip');
+    drawText(sink, line, M, H - M - 7 * s, s, st.chip ? COLOR.chipLine : COLOR.noChip);
   }
 
   /** Enemy HP as a row of big segments: lit = red block, lost = red outline. */

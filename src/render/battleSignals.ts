@@ -21,10 +21,8 @@ export interface SignalInput {
   state: GameState;
   /** Ticks since the state began (world.stateElapsed). */
   elapsed: number;
-  firstStart: boolean;
   player: { x: number; y: number };
   introTicks: number;
-  startTicks: number;
   wonTicks: number;
   deadTicks: number;
 }
@@ -44,12 +42,6 @@ export function battleSignal(i: SignalInput): GridSignal {
       // The grid draws in row by row, away from the player.
       const t = i.elapsed / Math.max(1, i.introTicks);
       return { ...NO_SIGNAL, reveal: (y) => clamp01(t * ROWS * 1.25 - nearIndex(y)) };
-    }
-    case 'BATTLE_START': {
-      if (!i.firstStart) return NO_SIGNAL;
-      // An accent wave runs from the player's edge into the depth.
-      const s = (i.elapsed / Math.max(1, i.startTicks)) * (ROWS + 2) - 1;
-      return { ...NO_SIGNAL, flash: (_x, y) => clamp01(1 - Math.abs(nearIndex(y) - s)) };
     }
     case 'BATTLE_WON': {
       // Enemy cells blink, the rest pulses once.

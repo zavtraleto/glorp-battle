@@ -52,10 +52,17 @@ export class SceneRenderer {
 
   private fitCamera(w: number, h: number): void {
     const v = tuning.battleVisual;
-    const key = `${v.VIEW_PITCH}|${v.VIEW_FOV}|${v.VIEW_FILL}|${w}|${h}`;
+    const key = `${v.VIEW_PITCH}|${v.VIEW_FOV}|${v.VIEW_FILL}|${v.HUD_BAND}|${w}|${h}`;
     if (key === this.lastCameraKey) return;
     this.lastCameraKey = key;
-    fitView(this.camera, this.corners, { pitchDeg: v.VIEW_PITCH, fovDeg: v.VIEW_FOV, aspect: w / h, fill: v.VIEW_FILL });
+    fitView(this.camera, this.corners, {
+      pitchDeg: v.VIEW_PITCH,
+      fovDeg: v.VIEW_FOV,
+      aspect: w / h,
+      fill: v.VIEW_FILL,
+      // The status band owns the top of the picture, so the field sits below it.
+      offsetY: -v.HUD_BAND,
+    });
   }
 
   /** Normalized point (0..1, top-left origin) in the last render target for a world point. */
@@ -154,10 +161,8 @@ export class SceneRenderer {
     const signal = battleSignal({
       state: world.state,
       elapsed: world.stateElapsed,
-      firstStart: world.firstStart,
       player: { x: world.player.x, y: world.player.y },
       introTicks: secondsToTicks(fx.INTRO_TIME),
-      startTicks: secondsToTicks(fx.BANNER_BATTLE_START),
       wonTicks: secondsToTicks(fx.RESULT_DELAY_WIN),
       deadTicks: secondsToTicks(fx.RESULT_DELAY_LOSE),
     });

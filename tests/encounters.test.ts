@@ -62,9 +62,10 @@ describe('Monolith', () => {
       battleIndex: 1,
       encounter: encounterById('boss'),
       skipIntro: true,
+      // Long ACTION runs: the Custom Screen would open itself and freeze the tick.
       cheats: { god: true, aiEnabled: true, buster: false },
     });
-    w.chips.queue = [];
+    w.chips.attack = [];
     const boss = w.enemies.find((e) => e.kind === 'monolith') as Monolith;
     // Keep the escort out of the way.
     const escort = w.enemies.find((e) => e.kind !== 'monolith')!;

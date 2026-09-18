@@ -29,7 +29,7 @@ function makeWorld(): World {
   for (const e of w.enemies) w.occupancy.remove(e.id, e.x, e.y);
   w.enemies = [];
   // Discard the chip picked by skipIntro so each test controls the queue.
-  w.chips.queue = [];
+  w.chips.attack = [];
   // A durable enemy out of every tested pattern keeps the battle from ending.
   addEnemy(w, 2, 0, 9999);
   return w;
@@ -211,7 +211,7 @@ describe('chip use', () => {
     run(w, useTicks(CHIPS.recover50));
     use(w);
     expect(w.activeChip?.def.id).toBe('cannon');
-    expect(w.chips.queue).toHaveLength(0);
+    expect(w.chips.attackChips()).toHaveLength(0);
   });
 
   it('locks movement for the use time and ignores presses while busy', () => {
@@ -220,7 +220,7 @@ describe('chip use', () => {
     use(w);
     step(w, [{ type: 'move', dir: 'left' }, { type: 'useChip' }]);
     expect(w.player.x).toBe(1);
-    expect(w.chips.queue).toHaveLength(1);
+    expect(w.chips.attackChips()).toHaveLength(1);
     run(w, useTicks(CHIPS.cannon));
     expect(w.activeChip).toBeNull();
     step(w, [{ type: 'move', dir: 'left' }]);
@@ -235,7 +235,7 @@ describe('chip use', () => {
     use(w);
     run(w, T(1));
     expect(e.hp).toBe(200);
-    expect(w.chips.queue).toHaveLength(0);
+    expect(w.chips.attackChips()).toHaveLength(0);
     expect(events.some((ev) => ev.type === 'chipInterrupted')).toBe(true);
   });
 
@@ -247,19 +247,17 @@ describe('chip use', () => {
     w.player.takeHit(0, w.tick);
     use(w);
     expect(w.activeChip).toBeNull();
-    expect(w.chips.queue).toHaveLength(1);
+    expect(w.chips.attackChips()).toHaveLength(1);
   });
 
-  it('a chip from the Custom Screen can win battle 1', () => {
+  it('chips picked in battle can win battle 1', () => {
     const w = new World({ seed: 2, battleIndex: 1, cheats: { god: true, aiEnabled: false } });
-    run(w, T(tuning.fx.INTRO_TIME));
-    // Pick the HiCannon or Cannon chips available in the lane (Mettik starts in the player's lane).
+    run(w, T(tuning.fx.INTRO_TIME) + 1);
+    // Pick the HiCannon or Cannon chips in the lane (Mettik starts in the player's lane).
     w.chips.hand.forEach((c, i) => {
-      if (c && (c.defId === 'cannon' || c.defId === 'hicannon')) w.customSelect(i);
+      if (c && (c.defId === 'cannon' || c.defId === 'hicannon')) w.selectChip(i);
     });
-    const picked = w.chips.selection.length;
-    w.customConfirm();
-    run(w, T(tuning.fx.BANNER_BATTLE_START));
+    const picked = w.chips.attack.length;
     for (let i = 0; i < picked; i++) {
       use(w);
       run(w, T(0.6));
@@ -302,7 +300,7 @@ describe('hit effects', () => {
   it('paralyze stops an enemy for PARALYZE_TIME', () => {
     withChip({ ...CHIPS.cannon, onHit: { paralyze: true } }, () => {
       const w = new World({ seed: 7, battleIndex: 1, cheats: { god: true, aiEnabled: true, buster: false }, skipIntro: true });
-      w.chips.queue = [];
+      w.chips.attack = [];
       const met = w.enemies[0]!; // (1,1), in the player's lane: would attack within a second
       met.hp = 500;
       give(w, 'cannon');

@@ -23,8 +23,7 @@ export interface DebugActions {
   killAll(): void;
   setPlayerHp(hp: number): void;
   forceAttack(): void;
-  fillGauge(): void;
-  openCustom(): void;
+  advanceRefresh(): void;
   giveChip(id: ChipId): void;
   /** Battle field look (BATTLE_VISUAL.md §10). */
   setCellState(x: number, y: number, state: DebugCellState | 'NONE'): void;
@@ -58,6 +57,29 @@ const RANGES: Record<string, [number, number, number]> = {
   CRT_CURVATURE: [0, 0.4, 0.01],
   CRT_BLEED: [0, 1, 0.01],
   CRT_GHOSTING: [0, 0.9, 0.01],
+  CRT_PHOSPHOR: [0, 1, 0.01],
+  CRT_GLOW: [0, 1, 0.01],
+  CRT_NOISE: [0, 0.3, 0.01],
+  CRT_ABERRATION: [0, 2, 0.05],
+  CRT_SHAKE: [0, 1, 0.01],
+  AMBIENT: [0, 0.5, 0.01],
+  LIGHT_CRT: [0, 2, 0.05],
+  LIGHT_RING: [0, 2, 0.05],
+  LIGHT_CHIP: [0, 2, 0.05],
+  VIGNETTE: [0, 1, 0.01],
+  DECK_TILT: [0, 45, 1],
+  RAIL_TILT: [0, 30, 1],
+  CRT_TILT: [0, 20, 1],
+  BALL_W: [0.1, 0.5, 0.01],
+  RING_W: [0.15, 0.6, 0.01],
+  RING_SEGMENTS: [6, 32, 1],
+  CHIP_ACTIVE_PUSH: [0, 0.5, 0.01],
+  CHIP_ACTIVE_GLOW: [0, 2, 0.05],
+  HUD_BAND: [0, 0.3, 0.01],
+  LAYOUT_DRAW: [0, 0.12, 0.01],
+  REFRESH_AT: [1, 6, 1],
+  DRAW_PREVIEW: [0, 6, 1],
+  HAND_SIZE: [3, 8, 1],
 };
 
 /** lil-gui debug panel (GDD §15.5). Every tunable is editable live and persisted. */
@@ -142,8 +164,7 @@ export class DebugPanel {
     cf.add(a.cheats, 'buster').name('auto buster');
     cf.add({ kill: () => a.killAll() }, 'kill').name('kill all enemies');
     cf.add({ force: () => a.forceAttack() }, 'force').name('force enemy attack');
-    cf.add({ fill: () => a.fillGauge() }, 'fill').name('fill custom gauge');
-    cf.add({ open: () => a.openCustom() }, 'open').name('open custom now');
+    cf.add({ step: () => a.advanceRefresh() }, 'step').name('advance refresh counter');
     const give = { chip: 'cannon' as ChipId };
     cf.add(give, 'chip', Object.keys(CHIPS)).name('chip to give');
     cf.add({ give: () => a.giveChip(give.chip) }, 'give').name('add chip to queue');

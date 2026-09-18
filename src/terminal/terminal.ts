@@ -8,9 +8,8 @@ import type { SimEvent } from '../sim/events';
 import type { World } from '../sim/world';
 import {
   acceptsPress,
-  chipSelectAvailability,
   cursorKind,
-  executeAvailability,
+  shotAvailability,
   organForKey,
   stepFocus,
   trayKeyAction,
@@ -18,8 +17,9 @@ import {
 import { BattleTarget } from './crt/battleTarget';
 import { CrtCanvas } from './crt/crtCanvas';
 import { CrtMaterial } from './crt/crtMaterial';
+import { PLAYER_ID } from '../sim/player';
 import { FloaterList, floaterFromEvent } from './crt/floaters';
-import { EMPTY_HUD, gaugeLedCount, hpLedCount, type HpBar, type HudLabel } from './crt/hudModel';
+import { EMPTY_HUD, type HpBar, type HudLabel, type HudStatus } from './crt/hudModel';
 import { hpSegments } from '../render/battleSignals';
 import { menuFor, menuItemAt, menuLayout, moveCursor, type MenuAction, type MenuSpec } from './crt/menuModel';
 import { trayLayout, trayTargetAt, type TrayLayout, type TrayTarget } from './chips/trayLayout';
@@ -27,25 +27,40 @@ import { cursorCss } from './interaction/cursor';
 import { attachPointers } from './interaction/pointerEvents';
 import { TrayInput } from './interaction/trayInput';
 import { PointerRouter } from './interaction/pointerRouter';
-import { computeLayout, cssToWorld, glassRect, rectContains, type TerminalLayout, type ZoneId } from './layout';
+import {
+  computeLayout,
+  cssToWorld,
+  glassRect,
+  railZoneSlots,
+  rectContains,
+  rectToWorld,
+  ZONE_ORDER,
+  type TerminalLayout,
+  type ZoneId,
+} from './layout';
 import { DeckControls } from './parts/deckControls';
-import { Environment } from './parts/environment';
-import { ChipRail, RAIL_SLOTS } from './parts/chipRail';
+import { ChipRail } from './parts/chipRail';
 import { ChipTray, type HandCellState } from './parts/chipTray';
 import { HitZones } from './parts/hitZones';
 import { Housing } from './parts/housing';
+import { DarkLighting } from './parts/lighting';
+import { DrawStrip } from './parts/drawStrip';
+import { Mount } from './parts/mount';
+import { mountCorners, screenBounds } from './interaction/project';
 import { Trackball } from './parts/trackball';
-import { lampStates, terminalMode } from './terminalMode';
+import { terminalMode } from './terminalMode';
 import type { TraySource } from '../app/reward';
-import { t as tr } from '../i18n';
+import { chipName, t as tr } from '../i18n';
 
 // NET-01 terminal (TERMINAL.md §13). Owns the terminal scene and camera, draws
 // the battle and the HUD into the CRT and the terminal into a low-resolution
 // canvas that CSS upscales without smoothing.
 
-const TERMINAL_CLEAR_COLOR = 0x07080a;
-const GAUGE_LEDS = 12;
-const HP_LEDS = 10;
+const TERMINAL_CLEAR_COLOR = 0x000000;
+/** HP at or below this share of the maximum turns the number amber. */
+const HP_LOW_SHARE = 0.25;
+/** How long the HP number blinks after a hit, seconds. */
+const HP_HIT_TIME = 0.5;
 /** Parallax follow rate, 1/s. */
 const PARALLAX_RATE = 6;
 /** The tray takes input once it is this far open. */
@@ -63,8 +78,9 @@ export interface TerminalHandlers {
   move(dir: Dir): void;
   /** A session menu item was chosen. */
   menu(action: MenuAction): void;
+  /** Tap on a rail slot: build or unbuild the Attack Queue (GDD §7.2). */
+  selectChip(slot: number): void;
   execute(): void;
-  chipSelect(): void;
   pause(): void;
 }
 
@@ -100,7 +116,16 @@ export class Terminal {
   private readonly hitZones = new HitZones();
   private readonly deck = new DeckControls();
   private readonly trackball = new Trackball();
-  private readonly environment = new Environment();
+  private readonly lighting = new DarkLighting();
+  private readonly drawStrip = new DrawStrip();
+  private readonly crtMount = new Mount();
+  private readonly railMount = new Mount();
+  private readonly deckMount = new Mount();
+  /** Pivot line of each tilted mount, world y (spec §3.1). */
+  private readonly pivots = { crt: 0, rail: 0, deck: 0 };
+  private readonly corners: THREE.Vector3[] = [];
+  private readonly activeChipAt = new THREE.Vector3();
+  private hpHitLeft = 0;
   private readonly battle: BattleTarget;
   private readonly router: PointerRouter;
   private readonly cleanups: (() => void)[] = [];
@@ -111,7 +136,6 @@ export class Terminal {
   private hovered: ZoneId | null = null;
   private cursor = '';
   private time = 0;
-  private shown = { gauge: -1, full: false, hp: -1, chips: -1, lamps: '' };
   private layoutKey = '';
 
   constructor(private opts: TerminalOptions) {
@@ -123,23 +147,22 @@ export class Terminal {
     this.battle = new BattleTarget(renderer);
     this.crt.setHud(this.hud.texture);
 
+    this.crtMount.inner.add(this.housing.crtGroup);
+    this.railMount.inner.add(this.rail.group, this.drawStrip.group);
+    this.deckMount.inner.add(this.trackball.group);
     this.scene.add(
-      this.environment.group,
+      this.lighting.group,
       this.housing.group,
-      this.housing.controlLabels,
-      this.rail.group,
+      this.crtMount,
+      this.railMount,
+      this.deckMount,
       this.tray.group,
       this.hitZones.group,
       this.deck.group,
-      this.trackball.group,
     );
-    this.scene.add(new THREE.AmbientLight(0xffffff, 0.55));
-    const key = new THREE.DirectionalLight(0xfff1dd, 1.6);
-    key.position.set(-4, 6, 10);
-    this.scene.add(key);
 
     this.layout = computeLayout(container.clientWidth, container.clientHeight);
-    this.router = new PointerRouter(() => this.layout, {
+    this.router = new PointerRouter((x, y) => this.zoneAt(x, y), {
       press: (z) => this.press(z, true),
       release: (z) => this.release(z),
       move: (d) => {
@@ -148,7 +171,7 @@ export class Terminal {
         else opts.handlers.move(d);
       },
       roll: (dx, dy) => this.trackball.roll(dx, dy),
-      action: () => {},
+      action: (z, x, y) => this.act(z, true, x, y),
       accepts: (z) => acceptsPress(this.mode(), z),
       hover: (z, x, y) => this.hover(z, x, y),
     });
@@ -191,7 +214,9 @@ export class Terminal {
     const vh = Math.max(1, container.clientHeight);
     const key = [
       vw, vh, t.RENDER_SCALE_SHORT, t.CAMERA_FOV, t.LAYOUT_TOP, t.LAYOUT_CRT, t.LAYOUT_RAIL, t.LAYOUT_DECK,
-      t.CRT_MARGIN_X, t.DECK_SPLIT_LEFT, t.DECK_SPLIT_RIGHT, t.PAUSE_ZONE_W, t.CRT_RES_W, t.CRT_RES_H,
+      t.CRT_MARGIN_X, t.PAUSE_ZONE_W, t.CRT_RES_W, t.CRT_RES_H,
+      t.DECK_TILT, t.RAIL_TILT, t.CRT_TILT, t.BALL_W, t.RING_W, t.RING_SEGMENTS, t.LAYOUT_DRAW,
+      tuning.chips.DRAW_PREVIEW,
       t.TERMINAL_ASPECT_MIN, t.TERMINAL_ASPECT_MAX, t.BUTTON_PRESS_DEPTH,
     ].join('|');
     if (key === this.layoutKey) return;
@@ -222,26 +247,64 @@ export class Terminal {
     const texel = k / scale; // world size of one render pixel
     this.housing.build(this.layout, texel, t.CRT_RES_W / t.CRT_RES_H);
     this.rail.build(this.layout, texel);
+    this.drawStrip.build(this.layout, tuning.chips.DRAW_PREVIEW);
     this.tray.build(this.layout, texel);
     this.trayGeomKey = '';
     this.hitZones.build(this.layout);
     this.deck.build(this.layout);
-    const tb = this.layout.zones.trackball;
-    const tbWorld = { cx: (tb.x + tb.w / 2 - bodyCx) * k, cy: -(tb.y + tb.h / 2 - bodyCy) * k };
-    this.trackball.build(tbWorld.cx, tbWorld.cy, Math.min(tb.w, tb.h) * k * 0.28);
-    const cx = this.camBase.x;
-    const cy = this.camBase.y;
-    this.environment.build(this.layout, {
-      left: cx - (vw * k) / 2,
-      right: cx + (vw * k) / 2,
-      top: cy + (vh * k) / 2,
-      bottom: cy - (vh * k) / 2,
-    });
-    this.shown = { gauge: -1, full: false, hp: -1, chips: -1, lamps: '' };
+    const tb = rectToWorld(this.layout, this.layout.zones.trackball);
+    // Sizes are shares of the body width, so the ball and the ring keep their
+    // proportions on any screen (spec §10.1).
+    this.trackball.build(tb.cx, tb.cy - tb.h * 0.06, this.layout.worldWidth);
+    this.placeMounts();
+    this.lighting.build(this.layout);
+  }
+
+  /** Leans the tilted panels; pivots are kept for the hit-rect projection. */
+  private placeMounts(): void {
+    const t = tuning.terminal;
+    const crt = rectToWorld(this.layout, this.layout.crt);
+    const rail = rectToWorld(this.layout, this.layout.rail);
+    const deck = rectToWorld(this.layout, this.layout.deck);
+    // The screen leans back about its lower edge; the rail and the deck lean
+    // their lower edge toward the player, like an arcade control panel.
+    this.pivots.crt = crt.cy - crt.h / 2;
+    this.pivots.rail = rail.cy + rail.h / 2;
+    this.pivots.deck = deck.cy + deck.h / 2;
+    this.crtMount.set(THREE.MathUtils.degToRad(t.CRT_TILT), this.pivots.crt);
+    this.railMount.set(THREE.MathUtils.degToRad(t.RAIL_TILT), this.pivots.rail);
+    this.deckMount.set(THREE.MathUtils.degToRad(t.DECK_TILT), this.pivots.deck);
+  }
+
+  /**
+   * Which organ is under a screen point. Zones are projected through the live
+   * camera because the deck is tilted and the camera moves (spec §3.1).
+   */
+  private zoneAt(x: number, y: number): ZoneId | null {
+    const { w: vw, h: vh } = this.layout.viewport;
+    this.camera.updateMatrixWorld();
+    for (const id of ZONE_ORDER) {
+      const world = rectToWorld(this.layout, this.layout.zones[id]);
+      const tilt = id === 'trackball' ? THREE.MathUtils.degToRad(tuning.terminal.DECK_TILT) : 0;
+      const pivot = id === 'trackball' ? this.pivots.deck : 0;
+      mountCorners(world, tilt, pivot, this.corners);
+      if (rectContains(screenBounds(this.corners, this.camera, vw, vh), x, y)) return id;
+    }
+    return null;
   }
 
   onEvent(e: SimEvent, world: World): void {
     if (e.type === 'chipUsed') this.crt.flash();
+    // Refresh is the beat that replaces the old Custom Screen pause (spec §11.4).
+    if (e.type === 'handRefreshed') {
+      this.crt.flash();
+      this.trackball.pulse();
+    }
+    // A hit shakes the picture, not the cabinet (spec §5.3).
+    if (e.type === 'damaged' && e.targetId === PLAYER_ID) {
+      this.crt.shake();
+      this.hpHitLeft = HP_HIT_TIME;
+    }
     const f = floaterFromEvent(e);
     if (f) this.floaters.add(f, world.tick);
   }
@@ -260,6 +323,7 @@ export class Terminal {
     const { renderer, sceneRenderer, perf } = this.opts;
     this.resize();
     this.time += dt;
+    this.hpHitLeft = Math.max(0, this.hpHitLeft - dt);
     renderer.info.reset();
 
     const screen = this.battle.render(sceneRenderer, world, alpha, dt);
@@ -273,17 +337,18 @@ export class Terminal {
     const menu = this.menu ? { spec: this.menu, cursor: this.menuCursor } : null;
     const marks = source ? EMPTY_HUD : this.fieldMarks(world, alpha);
     const title = this.opts.session.screen === 'REWARD' ? tr('reward.title') : null;
-    this.hud.draw({ labels: marks.labels, bars: marks.bars, info, menu, title }, this.time);
+    const status = menu || source ? null : this.battleStatus(world);
+    this.hud.draw({ labels: marks.labels, bars: marks.bars, status, info, menu, title }, this.time);
 
-    this.syncIndicators(world);
     this.rail.update(dt);
+    this.syncIndicators(world);
     this.tray.update(dt);
     const slide = -this.tray.openness * this.tray.slideDistance;
-    this.deck.slide.position.y = slide;
     this.trackball.group.position.y = slide;
-    this.housing.controlLabels.position.y = slide;
-    this.deck.update(dt, this.time);
-    this.trackball.update(dt);
+    this.deck.update(dt);
+    // The ring shows how close the next Refresh is (spec §11.4).
+    const chips = this.opts.session.world.chips;
+    this.trackball.update(dt, chips.usedSinceRefresh / Math.max(1, tuning.chips.REFRESH_AT), this.time);
     this.updateParallax(dt);
 
     renderer.setRenderTarget(null);
@@ -308,51 +373,60 @@ export class Terminal {
    * device already sends the command, the terminal only shows it.
    */
   private press(zone: ZoneId, send: boolean): void {
+    void send; // A press is only the visual reaction; commands come from act().
+    if (zone === 'trackball') this.trackball.press();
+    else if (zone === 'pause') this.deck.key(zone).press(false);
+    this.updateCursor();
+  }
+
+  /**
+   * A control acts: the pause key on press, the trackball on release, when the
+   * gesture turned out to be a tap rather than a step (spec §10.2).
+   */
+  private act(zone: ZoneId, send: boolean, x = -1, y = -1): void {
     const world = this.opts.session.world;
     const { handlers } = this.opts;
-    if (this.mode() === 'MENU' && zone === 'execute') {
-      // Menus are driven only by the terminal, so keyboard presses act too.
-      this.deck.key('execute').press(false);
+    if (zone === 'pause') {
+      if (send) handlers.pause();
+      this.updateCursor();
+      return;
+    }
+    if (zone === 'rail') {
+      // The rail acts on press: unlike a trackball gesture there is nothing to
+      // tell it apart from, so waiting for the release would only add lag.
+      const slot = this.railSlotAt(x, y);
+      if (slot >= 0 && send) handlers.selectChip(slot);
+      this.updateCursor();
+      return;
+    }
+    if (this.mode() === 'MENU') {
+      // Menus are driven only by the terminal, so keyboard taps act too.
       this.activateMenu();
       this.updateCursor();
       return;
     }
-    switch (zone) {
-      case 'trackball':
-        this.trackball.press();
-        break;
-      case 'execute': {
-        const ok = executeAvailability(world) === 'ok';
-        this.deck.key('execute').press(!ok);
-        if (ok) {
-          if (send) handlers.execute();
-        } else {
-          this.deck.deny('execute');
-        }
-        break;
-      }
-      case 'chipSelect': {
-        const ok = chipSelectAvailability(world) === 'ok';
-        this.deck.key('chipSelect').press(!ok);
-        if (ok) {
-          if (send) handlers.chipSelect();
-        } else {
-          this.deck.deny('chipSelect');
-        }
-        break;
-      }
-      case 'pause':
-        this.deck.key('pause').press(false);
-        if (send) handlers.pause();
-        break;
-    }
+    // A refused shot blinks the ring red instead of sending anything.
+    if (shotAvailability(world) !== 'ok') this.trackball.deny();
+    else if (send) handlers.execute();
     this.updateCursor();
   }
 
   private release(zone: ZoneId): void {
     if (zone === 'trackball') this.trackball.release();
-    else this.deck.key(zone).release();
+    else if (zone === 'pause') this.deck.key(zone).release();
     this.updateCursor();
+  }
+
+  /** Which rail slot a screen point hits, or -1 (spec §11.2). */
+  private railSlotAt(x: number, y: number): number {
+    if (x < 0) return -1;
+    const { w: vw, h: vh } = this.layout.viewport;
+    this.camera.updateMatrixWorld();
+    const tilt = THREE.MathUtils.degToRad(tuning.terminal.RAIL_TILT);
+    return railZoneSlots(this.layout).findIndex((r) => {
+      mountCorners(rectToWorld(this.layout, r), tilt, this.pivots.rail, this.corners);
+      return rectContains(screenBounds(this.corners, this.camera, vw, vh), x, y);
+    });
   }
 
   private hover(zone: ZoneId | null, x: number, y: number): void {
@@ -374,7 +448,7 @@ export class Terminal {
 
   private hoverVisual(zone: ZoneId, on: boolean): void {
     if (zone === 'trackball') this.trackball.hover(on);
-    else this.deck.key(zone).hover(on);
+    else if (zone === 'pause') this.deck.key(zone).hover(on);
   }
 
   private updateCursor(): void {
@@ -405,29 +479,9 @@ export class Terminal {
     this.camera.lookAt(b.x, b.y, 0);
   }
 
-  /** What the tray edits now: the Custom Screen hand, a reward pick, or nothing. */
+  /** The tray only serves the reward pick now (roguelite spec §6.3). */
   private traySource(): TraySource | null {
-    const { session } = this.opts;
-    if (session.screen === 'REWARD') return session.reward;
-    if (session.screen !== 'BATTLE' || session.world.state !== 'CUSTOM') return null;
-    const w = session.world;
-    const chips = w.chips;
-    return {
-      get hand() {
-        return chips.hand;
-      },
-      get selection() {
-        return chips.selection;
-      },
-      selectedChips: () => chips.selectedChips(),
-      isSelected: (slot) => chips.isSelected(slot),
-      canSelect: (slot) => chips.canSelect(slot),
-      selectAt: (slot, index) => w.customSelectAt(slot, index),
-      unselect: (index) => w.customUnselect(index),
-      cancelLast: () => w.customCancel(),
-      confirm: () => w.customConfirm(),
-      add: () => w.customAdd(),
-    };
+    return this.opts.session.screen === 'REWARD' ? this.opts.session.reward : null;
   }
 
   /** Tray open state, hand cartridges, and the rail showing the selection (or the battle queue). */
@@ -460,15 +514,22 @@ export class Terminal {
       this.selectedBefore.clear();
     }
 
-    const inBattle = session.screen === 'BATTLE' || session.screen === 'PAUSED';
-    const list = source ? source.selectedChips() : inBattle ? world.chips.queue : [];
-    const handIndex = (uid: number) => (source ? source.hand.findIndex((c) => c?.uid === uid) : -1);
-    this.rail.sync(list, {
-      mode: source ? 'select' : 'queue',
-      burning: source !== null,
-      inHand: (uid) => handIndex(uid) >= 0,
-      spawnFrom: (uid) => this.tray.cellPosition(handIndex(uid)),
-    });
+    if (source) {
+      const handIndex = (uid: number) => source.hand.findIndex((c) => c?.uid === uid);
+      this.rail.sync(source.selectedChips(), {
+        mode: 'select',
+        burning: true,
+        inHand: (uid) => handIndex(uid) >= 0,
+        spawnFrom: (uid) => this.tray.cellPosition(handIndex(uid)),
+      });
+      return;
+    }
+    // In battle the rail is the hand: one slot per chip, states from the sim.
+    const chips = world.chips;
+    this.rail.syncHand(
+      chips.hand.map((chip, i) => ({ chip, state: chips.slotState(i), order: chips.queuePosition(i) })),
+    );
+    this.drawStrip.set(chips.drawPreview(tuning.chips.DRAW_PREVIEW));
   }
 
   private trayReady(): boolean {
@@ -650,6 +711,9 @@ export class Terminal {
       held.add(e.code);
       if (organ.dir && this.mode() === 'MENU') this.moveMenu(organ.dir);
       this.press(organ.zone, false);
+      // The keyboard device sends the command itself; the terminal animates the
+      // ball and, in menus, still has to pick the item.
+      if (organ.fire) this.act(organ.zone, false);
       if (organ.dir) this.trackball.step(organ.dir);
       if (code === 'Space') e.preventDefault();
     };
@@ -668,30 +732,25 @@ export class Terminal {
     };
   }
 
-  /** Pushes LED, lamp and counter state to the meshes when it changes. */
+  /** HP, the Refresh counter and the first queued chip, across the top of the picture. */
+  private battleStatus(world: World): HudStatus {
+    const next = world.chips.attackChips()[0];
+    const total = Math.max(1, tuning.chips.REFRESH_AT);
+    return {
+      hp: world.player.hp,
+      hpLow: world.player.maxHp > 0 && world.player.hp <= world.player.maxHp * HP_LOW_SHARE,
+      hpHit: this.hpHitLeft > 0,
+      gaugeLit: Math.min(total, world.chips.usedSinceRefresh),
+      gaugeTotal: total,
+      gaugeFull: world.chips.refreshDue,
+      chip: next ? { name: chipName(next.defId).toUpperCase(), code: next.code } : null,
+    };
+  }
+
+  /** Drives the lights that stand in for the cabinet's old indicators (spec §4). */
   private syncIndicators(world: World): void {
-    const { session } = this.opts;
-    const gauge = gaugeLedCount(world.gauge.value, world.gauge.full, GAUGE_LEDS);
-    const hp = hpLedCount(world.player.hp, world.player.maxHp, HP_LEDS);
-    // On the Custom Screen the counter shows the chips placed in the rail.
-    const source = this.traySource();
-    const chips = source ? source.selection.length : world.chips.queue.length;
-    const lamps = lampStates(terminalMode(session.screen, world.state), session.screen, world.gauge.full, this.time);
-    const lampKey = `${+lamps.power}${+lamps.sync}${+lamps.link}${+lamps.battle}`;
-    const s = this.shown;
-    if (gauge !== s.gauge || world.gauge.full !== s.full) {
-      s.gauge = gauge;
-      s.full = world.gauge.full;
-      this.deck.setGauge(gauge, s.full);
-    }
-    if (hp !== s.hp) this.housing.setHpLeds((s.hp = hp));
-    if (chips !== s.chips) {
-      s.chips = chips;
-      this.housing.setChipCount(chips, RAIL_SLOTS);
-    }
-    if (lampKey !== s.lamps) {
-      s.lamps = lampKey;
-      this.housing.setLamps(lamps);
-    }
+    const active = this.rail.activePosition(this.activeChipAt);
+    this.lighting.setChipAt(active ? this.activeChipAt : null);
+    this.lighting.update(world.chips.usedSinceRefresh / Math.max(1, tuning.chips.REFRESH_AT), active);
   }
 }

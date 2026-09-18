@@ -19,7 +19,7 @@ function arena(kind: EnemyKind, x: number, y: number): { w: World; e: Enemy } {
   const w = new World({ seed: 3, battleIndex: 1, skipIntro: true, cheats: { god: false, aiEnabled: true, buster: false } });
   for (const old of w.enemies) w.occupancy.remove(old.id, old.x, old.y);
   w.enemies = [];
-  w.chips.queue = [];
+  w.chips.attack = [];
   const e = createEnemy({ kind, x, y }, nextId++, w.tick);
   w.occupancy.place(e.id, x, y);
   w.enemies.push(e);

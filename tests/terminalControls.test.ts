@@ -2,10 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { Spring } from '../src/terminal/anim/spring';
 import {
   acceptsPress,
-  chipSelectAvailability,
   cursorKind,
-  executeAvailability,
   organForKey,
+  shotAvailability,
   stepFocus,
   trayKeyAction,
   type ControlWorld,
@@ -50,46 +49,44 @@ function cw(over: Partial<ControlWorld> = {}): ControlWorld {
   return {
     state: 'ACTION',
     activeChip: null,
-    gauge: { full: false },
     player: { flinched: false, actionTicks: 0 },
-    chips: { queue: [{}] },
+    chips: { attack: [0] },
     ...over,
   };
 }
 
 describe('control rules', () => {
-  it('lets EXECUTE fire only for a free player with a queued chip', () => {
-    expect(executeAvailability(cw())).toBe('ok');
-    expect(executeAvailability(cw({ chips: { queue: [] } }))).toBe('dull');
-    expect(executeAvailability(cw({ activeChip: {} }))).toBe('dull');
-    expect(executeAvailability(cw({ player: { flinched: true, actionTicks: 0 } }))).toBe('dull');
-    expect(executeAvailability(cw({ player: { flinched: false, actionTicks: 3 } }))).toBe('dull');
-    expect(executeAvailability(cw({ state: 'BATTLE_START' }))).toBe('dull');
-  });
-
-  it('lets CHIP SELECT fire only with a full gauge in ACTION', () => {
-    expect(chipSelectAvailability(cw())).toBe('dull');
-    expect(chipSelectAvailability(cw({ gauge: { full: true } }))).toBe('ok');
-    expect(chipSelectAvailability(cw({ gauge: { full: true }, state: 'CUSTOM' }))).toBe('dull');
+  it('lets the shot fire only for a free player with a queued chip', () => {
+    expect(shotAvailability(cw())).toBe('ok');
+    expect(shotAvailability(cw({ chips: { attack: [] } }))).toBe('dull');
+    expect(shotAvailability(cw({ activeChip: {} }))).toBe('dull');
+    expect(shotAvailability(cw({ player: { flinched: true, actionTicks: 0 } }))).toBe('dull');
+    expect(shotAvailability(cw({ player: { flinched: false, actionTicks: 3 } }))).toBe('dull');
+    expect(shotAvailability(cw({ state: 'BATTLE_INTRO' }))).toBe('dull');
   });
 
   it('accepts presses in battle, menu navigation in menus, pause always', () => {
-    expect(acceptsPress('BATTLE', 'execute')).toBe(true);
-    expect(acceptsPress('TRANSITION', 'execute')).toBe(false);
+    expect(acceptsPress('BATTLE', 'trackball')).toBe(true);
     expect(acceptsPress('TRANSITION', 'trackball')).toBe(false);
     expect(acceptsPress('TRANSITION', 'pause')).toBe(true);
-    expect(acceptsPress('MENU', 'chipSelect')).toBe(false);
     expect(acceptsPress('MENU', 'trackball')).toBe(true);
-    expect(acceptsPress('MENU', 'execute')).toBe(true);
-    expect(acceptsPress('CHIP_SELECT', 'execute')).toBe(false);
+    expect(acceptsPress('CHIP_SELECT', 'trackball')).toBe(false);
   });
 
+  // There is no EXECUTE key any more: the shot keys animate the ball (spec §11.2).
   it('maps keys to controls', () => {
     expect(organForKey('ArrowLeft')).toEqual({ zone: 'trackball', dir: 'left' });
     expect(organForKey('KeyW')).toEqual({ zone: 'trackball', dir: 'up' });
-    expect(organForKey('Space')).toEqual({ zone: 'execute' });
-    expect(organForKey('KeyE')).toEqual({ zone: 'chipSelect' });
+    expect(organForKey('Space')).toEqual({ zone: 'trackball', fire: true });
+    expect(organForKey('KeyF')).toEqual({ zone: 'trackball', fire: true });
     expect(organForKey('Escape')).toEqual({ zone: 'pause' });
+    // Digits pick the chip in that hand slot (GDD §12).
+    expect(organForKey('Digit1')).toEqual({ zone: 'rail', slot: 0 });
+    expect(organForKey('Digit5')).toEqual({ zone: 'rail', slot: 4 });
+    expect(organForKey('Digit6')).toBeNull();
+    expect(organForKey('Digit0')).toBeNull();
+    expect(organForKey('KeyQ')).toBeNull();
+    expect(organForKey('KeyE')).toBeNull();
     expect(organForKey('KeyZ')).toBeNull();
   });
 

@@ -88,7 +88,7 @@ const terminal = new Terminal({
   handlers: {
     move: (dir) => input.push({ type: 'move', dir }),
     execute: () => input.push({ type: 'useChip' }),
-    chipSelect: () => input.push({ type: 'openCustom' }),
+    selectChip: (slot) => input.push({ type: 'selectChip', slot }),
     pause: () => {
       if (session.screen === 'BATTLE' || session.screen === 'PAUSED') togglePause();
     },
@@ -140,11 +140,8 @@ function driveBench(frameSeconds: number): void {
     session.debugJump(1);
     return;
   }
-  if (w.state === 'CUSTOM') {
-    for (let i = 0; i < w.chips.hand.length; i++) w.customSelect(i);
-    w.customConfirm();
-  }
-  if (w.gauge.full) input.push({ type: 'openCustom' });
+  // The autopilot keeps the Attack Queue stocked; there is no screen to confirm.
+  for (let i = 0; i < w.chips.hand.length; i++) w.selectChip(i);
   for (const c of bench.frame(frameSeconds)) input.push(c);
   if (bench.done) {
     benchReport = formatBench({ seconds: bench.duration, snapshot: perf.snapshot() });
@@ -190,9 +187,10 @@ const loop = new GameLoop(
         extra:
           (benchReport ? `${benchReport}\n` : '') +
           `player ${p.x},${p.y} hp ${p.hp} hits ${p.hitsTaken} ${p.flinched ? 'FLINCH ' : ''}${p.invulnerable ? 'IFR' : ''}\n` +
-          `gauge ${(world.gauge.value * 100).toFixed(0)}%  turn ${world.chips.turns}  add ${world.chips.addStreak}\n` +
-          `folder ${world.chips.folderRemaining} hand ${world.chips.hand.filter(Boolean).length}/${world.chips.hand.length}` +
-          ` queue ${world.chips.queue.length} used ${world.chips.count('used')}` +
+          `refresh ${world.chips.usedSinceRefresh}/${tuning.chips.REFRESH_AT} (${world.chips.refreshes})
+` +
+          `draw ${world.chips.drawRemaining} hand ${world.chips.hand.filter(Boolean).length}/${world.chips.hand.length}` +
+          ` attack ${world.chips.attack.length} used ${world.chips.count('used')}` +
           ` chip ${world.activeChip ? world.activeChip.def.id : '-'}\n` +
           `gen ${session.generation}  step ${session.depth}/${session.steps}  folder ${session.folderSize}\n` +
           world.enemies.map((e) => `${e.kind}#${e.id} ${e.x},${e.y} hp ${e.hp} ${e.state}`).join('\n') +
@@ -220,11 +218,7 @@ const panel = new DebugPanel(loop.clock, {
     const p = session.world.player;
     p.hp = Math.max(0, Math.min(p.maxHp, Math.round(hp)));
   },
-  fillGauge: () => session.world.fillGauge(),
-  openCustom: () => {
-    session.world.fillGauge();
-    input.push({ type: 'openCustom' });
-  },
+  advanceRefresh: () => session.world.advanceRefresh(),
   giveChip: (defId) => {
     // Debug chips get uids outside the folder range and a wildcard code.
     session.world.giveChip({ uid: debugChipUid++, defId, code: '*', state: 'queued' });

@@ -11,7 +11,7 @@ beforeEach(() => mergeTuning(tuning, JSON.parse(JSON.stringify(DEFAULT_TUNING)))
 // Battle 1: one Mettik at (1,1); the player starts at (1,4) in the same column.
 function makeWorld(): World {
   const w = new World({ seed: 7, battleIndex: 1, cheats: { god: true, aiEnabled: false }, skipIntro: true });
-  w.chips.queue = [];
+  w.chips.attack = [];
   return w;
 }
 

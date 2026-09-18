@@ -36,7 +36,7 @@ const move = (w: World, dir: Dir) => step(w, [{ type: 'move', dir }]);
 
 /** Queues a Cannon and fires it; the damage lands at the chip's hit frame. */
 function cannon(w: World): void {
-  w.chips.queue = [];
+  w.chips.attack = [];
   w.giveChip({ uid: 9000 + w.tick, defId: 'cannon', code: '*', state: 'queued' });
   step(w, [{ type: 'useChip' }]);
   run(w, T(tuning.chips.CHIP_HIT_FRAME));

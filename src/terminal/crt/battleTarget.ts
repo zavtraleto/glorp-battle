@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { tuning } from '../../config/tuning';
 import type { SceneRenderer } from '../../render/scene';
 import type { World } from '../../sim/world';
-import { PALETTE, PALETTE_GLSL, DITHER_BIAS } from '../../render/palette';
+import { PALETTE_COLORS, PALETTE_GLSL, DITHER_BIAS } from '../../render/palette';
 
 // Battle → CRT render target (TERMINAL.md §9.1). With CRT_GHOSTING > 0 a
 // ping-pong pass keeps a decaying copy of previous frames (phosphor persistence).
@@ -14,24 +14,20 @@ void main() {
   gl_Position = vec4(position.xy, 0.0, 1.0);
 }`;
 
-// Signal channels → 4-colour palette with a 4×4 Bayer threshold (BATTLE_VISUAL.md §1).
+// Index + brightness → 6-colour palette with a 4×4 Bayer threshold (spec §6.1).
+// Mirrors paletteIndex() in render/palette.ts; the twin is covered by a test.
+const PALETTE_COUNT = PALETTE_COLORS.length;
 const PALETTE_FRAG = /* glsl */ `
 uniform sampler2D uScene;
-uniform vec3 uBg;
-uniform vec3 uPhosphor;
-uniform vec3 uRed;
-uniform vec3 uAccent;
+uniform vec3 uColors[${PALETTE_COUNT}];
 varying vec2 vUv;
 ${PALETTE_GLSL}
 void main() {
-  vec3 s = texture2D(uScene, vUv).rgb;
-  float v;
-  vec3 color;
-  if (s.b >= s.r && s.b >= s.g) { v = s.b; color = uAccent; }
-  else if (s.r >= s.g) { v = s.r; color = uRed; }
-  else { v = s.g; color = uPhosphor; }
+  vec2 s = texture2D(uScene, vUv).rg;
+  int index = int(floor(s.r * 255.0 + 0.5));
   float t = bayer4(gl_FragCoord.xy) + ${DITHER_BIAS.toFixed(6)};
-  gl_FragColor = vec4(v > t ? color : uBg, 1.0);
+  bool lit = index > 0 && index < ${PALETTE_COUNT} && s.g > t;
+  gl_FragColor = vec4(lit ? uColors[index] : uColors[0], 1.0);
 }`;
 
 const COMPOSE_FRAG = /* glsl */ `
@@ -62,10 +58,7 @@ export class BattleTarget {
     fragmentShader: PALETTE_FRAG,
     uniforms: {
       uScene: { value: null },
-      uBg: { value: new THREE.Color(PALETTE.bg) },
-      uPhosphor: { value: new THREE.Color(PALETTE.phosphor) },
-      uRed: { value: new THREE.Color(PALETTE.red) },
-      uAccent: { value: new THREE.Color(PALETTE.accent) },
+      uColors: { value: PALETTE_COLORS.map((c) => new THREE.Color(c)) },
     },
     depthTest: false,
     depthWrite: false,

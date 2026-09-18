@@ -7,12 +7,14 @@ export const RAIL_SLOTS = 5;
 /** Slots span this share of the rail width, starting RAIL_LEFT (share of width) left of its centre. */
 export const RAIL_SPAN = 0.82;
 export const RAIL_LEFT = 0.475;
-/** Cartridge size in texels (face 58×72 plus the body rim). */
-export const CHIP_TEXELS_W = 60;
-export const CHIP_TEXELS_H = 78;
+/** Cartridge size in texels (face 64×88 plus the body rim). */
+export const CHIP_TEXELS_W = 68;
+export const CHIP_TEXELS_H = 94;
 const TRAY_COLS = 5;
 /** Bottom share of the deck used by the OK / ADD keys. */
 const KEYS_SHARE = 0.27;
+/** The keys never go below a comfortable touch target, CSS px. */
+const MIN_KEY_H = 64;
 /** A drop this far outside the slot row (share of the rail height) still counts. */
 const DROP_PAD = 0.35;
 
@@ -59,7 +61,9 @@ export function cssPerTexel(layout: TerminalLayout): number {
 
 export function trayLayout(layout: TerminalLayout, handSize: number): TrayLayout {
   const d = layout.deck;
-  const keysH = d.h * KEYS_SHARE;
+  // The deck is only 23% of the body now, so the keys claim their touch size
+  // first and the hand grid takes what is left (the cartridges scale down).
+  const keysH = Math.max(d.h * KEYS_SHARE, MIN_KEY_H);
   const gridH = d.h - keysH;
   const rows = Math.max(1, Math.ceil(handSize / TRAY_COLS));
   const gridW = d.w * 0.92;

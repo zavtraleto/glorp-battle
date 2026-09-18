@@ -1,41 +1,45 @@
 import type { Dir } from '../core/input/commands';
 import type { GameState } from '../sim/world';
-import type { ZoneId } from './layout';
+import { RAIL_ZONE_SLOTS, type ZoneId } from './layout';
 import type { TerminalMode } from './terminalMode';
 
-// When terminal controls act and how they feel (TERMINAL.md §5). Pure.
+// When terminal controls act and how they feel (spec §11). Pure.
 
 export interface ControlWorld {
   state: GameState;
   activeChip: unknown;
-  gauge: { full: boolean };
   player: { flinched: boolean; actionTicks: number };
-  chips: { queue: readonly unknown[] };
+  chips: { attack: readonly number[] };
 }
 
 /** `dull`: the control moves less and sends nothing. */
 export type Availability = 'ok' | 'dull';
 
-export function executeAvailability(w: ControlWorld): Availability {
-  if (w.state !== 'ACTION' || w.chips.queue.length === 0) return 'dull';
+/** Whether a tap on the trackball may use the active chip. */
+export function shotAvailability(w: ControlWorld): Availability {
+  if (w.state !== 'ACTION' || w.chips.attack.length === 0) return 'dull';
   const busy = w.activeChip !== null || w.player.flinched || w.player.actionTicks > 0;
   return busy ? 'dull' : 'ok';
 }
 
-export function chipSelectAvailability(w: ControlWorld): Availability {
-  return w.state === 'ACTION' && w.gauge.full ? 'ok' : 'dull';
-}
-
 /**
- * Controls react in BATTLE; in MENU the trackball moves the cursor and EXECUTE
+ * Controls react in BATTLE; in MENU the trackball moves the cursor and a tap
  * picks the item; the pause key works whenever it is visible.
  */
 export function acceptsPress(mode: TerminalMode, zone: ZoneId): boolean {
   if (zone === 'pause' || mode === 'BATTLE') return true;
-  return mode === 'MENU' && (zone === 'trackball' || zone === 'execute');
+  return mode === 'MENU' && zone === 'trackball';
 }
 
-const KEY_ORGANS: Record<string, { zone: ZoneId; dir?: Dir }> = {
+export interface KeyOrgan {
+  zone: ZoneId;
+  dir?: Dir;
+  fire?: boolean;
+  /** Hand slot for the digit keys. */
+  slot?: number;
+}
+
+const KEY_ORGANS: Record<string, KeyOrgan> = {
   KeyW: { zone: 'trackball', dir: 'up' },
   ArrowUp: { zone: 'trackball', dir: 'up' },
   KeyS: { zone: 'trackball', dir: 'down' },
@@ -44,15 +48,18 @@ const KEY_ORGANS: Record<string, { zone: ZoneId; dir?: Dir }> = {
   ArrowLeft: { zone: 'trackball', dir: 'left' },
   KeyD: { zone: 'trackball', dir: 'right' },
   ArrowRight: { zone: 'trackball', dir: 'right' },
-  Space: { zone: 'execute' },
-  KeyF: { zone: 'execute' },
-  KeyQ: { zone: 'chipSelect' },
-  KeyE: { zone: 'chipSelect' },
+  Space: { zone: 'trackball', fire: true },
+  KeyF: { zone: 'trackball', fire: true },
   Escape: { zone: 'pause' },
 };
 
 /** The control a keyboard key stands for (keys only animate it; commands come from the keyboard device). */
-export function organForKey(code: string): { zone: ZoneId; dir?: Dir } | null {
+export function organForKey(code: string): KeyOrgan | null {
+  const digit = /^Digit([1-9])$/.exec(code);
+  if (digit) {
+    const slot = Number(digit[1]) - 1;
+    return slot < RAIL_ZONE_SLOTS ? { zone: 'rail', slot } : null;
+  }
   return KEY_ORGANS[code] ?? null;
 }
 

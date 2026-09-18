@@ -32,10 +32,12 @@ export const DEFAULT_TUNING = {
     GAUGE_FILL_TIME: 8.0,
   },
   chips: {
-    HAND_BASE: 5,
-    HAND_ADD_STEP: 5,
-    HAND_MAX: 15,
-    SELECT_MAX: 5,
+    /** Hand slots visible in the rail for the whole battle (GDD §5). */
+    HAND_SIZE: 5,
+    /** Chips spent before the hand refills; the pacing knob of the whole battle. */
+    REFRESH_AT: 3,
+    /** Chips of the draw queue shown under the rail. */
+    DRAW_PREVIEW: 3,
     CHIP_USE_TIME_CANNON: 0.5,
     CHIP_USE_TIME_SWORD: 0.4,
     CHIP_USE_TIME_BOMB: 0.5,
@@ -153,9 +155,8 @@ export const DEFAULT_TUNING = {
     WARP_FX_TIME: 0.15,
     DAMAGE_NUMBER_TIME: 0.6,
     DELETE_ANIM_TIME: 0.4,
+    /** Enemies appear and the hand rides into the rail before the battle runs. */
     INTRO_TIME: 0.8,
-    BANNER_BATTLE_START: 1.0,
-    RESUME_DELAY: 0.2,
     /** "ENEMY DELETED!" banner before the result screen. */
     RESULT_DELAY_WIN: 1.2,
     /** Player deletion before the GAME OVER screen. */
@@ -174,7 +175,8 @@ export const DEFAULT_TUNING = {
     VIEW_PITCH: 38,
     VIEW_FOV: 50,
     /** Share of the CRT frame the field may fill. */
-    VIEW_FILL: 0.92,
+    /** Leaves the top band of the picture to the HUD (spec §8). */
+    VIEW_FILL: 0.86,
     /** Gap between cell outlines (share of a cell). */
     CELL_GAP: 0.08,
     /** Brightness of idle grid lines (dithered below 1). */
@@ -191,40 +193,67 @@ export const DEFAULT_TUNING = {
     SPAWN_TIME: 0.6,
     HP_SEGMENTS: 8,
     DAMAGE_SCALE: 3,
+    /** Height of the CRT status band, share of the picture (spec §8). */
+    HUD_BAND: 0.11,
   },
   /** Physical terminal NET-01 (docs/TERMINAL.md §17). */
   terminal: {
     /** Render pixels across the terminal body's short side; the canvas is upscaled without smoothing. */
     RENDER_SCALE_SHORT: 400,
-    /** Battle render target shown on the CRT. */
-    CRT_RES_W: 240,
-    CRT_RES_H: 320,
+    /** Battle render target shown on the CRT; 320:440 = 1:1.375, the glass aspect (spec §5.2). */
+    CRT_RES_W: 320,
+    CRT_RES_H: 440,
     /** Viewport aspect (w/h) range the terminal body stretches to; outside it the terminal is letterboxed. */
     TERMINAL_ASPECT_MIN: 0.42,
     TERMINAL_ASPECT_MAX: 0.62,
-    /** Vertical shares of the terminal, top to bottom (sum = 1). */
-    LAYOUT_TOP: 0.06,
-    LAYOUT_CRT: 0.5,
-    LAYOUT_RAIL: 0.14,
-    LAYOUT_DECK: 0.3,
+    /** Vertical shares of the terminal, top to bottom (spec §3; sum = 1). */
+    LAYOUT_TOP: 0.02,
+    LAYOUT_CRT: 0.6,
+    LAYOUT_RAIL: 0.15,
+    /** Draw queue strip under the rail; it takes its height from the deck. */
+    LAYOUT_DRAW: 0.04,
+    LAYOUT_DECK: 0.19,
     /** Horizontal bezel around the CRT glass, as a share of terminal width on each side. */
-    CRT_MARGIN_X: 0.1,
-    /** Deck columns: CHIP SELECT | trackball zone | EXECUTE (shares of terminal width). */
-    DECK_SPLIT_LEFT: 0.27,
-    DECK_SPLIT_RIGHT: 0.63,
+    CRT_MARGIN_X: 0.05,
+    /** Mount tilts toward the player, degrees (spec §3.1). */
+    DECK_TILT: 18,
+    RAIL_TILT: 8,
+    CRT_TILT: 4,
+    /** A trackball gesture that never travelled counts as a chip shot within this long (spec §10.2). */
+    TAP_MAX_TIME: 0.35,
     /** Pause key zone width at the right end of the top bar (share of terminal width). */
     PAUSE_ZONE_W: 0.16,
     /** Vertical field of view, degrees. */
     CAMERA_FOV: 22,
-    /** Glass effects are post-processing on top of the base look; off by default (BATTLE_VISUAL.md §2). */
-    CRT_SCANLINES: 0,
-    CRT_CURVATURE: 0,
-    CRT_BLEED: 0,
+    /** Glass effects, moderate: the picture must stay readable (spec §5.3). */
+    CRT_SCANLINES: 0.3,
+    CRT_CURVATURE: 0.06,
+    CRT_BLEED: 0.35,
     /** Previous-frame persistence; 0 disables the ghosting pass entirely. */
-    CRT_GHOSTING: 0,
-    CRT_FLASH_TIME: 0,
+    CRT_GHOSTING: 0.2,
+    CRT_FLASH_TIME: 0.12,
+    /** RGB phosphor triads across the texel columns. */
+    CRT_PHOSPHOR: 0.25,
+    /** Bloom around bright texels. */
+    CRT_GLOW: 0.35,
+    CRT_NOISE: 0.03,
+    /** Radial R/B separation, in texels at the screen edge. */
+    CRT_ABERRATION: 0.4,
+    /** Picture shake on a hit (the cabinet never moves). */
+    CRT_SHAKE: 0.15,
+    /** Near-black scene: everything is lit by the screen, the ring and the active chip (spec §4). */
+    AMBIENT: 0.04,
+    LIGHT_CRT: 1.0,
+    LIGHT_RING: 1.6,
+    LIGHT_CHIP: 0.7,
+    /** Darkening of the terminal frame's edges. */
+    VIGNETTE: 0.6,
     /** Button travel when pressed, world units. */
     BUTTON_PRESS_DEPTH: 0.12,
+    /** Ball diameter and red ring outer diameter, shares of the body width (spec §10.1). */
+    BALL_W: 0.28,
+    RING_W: 0.38,
+    RING_SEGMENTS: 16,
     /** Trackball rotation per CSS px of drag, radians. */
     TRACKBALL_ROLL_GAIN: 0.02,
     /** Trackball spin decay, 1/s. */
@@ -243,8 +272,12 @@ export const DEFAULT_TUNING = {
     PARALLAX_DEG: 1.5,
     /** CHIP SELECT glow pulse when the gauge is full. */
     GLOW_PULSE_HZ: 1.5,
-    /** Chip rail (TERMINAL.md §6.3): active chip lift (world units) and animation times (s). */
+    /** Chip rail (spec §9.2): active chip lift and push (world units), animation times (s). */
     CHIP_ACTIVE_LIFT: 0.18,
+    /** How far the active cartridge slides out of its slot toward the player. */
+    CHIP_ACTIVE_PUSH: 0.1,
+    /** Brightness of the light the active cartridge throws on its own slot. */
+    CHIP_ACTIVE_GLOW: 0.7,
     EJECT_LIFT_TIME: 0.06,
     EJECT_TIME: 0.34,
     BURN_STAGGER: 0.04,

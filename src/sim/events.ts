@@ -33,4 +33,6 @@ export type SimEvent =
   | { type: 'busterShot'; x: number; fromY: number; toY: number }
   | { type: 'enemyWarped'; id: EntityId; fromX: number; fromY: number; x: number; y: number }
   /** HeatShot burst: the hit panel plus the panel behind it. */
-  | { type: 'explosion'; cells: Cell[] };
+  | { type: 'explosion'; cells: Cell[] }
+  /** The hand refilled its spent slots (GDD §5). */
+  | { type: 'handRefreshed'; refreshes: number };

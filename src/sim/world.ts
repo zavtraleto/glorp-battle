@@ -19,7 +19,6 @@ import { lobArea, lobTarget, shapeCells } from './chips/patterns';
 import type { Enemy, EnemyContext } from './enemies/enemyBase';
 import { createEnemy } from './enemies/factory';
 import type { SimEvent } from './events';
-import { Gauge } from './gauge';
 import { COLS, ROWS, type Cell, type Side } from './grid';
 import { Occupancy } from './occupancy';
 import { Player } from './player';
@@ -28,8 +27,6 @@ export type GameState =
   | 'BOOT'
   | 'TITLE'
   | 'BATTLE_INTRO'
-  | 'CUSTOM'
-  | 'BATTLE_START'
   | 'ACTION'
   | 'PAUSED'
   | 'PLAYER_DEAD'
@@ -54,12 +51,12 @@ export interface WorldOptions {
   playerHp?: number;
   cheats?: Cheats;
   folder?: FolderId | readonly FolderChip[];
-  /** Skip intro and the first Custom Screen (tests). */
+  /** Skip the intro and start in ACTION with the hand dealt (tests). */
   skipIntro?: boolean;
 }
 
-/** States in which the battle simulation (enemies, attacks, gauge, timers) is frozen. */
-const FROZEN_STATES: ReadonlySet<GameState> = new Set(['BOOT', 'TITLE', 'BATTLE_INTRO', 'CUSTOM', 'BATTLE_START', 'PAUSED']);
+/** States in which the battle simulation (enemies, attacks, timers) is frozen. */
+const FROZEN_STATES: ReadonlySet<GameState> = new Set(['BOOT', 'TITLE', 'BATTLE_INTRO', 'PAUSED']);
 
 /** Input snapshot handed to the simulation each tick. */
 export interface TickInput {
@@ -82,15 +79,10 @@ export class World implements EnemyContext, AttackContext {
   state: GameState = 'BATTLE_INTRO';
   /** uiTick when the current state was entered. */
   stateTick = 0;
-  readonly gauge = new Gauge();
   readonly buster = new Buster();
   readonly chips: ChipSystem;
-  /** OPEN CUSTOM was pressed while busy; opens as soon as the player is free. */
-  private pendingOpenCustom = false;
-  /** Duration of the current BATTLE_START phase in ui ticks. */
-  private resumeTicks = 0;
+
   /** True while the current BATTLE_START phase should show the banner. */
-  firstStart = false;
   /** State to return to when the pause ends. */
   private pausedFrom: GameState | null = null;
   readonly seed: number;
@@ -129,8 +121,7 @@ export class World implements EnemyContext, AttackContext {
     this.chips = new ChipSystem(options.folder ?? 'mvp', this.rngFolder);
     this.spawnBattle();
     if (options.skipIntro) {
-      this.chips.openTurn();
-      this.chips.confirm();
+      this.chips.dealHand();
       this.state = 'ACTION';
     }
   }
@@ -171,64 +162,18 @@ export class World implements EnemyContext, AttackContext {
 
   // ---------- Custom Screen (GDD §7) ----------
 
-  /** Whether the Custom Screen can be opened manually right now. */
-  get canOpenCustom(): boolean {
-    const p = this.player;
-    return this.state === 'ACTION' && this.gauge.full && !p.flinched && p.actionTicks === 0;
-  }
-
-  private openCustom(): void {
-    // A queued step must not fire after the Custom Screen closes.
-    this.player.bufferedDir = null;
-    this.pendingOpenCustom = false;
-    this.chips.openTurn();
-    this.setState('CUSTOM');
-  }
-
-  customSelect(slot: number): boolean {
-    return this.state === 'CUSTOM' && this.chips.select(slot);
-  }
-
-  /** Inserts a hand chip at a selection position (physical chip rail, TERMINAL.md §6.4). */
-  customSelectAt(slot: number, index: number): boolean {
-    return this.state === 'CUSTOM' && this.chips.selectAt(slot, index);
-  }
-
-  customUnselect(index: number): boolean {
-    return this.state === 'CUSTOM' && this.chips.unselect(index);
-  }
-
-  customCancel(): boolean {
-    return this.state === 'CUSTOM' && this.chips.cancelLast();
-  }
-
-  customConfirm(): void {
-    if (this.state !== 'CUSTOM') return;
-    this.chips.confirm();
-    this.closeCustom();
-  }
-
-  customAdd(): void {
-    if (this.state !== 'CUSTOM') return;
-    this.chips.add();
-    this.closeCustom();
-  }
-
-  private closeCustom(): void {
-    const first = this.chips.turns === 1;
-    this.gauge.reset();
-    // "BATTLE START!" only after the first Custom Screen of a battle (GDD §11).
-    this.resumeTicks = secondsToTicks(first ? tuning.fx.BANNER_BATTLE_START : tuning.fx.RESUME_DELAY);
-    this.firstStart = first;
-    this.setState('BATTLE_START');
+  /** One tap on a hand slot: build or unbuild the Attack Queue (GDD §7.2). */
+  selectChip(slot: number): boolean {
+    if (this.state !== 'ACTION') return false;
+    return this.chips.toggleSelect(slot);
   }
 
   /**
    * Pauses the battle (GDD §11). Only the running battle can be paused; the
-   * Custom Screen and the intro are already frozen. A buffered step is dropped.
+   * intro is already frozen. A buffered step is dropped.
    */
   pause(): boolean {
-    if (this.state !== 'ACTION' && this.state !== 'BATTLE_START') return false;
+    if (this.state !== 'ACTION') return false;
     this.player.bufferedDir = null;
     this.pausedFrom = this.state;
     this.setState('PAUSED');
@@ -243,8 +188,9 @@ export class World implements EnemyContext, AttackContext {
   }
 
   /** Debug: fill the gauge instantly. */
-  fillGauge(): void {
-    this.gauge.fill();
+  /** Debug: brings the next Refresh one chip closer. */
+  advanceRefresh(): void {
+    this.chips.usedSinceRefresh = Math.min(tuning.chips.REFRESH_AT, this.chips.usedSinceRefresh + 1);
   }
 
   enemyAt(x: number, y: number): Enemy | null {
@@ -605,10 +551,18 @@ export class World implements EnemyContext, AttackContext {
     this.bombs = this.bombs.filter((b) => !b.done);
   }
 
-  /** Debug: append a chip to the queue. */
+  /**
+   * Debug: put a chip into the hand and queue it. Prefers a free slot; with a
+   * full hand it takes over a slot that is not already queued.
+   */
   giveChip(chip: ChipInstance): void {
-    chip.state = 'queued';
-    this.chips.queue.push(chip);
+    const hand = this.chips.hand;
+    let slot = hand.indexOf(null);
+    if (slot < 0) slot = hand.findIndex((_, i) => this.chips.queueIndexOf(i) < 0);
+    if (slot < 0) return;
+    chip.state = 'hand';
+    hand[slot] = chip;
+    this.chips.toggleSelect(slot);
   }
 
   killAllEnemies(): void {
@@ -627,10 +581,12 @@ export class World implements EnemyContext, AttackContext {
 
     switch (this.state) {
       case 'BATTLE_INTRO':
-        if (this.stateElapsed >= secondsToTicks(tuning.fx.INTRO_TIME)) this.openCustom();
-        return;
-      case 'BATTLE_START':
-        if (this.stateElapsed >= this.resumeTicks) this.setState('ACTION');
+        if (this.stateElapsed >= secondsToTicks(tuning.fx.INTRO_TIME)) {
+          // The hand is dealt into the rail and the battle starts; there is no
+          // Custom Screen to stop for (GDD §7.6).
+          this.chips.dealHand();
+          this.setState('ACTION');
+        }
         return;
       case 'BATTLE_WON':
       case 'PLAYER_DEAD':
@@ -647,7 +603,6 @@ export class World implements EnemyContext, AttackContext {
     this.tick++;
     this.time += dt;
     this.removeDeletedEnemies();
-    this.gauge.tick();
     this.field.update(this.tick, (x, y) => this.occupancy.isFree(x, y));
 
     const p = this.player;
@@ -656,8 +611,8 @@ export class World implements EnemyContext, AttackContext {
     const moves: Dir[] = [];
     for (const c of input.commands) {
       if (c.type === 'move') moves.push(c.dir);
-      else if (c.type === 'openCustom' && this.gauge.full) this.pendingOpenCustom = true;
       else if (c.type === 'useChip') this.tryUseChip();
+      else if (c.type === 'selectChip') this.selectChip(c.slot);
     }
     p.updateMovement(this.tick, moves, input.held);
     this.updateActiveChip();
@@ -687,8 +642,10 @@ export class World implements EnemyContext, AttackContext {
       this.bombs = [];
       this.activeChip = null;
       this.setState('BATTLE_WON');
-    } else if (this.pendingOpenCustom && this.canOpenCustom) {
-      this.openCustom();
+    } else if (this.chips.refreshDue) {
+      // Refresh is an event, not a pause: the battle does not stop for it (GDD §5).
+      this.chips.refresh();
+      this.events.push({ type: 'handRefreshed', refreshes: this.chips.refreshes });
     }
   }
 

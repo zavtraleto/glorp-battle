@@ -39,11 +39,9 @@ const run = (s: Session, n: number) => {
   for (let i = 0; i < n; i++) tick(s);
 };
 
-/** Intro → Custom (OK with nothing) → action. */
+/** Intro → action; the hand is dealt on the way (GDD §7.6). */
 function enterAction(s: Session): void {
-  run(s, T(tuning.fx.INTRO_TIME));
-  s.world.customConfirm();
-  run(s, T(tuning.fx.BANNER_BATTLE_START));
+  run(s, T(tuning.fx.INTRO_TIME) + 1);
   expect(s.world.state).toBe('ACTION');
 }
 
@@ -203,13 +201,11 @@ describe('pause', () => {
     enterAction(s);
     run(s, 30);
     const tick0 = s.world.tick;
-    const gauge0 = s.world.gauge.value;
     s.pause();
     expect(s.screen).toBe('PAUSED');
     expect(s.world.state).toBe('PAUSED');
     run(s, 300);
     expect(s.world.tick).toBe(tick0);
-    expect(s.world.gauge.value).toBe(gauge0);
     s.resume();
     expect(s.screen).toBe('BATTLE');
     expect(s.world.state).toBe('ACTION');
@@ -217,16 +213,16 @@ describe('pause', () => {
     expect(s.world.tick).toBe(tick0 + 1);
   });
 
-  it('is ignored on the title and on the Custom Screen', () => {
+  it('is ignored on the title and during the intro', () => {
     const s = make();
     s.pause();
     expect(s.screen).toBe('TITLE');
     s.start();
     s.choosePath(0);
-    run(s, T(tuning.fx.INTRO_TIME));
-    expect(s.world.state).toBe('CUSTOM');
+    run(s, T(tuning.fx.INTRO_TIME) - 1);
+    expect(s.world.state).toBe('BATTLE_INTRO');
     s.pause();
     expect(s.screen).toBe('BATTLE');
-    expect(s.world.state).toBe('CUSTOM');
+    expect(s.world.state).toBe('BATTLE_INTRO');
   });
 });

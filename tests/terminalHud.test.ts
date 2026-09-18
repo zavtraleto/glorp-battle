@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_HUD, gaugeLedCount, hpLedCount, hudKey } from '../src/terminal/crt/hudModel';
+import { EMPTY_HUD, gaugeSegments, hudKey, type HudStatus } from '../src/terminal/crt/hudModel';
 import { drawText, glyphRows, measureText, GLYPH_H } from '../src/terminal/crt/pixelFont';
-import { lampStates, terminalMode } from '../src/terminal/terminalMode';
+import { terminalMode } from '../src/terminal/terminalMode';
 import { plasticPattern } from '../src/terminal/textures/procedural';
 
 describe('hud model', () => {
@@ -13,15 +13,52 @@ describe('hud model', () => {
     const c = { ...EMPTY_HUD, labels: [{ text: '40', x: 5, y: 5, tone: 'damage' as const }] };
     expect(hudKey(c, true)).not.toBe(hudKey(EMPTY_HUD, true));
   });
+});
 
-  it('counts LEDs', () => {
-    expect(hpLedCount(1, 100, 10)).toBe(1);
-    expect(hpLedCount(0, 100, 10)).toBe(0);
-    expect(hpLedCount(100, 100, 10)).toBe(10);
-    expect(hpLedCount(55, 100, 10)).toBe(6);
-    expect(gaugeLedCount(0.99, false, 12)).toBe(11);
-    expect(gaugeLedCount(0, false, 12)).toBe(0);
-    expect(gaugeLedCount(0.5, true, 12)).toBe(12);
+describe('battle status band', () => {
+  const status = (over: Partial<HudStatus> = {}): HudStatus => ({
+    hp: 100,
+    hpLow: false,
+    hpHit: false,
+    gaugeLit: 0,
+    gaugeTotal: 18,
+    gaugeFull: false,
+    chip: { name: 'CANNON', code: 'A' },
+    ...over,
+  });
+
+  it('redraws when HP, the gauge or the chip changes', () => {
+    const base = { ...EMPTY_HUD, status: status() };
+    for (const over of [{ hp: 90 }, { hpLow: true }, { gaugeLit: 4 }, { chip: null }] as Partial<HudStatus>[]) {
+      expect(hudKey({ ...base, status: status(over) }, true)).not.toBe(hudKey(base, true));
+    }
+  });
+
+  it('blinks the HP number after a hit', () => {
+    const hit = { ...EMPTY_HUD, status: status({ hpHit: true }) };
+    expect(hudKey(hit, true)).not.toBe(hudKey(hit, false));
+  });
+
+  it('ignores the blink until the gauge is full', () => {
+    const calm = { ...EMPTY_HUD, status: status({ gaugeLit: 9 }) };
+    expect(hudKey(calm, true)).toBe(hudKey(calm, false));
+    const ready = { ...EMPTY_HUD, status: status({ gaugeLit: 18, gaugeFull: true }) };
+    expect(hudKey(ready, true)).not.toBe(hudKey(ready, false));
+  });
+});
+
+describe('gauge segments', () => {
+  // One rule for both the red ring and the CRT bar.
+  it('fills in proportion and keeps the last segment for a full gauge', () => {
+    expect(gaugeSegments(0, 18)).toBe(0);
+    expect(gaugeSegments(0.5, 18)).toBe(9);
+    expect(gaugeSegments(0.999, 18)).toBe(17);
+    expect(gaugeSegments(1, 18)).toBe(18);
+  });
+
+  it('clamps out-of-range values', () => {
+    expect(gaugeSegments(-1, 16)).toBe(0);
+    expect(gaugeSegments(2, 16)).toBe(16);
   });
 });
 
@@ -30,21 +67,9 @@ describe('terminalMode', () => {
     expect(terminalMode('TITLE', 'ACTION')).toBe('MENU');
     expect(terminalMode('PAUSED', 'PAUSED')).toBe('MENU');
     expect(terminalMode('BATTLE', 'ACTION')).toBe('BATTLE');
-    expect(terminalMode('BATTLE', 'CUSTOM')).toBe('CHIP_SELECT');
+    expect(terminalMode('REWARD', 'ACTION')).toBe('CHIP_SELECT');
     expect(terminalMode('BATTLE', 'BATTLE_INTRO')).toBe('TRANSITION');
     expect(terminalMode('BATTLE', 'BATTLE_WON')).toBe('TRANSITION');
-  });
-
-  it('drives the status lamps', () => {
-    const on = lampStates('BATTLE', 'BATTLE', false, 0);
-    expect(on).toEqual({ power: true, sync: false, link: true, battle: true });
-    expect(lampStates('BATTLE', 'BATTLE', false, 0.3).battle).toBe(true);
-    // Full gauge: the BATTLE lamp blinks at 2 Hz (on 0–0.25 s, off 0.25–0.5 s).
-    expect(lampStates('BATTLE', 'BATTLE', true, 0.1).battle).toBe(true);
-    expect(lampStates('BATTLE', 'BATTLE', true, 0.3).battle).toBe(false);
-    expect(lampStates('TRANSITION', 'BATTLE', false, 0.1).sync).toBe(true);
-    expect(lampStates('TRANSITION', 'BATTLE', false, 0.3).sync).toBe(false);
-    expect(lampStates('MENU', 'TITLE', false, 0)).toEqual({ power: true, sync: false, link: false, battle: false });
   });
 });
 

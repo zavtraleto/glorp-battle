@@ -12,7 +12,8 @@ export const DIR_VECTORS: Record<Dir, { dx: number; dy: number }> = {
 export type Command =
   | { type: 'move'; dir: Dir }
   | { type: 'useChip' }
-  | { type: 'openCustom' };
+  /** Tap on a hand slot: build or unbuild the Attack Queue (GDD §7.2). */
+  | { type: 'selectChip'; slot: number };
 
 export class InputState {
   private queue: Command[] = [];

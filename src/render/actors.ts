@@ -81,7 +81,7 @@ export class PlayerView {
 const bitmaps = new Map<number, CreatureBitmap>();
 
 /** Bosses are drawn from a bigger bitmap and a wider sprite (roguelite spec §5.3). */
-const BOSS_SIZE = 48;
+const BOSS_SIZE = 72;
 const BOSS_WIDTH = 1.4;
 
 function creature(seed: number, size: number): CreatureBitmap {
