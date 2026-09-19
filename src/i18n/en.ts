@@ -29,7 +29,6 @@ export const en = {
   'btn.next': 'Next',
   'btn.resume': 'Resume',
   'btn.debug': 'DBG',
-  'hud.refresh': 'REFRESH',
   'hud.noChip': 'NO CHIP',
   'result.time': 'Time',
   'result.step': 'Step',

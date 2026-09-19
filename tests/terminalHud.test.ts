@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_HUD, gaugeSegments, hudKey, type HudStatus } from '../src/terminal/crt/hudModel';
+import { EMPTY_HUD, hudKey, type HudStatus } from '../src/terminal/crt/hudModel';
 import { drawText, glyphRows, measureText, GLYPH_H } from '../src/terminal/crt/pixelFont';
 import { terminalMode } from '../src/terminal/terminalMode';
 import { plasticPattern } from '../src/terminal/textures/procedural';
@@ -15,50 +15,21 @@ describe('hud model', () => {
   });
 });
 
-describe('battle status band', () => {
-  const status = (over: Partial<HudStatus> = {}): HudStatus => ({
-    hp: 100,
-    hpLow: false,
-    hpHit: false,
-    gaugeLit: 0,
-    gaugeTotal: 18,
-    gaugeFull: false,
-    chip: { name: 'CANNON', code: 'A' },
-    ...over,
-  });
+describe('battle status', () => {
+  const status = (over: Partial<HudStatus> = {}): HudStatus => ({ hp: 100, hpLow: false, hpHit: false, ...over });
 
-  it('redraws when HP, the gauge or the chip changes', () => {
+  it('redraws when HP changes or runs low', () => {
     const base = { ...EMPTY_HUD, status: status() };
-    for (const over of [{ hp: 90 }, { hpLow: true }, { gaugeLit: 4 }, { chip: null }] as Partial<HudStatus>[]) {
+    for (const over of [{ hp: 90 }, { hpLow: true }] as Partial<HudStatus>[]) {
       expect(hudKey({ ...base, status: status(over) }, true)).not.toBe(hudKey(base, true));
     }
   });
 
-  it('blinks the HP number after a hit', () => {
+  it('blinks the HP number after a hit, and only then', () => {
     const hit = { ...EMPTY_HUD, status: status({ hpHit: true }) };
     expect(hudKey(hit, true)).not.toBe(hudKey(hit, false));
-  });
-
-  it('ignores the blink until the gauge is full', () => {
-    const calm = { ...EMPTY_HUD, status: status({ gaugeLit: 9 }) };
+    const calm = { ...EMPTY_HUD, status: status() };
     expect(hudKey(calm, true)).toBe(hudKey(calm, false));
-    const ready = { ...EMPTY_HUD, status: status({ gaugeLit: 18, gaugeFull: true }) };
-    expect(hudKey(ready, true)).not.toBe(hudKey(ready, false));
-  });
-});
-
-describe('gauge segments', () => {
-  // One rule for both the red ring and the CRT bar.
-  it('fills in proportion and keeps the last segment for a full gauge', () => {
-    expect(gaugeSegments(0, 18)).toBe(0);
-    expect(gaugeSegments(0.5, 18)).toBe(9);
-    expect(gaugeSegments(0.999, 18)).toBe(17);
-    expect(gaugeSegments(1, 18)).toBe(18);
-  });
-
-  it('clamps out-of-range values', () => {
-    expect(gaugeSegments(-1, 16)).toBe(0);
-    expect(gaugeSegments(2, 16)).toBe(16);
   });
 });
 

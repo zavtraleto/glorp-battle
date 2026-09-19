@@ -156,7 +156,8 @@ BROKEN / EMPTY / OBJECT пока только визуал: включаются
 | Свет сцены терминала | `src/terminal/parts/lighting.ts` |
 | Крепления и наклоны панелей | `src/terminal/parts/mount.ts`, `interaction/project.ts` |
 | Ряд чипов как рука, состояния слотов | `src/terminal/parts/chipRail.ts` |
-| Полоса очереди добора | `src/terminal/parts/drawStrip.ts` |
+| Полоса будущих чипов (и счётчик Refresh светом) | `src/terminal/parts/drawStrip.ts` |
+| Сегментный дисплей чипа, его шрифт | `src/terminal/parts/segmentDisplay.ts`, `chips/segmentFont.ts` |
 | Вылет кассеты | `src/terminal/chips/ejectArc.ts` |
 | Пиксельный шрифт 5×7 | `src/terminal/crt/pixelFont.ts` |
 | Параметры визуала | `src/config/tuning.ts`, группы `battleVisual` и `terminal` |

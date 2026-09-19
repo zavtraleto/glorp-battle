@@ -22,6 +22,11 @@ export function shotAvailability(w: ControlWorld): Availability {
   return busy ? 'dull' : 'ok';
 }
 
+/** A tap on the ball would act: pick a menu item, or fire a loaded chip. */
+export function trackballArmed(mode: TerminalMode, shot: Availability): boolean {
+  return mode === 'MENU' || (mode === 'BATTLE' && shot === 'ok');
+}
+
 /**
  * Controls react in BATTLE; in MENU the trackball moves the cursor and a tap
  * picks the item; the pause key works whenever it is visible.

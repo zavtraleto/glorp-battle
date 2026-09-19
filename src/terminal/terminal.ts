@@ -6,7 +6,8 @@ import type { PerfProbe } from '../debug/perfProbe';
 import type { SceneRenderer } from '../render/scene';
 import type { SimEvent } from '../sim/events';
 import type { World } from '../sim/world';
-import { acceptsPress, cursorKind, shotAvailability, organForKey } from './controlRules';
+import { acceptsPress, cursorKind, shotAvailability, organForKey, trackballArmed } from './controlRules';
+import { RAIL_LEFT, RAIL_SPAN } from './chips/railLayout';
 import { BattleTarget } from './crt/battleTarget';
 import { CrtCanvas } from './crt/crtCanvas';
 import { CrtMaterial } from './crt/crtMaterial';
@@ -34,11 +35,13 @@ import { HitZones } from './parts/hitZones';
 import { Housing } from './parts/housing';
 import { DarkLighting } from './parts/lighting';
 import { DrawStrip } from './parts/drawStrip';
+import { SegmentDisplay } from './parts/segmentDisplay';
+import { chipDisplayText } from './chips/segmentFont';
 import { Mount } from './parts/mount';
 import { mountCorners, screenBounds } from './interaction/project';
 import { Trackball } from './parts/trackball';
 import { terminalMode } from './terminalMode';
-import { chipName } from '../i18n';
+import { chipName, t } from '../i18n';
 
 // NET-01 terminal (TERMINAL.md §13). Owns the terminal scene and camera, draws
 // the battle and the HUD into the CRT and the terminal into a low-resolution
@@ -94,6 +97,7 @@ export class Terminal {
   private readonly trackball = new Trackball();
   private readonly lighting = new DarkLighting();
   private readonly drawStrip = new DrawStrip();
+  private readonly chipDisplay = new SegmentDisplay();
   private readonly crtMount = new Mount();
   /** The control panel: rail, draw strip, trackball and pause key on one tilted plane. */
   private readonly controlMount = new Mount();
@@ -122,7 +126,13 @@ export class Terminal {
     this.crt.setHud(this.hud.texture);
 
     this.crtMount.inner.add(this.housing.crtGroup);
-    this.controlMount.inner.add(this.rail.group, this.drawStrip.group, this.trackball.group, this.deck.group);
+    this.controlMount.inner.add(
+      this.rail.group,
+      this.drawStrip.group,
+      this.chipDisplay.group,
+      this.trackball.group,
+      this.deck.group,
+    );
     this.scene.add(this.lighting.group, this.housing.group, this.crtMount, this.controlMount, this.hitZones.group);
 
     this.layout = computeLayout(container.clientWidth, container.clientHeight);
@@ -162,7 +172,7 @@ export class Terminal {
     const key = [
       vw, vh, t.RENDER_SCALE_SHORT, t.CAMERA_FOV, t.LAYOUT_CRT, t.LAYOUT_RAIL, t.LAYOUT_DECK,
       t.CRT_MARGIN_X, t.PAUSE_ZONE_W, t.CRT_RES_W, t.CRT_RES_H,
-      t.CONTROL_TILT, t.CRT_TILT, t.BALL_W, t.RING_W, t.RING_SEGMENTS, t.LAYOUT_DRAW,
+      t.CONTROL_TILT, t.CRT_TILT, t.BALL_W, t.RING_W, t.LAYOUT_DRAW,
       tuning.chips.DRAW_PREVIEW,
       t.TERMINAL_ASPECT_MIN, t.TERMINAL_ASPECT_MAX, t.BUTTON_PRESS_DEPTH,
     ].join('|');
@@ -199,12 +209,14 @@ export class Terminal {
     this.housing.build(this.layout, texel, t.CRT_RES_W / t.CRT_RES_H);
     this.rail.build(this.layout, texel);
     this.drawStrip.build(this.layout, tuning.chips.DRAW_PREVIEW);
+    this.placeChipDisplay();
     this.hitZones.build(this.layout);
     this.deck.build(this.layout);
     const tb = rectToWorld(this.layout, this.layout.zones.trackball);
     // Sizes are shares of the body width, so the ball and the ring keep their
     // proportions on any screen (spec §10.1).
-    this.trackball.build(tb.cx, tb.cy, this.layout.worldWidth);
+    // A little above centre: the tilted panel's lower edge comes toward the camera and grows.
+    this.trackball.build(tb.cx, tb.cy + tb.h * 0.1, this.layout.worldWidth);
     this.placeMounts();
     this.lighting.build(this.layout);
   }
@@ -246,7 +258,6 @@ export class Terminal {
     // Refresh is the beat that replaces the old Custom Screen pause (spec §11.4).
     if (e.type === 'handRefreshed') {
       this.crt.flash();
-      this.trackball.pulse();
     }
     // A hit shakes the picture, not the cabinet (spec §5.3).
     if (e.type === 'damaged' && e.targetId === PLAYER_ID) {
@@ -287,9 +298,8 @@ export class Terminal {
     this.rail.update(dt);
     this.syncIndicators(world);
     this.deck.update(dt);
-    // The ring shows how close the next Refresh is (spec §11.4).
-    const chips = this.opts.session.world.chips;
-    this.trackball.update(dt, chips.usedSinceRefresh / Math.max(1, tuning.chips.REFRESH_AT), this.time);
+    this.drawStrip.update(dt);
+    this.trackball.update(dt, this.trackballArmed(world));
 
     renderer.setRenderTarget(null);
     renderer.setClearColor(TERMINAL_CLEAR_COLOR, 1);
@@ -345,9 +355,8 @@ export class Terminal {
       this.updateCursor();
       return;
     }
-    // A refused shot blinks the ring red instead of sending anything.
-    if (shotAvailability(world) !== 'ok') this.trackball.deny();
-    else if (send) handlers.execute();
+    // A refused shot sends nothing; the dark ring already said so.
+    if (send && shotAvailability(world) === 'ok') handlers.execute();
     this.updateCursor();
   }
 
@@ -398,7 +407,10 @@ export class Terminal {
     this.rail.syncHand(
       chips.hand.map((chip, i) => ({ chip, state: chips.slotState(i), order: chips.queuePosition(i) })),
     );
-    this.drawStrip.set(chips.drawPreview(tuning.chips.DRAW_PREVIEW));
+    // One preview tile lights per chip spent since the last Refresh (GDD §5).
+    this.drawStrip.set(chips.drawPreview(tuning.chips.DRAW_PREVIEW), chips.usedSinceRefresh);
+    const queued = this.mode() === 'MENU' ? [] : chips.attackChips().map((c) => chipName(c.defId));
+    this.chipDisplay.set(chipDisplayText(queued, t('hud.noChip')));
   }
 
   /** HP segments above each enemy and rising damage numbers, in CRT pixels. */
@@ -500,19 +512,28 @@ export class Terminal {
     };
   }
 
-  /** HP, the Refresh counter and the first queued chip, across the top of the picture. */
+  /** The player's HP for the bottom-left corner of the picture. */
   private battleStatus(world: World): HudStatus {
-    const next = world.chips.attackChips()[0];
-    const total = Math.max(1, tuning.chips.REFRESH_AT);
     return {
       hp: world.player.hp,
       hpLow: world.player.maxHp > 0 && world.player.hp <= world.player.maxHp * HP_LOW_SHARE,
       hpHit: this.hpHitLeft > 0,
-      gaugeLit: Math.min(total, world.chips.usedSinceRefresh),
-      gaugeTotal: total,
-      gaugeFull: world.chips.refreshDue,
-      chip: next ? { name: chipName(next.defId).toUpperCase(), code: next.code } : null,
     };
+  }
+
+  /** The ring burns while a tap on the ball would act (spec §10.2). */
+  private trackballArmed(world: World): boolean {
+    return trackballArmed(this.mode(), shotAvailability(world));
+  }
+
+  /** The segment display sits at the right end of the row under the rail. */
+  private placeChipDisplay(): void {
+    const row = rectToWorld(this.layout, this.layout.draw);
+    const rail = rectToWorld(this.layout, this.layout.rail);
+    const right = rail.cx - rail.w * RAIL_LEFT + rail.w * RAIL_SPAN;
+    const room = right - this.drawStrip.right - row.h * 0.5;
+    const h = Math.min(row.h * 0.8, room / this.chipDisplay.aspect);
+    this.chipDisplay.place(right, row.cy, h);
   }
 
   /** Drives the lights that stand in for the cabinet's old indicators (spec §4). */

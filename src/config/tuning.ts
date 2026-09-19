@@ -196,8 +196,8 @@ export const DEFAULT_TUNING = {
     LAYOUT_CRT: 0.64,
     LAYOUT_RAIL: 0.15,
     /** Draw queue strip under the rail; it takes its height from the deck. */
-    LAYOUT_DRAW: 0.035,
-    LAYOUT_DECK: 0.175,
+    LAYOUT_DRAW: 0.045,
+    LAYOUT_DECK: 0.165,
     /** Horizontal bezel around the CRT glass, as a share of terminal width on each side. */
     CRT_MARGIN_X: 0.015,
     /** The control panel (rail, draw strip, trackball, pause) is one plane; its top edge leans away from the player, degrees. */
@@ -209,7 +209,7 @@ export const DEFAULT_TUNING = {
     /** Pause key in the bottom-left corner of the control panel: zone side, share of terminal width. */
     PAUSE_ZONE_W: 0.16,
     /** Vertical field of view, degrees. */
-    CAMERA_FOV: 34,
+    CAMERA_FOV: 45,
     /** Glass effects, moderate: the picture must stay readable (spec §5.3). */
     CRT_SCANLINES: 0.3,
     CRT_CURVATURE: 0.06,
@@ -236,9 +236,8 @@ export const DEFAULT_TUNING = {
     /** Button travel when pressed, world units. */
     BUTTON_PRESS_DEPTH: 0.12,
     /** Ball diameter and red ring outer diameter, shares of the body width (spec §10.1). */
-    BALL_W: 0.25,
-    RING_W: 0.34,
-    RING_SEGMENTS: 16,
+    BALL_W: 0.19,
+    RING_W: 0.27,
     /** Trackball rotation per CSS px of drag, radians. */
     TRACKBALL_ROLL_GAIN: 0.0067,
     /** Trackball spin decay, 1/s. */
@@ -250,11 +249,8 @@ export const DEFAULT_TUNING = {
     DULL_PRESS_SHARE: 0.35,
     /** Lift of a hovered control (mouse), world units. */
     HOVER_LIFT: 0.04,
+    /** Flash of a trackball direction triangle on a step. */
     ARROW_FLASH_TIME: 0.15,
-    /** Red blink of the CHIP SELECT ring / EXECUTE when refused. */
-    DENIED_BLINK_TIME: 0.4,
-    /** CHIP SELECT glow pulse when the gauge is full. */
-    GLOW_PULSE_HZ: 1.5,
     /** Chip rail (spec §9.2): active chip lift and push (world units), animation times (s). */
     CHIP_ACTIVE_LIFT: 0.18,
     /** How far the active cartridge slides out of its slot toward the player. */

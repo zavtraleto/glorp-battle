@@ -1,18 +1,18 @@
 import * as THREE from 'three';
 import { tuning } from '../../config/tuning';
 import type { Dir } from '../../core/input/commands';
-import { gaugeSegments } from '../crt/hudModel';
 import { PressKey } from './pressKey';
 
-// NAVIGATION trackball (spec §10.1): the only battle organ. A faceted ball in a
-// thick socket, ringed by a big worn red ring. The ball follows the finger and
-// keeps spinning with inertia; the ring carries the custom gauge, flashes the
-// segment of each step and blinks when a shot is refused.
+// NAVIGATION trackball (spec §10.1): the only battle organ. A graphite ball in
+// a thick socket, inside a plain red ring. The ring burns bright only while a
+// tap would do something (a loaded chip in battle, any menu); four small
+// triangles around it flash with each step.
 
 const COLOR = {
-  lit: new THREE.Color(0xff3324),
-  unlit: new THREE.Color(0x35100d),
-  flash: new THREE.Color(0xffd2c4),
+  armed: new THREE.Color(0xff403f),
+  idle: new THREE.Color(0x3a1110),
+  arrowOff: new THREE.Color(0x2a0d0c),
+  arrowOn: new THREE.Color(0xff403f),
 };
 const DIR_ANGLE: Record<Dir, number> = {
   right: 0,
@@ -20,51 +20,54 @@ const DIR_ANGLE: Record<Dir, number> = {
   left: Math.PI,
   down: -Math.PI / 2,
 };
+const DIRS: readonly Dir[] = ['up', 'right', 'down', 'left'];
 /** Radians of spin velocity per CSS px of drag per second of frame. */
 const SPIN_FROM_DRAG = 60;
 /** The ball sinks a little when grabbed. */
 const GRAB_TRAVEL = 0.04;
-/** Segments lit to either side of a step's direction. */
-const STEP_SPREAD = 1;
-const DENY_BLINK_HZ = 8;
+/** Ring polygon count: low-poly, but reads as a circle. */
+const RING_SIDES = 40;
+/** Ring colour follows the armed state at this rate, 1/s. */
+const ARM_RATE = 18;
+/** Triangle size and its gap from the ring, shares of the ring's outer radius. */
+const ARROW_SIZE = 0.16;
+const ARROW_GAP = 0.06;
 const AXIS_X = new THREE.Vector3(1, 0, 0);
 const AXIS_Y = new THREE.Vector3(0, 1, 0);
 const turn = new THREE.Quaternion();
-
-/** Deterministic wear so the ring is not a perfect circle. */
-function wobble(i: number): number {
-  const s = Math.sin(i * 127.1) * 43758.5453;
-  return s - Math.floor(s);
-}
 
 export class Trackball {
   readonly group = new THREE.Group();
   private readonly key = new PressKey(GRAB_TRAVEL);
   private readonly ball: THREE.Mesh;
   private readonly socket: THREE.Mesh;
-  private readonly segGeo = new THREE.BoxGeometry(1, 1, 1);
-  private readonly segMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-  private ring: THREE.InstancedMesh | null = null;
-  private readonly flash: number[] = [];
+  private readonly ringMat = new THREE.MeshBasicMaterial({ color: COLOR.idle.clone() });
+  private ring: THREE.Mesh | null = null;
+  private readonly arrowGeo: THREE.BufferGeometry;
+  private readonly arrows = new Map<Dir, { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; left: number }>();
   private readonly spin = new THREE.Vector2();
-  private readonly tmpM = new THREE.Matrix4();
-  private readonly tmpP = new THREE.Vector3();
-  private readonly tmpQ = new THREE.Quaternion();
-  private readonly tmpS = new THREE.Vector3();
-  private readonly tmpC = new THREE.Color();
-  private lit = -1;
-  private denyLeft = 0;
+  private armed = 0;
 
   constructor() {
     this.ball = new THREE.Mesh(
       new THREE.SphereGeometry(1, 12, 8),
-      new THREE.MeshPhongMaterial({ color: 0x2a2c30, specular: 0x777777, shininess: 40, flatShading: true }),
+      new THREE.MeshPhongMaterial({ color: 0x4a4c50, specular: 0x3c3c3c, shininess: 22, flatShading: true }),
     );
     this.socket = new THREE.Mesh(
       new THREE.TorusGeometry(1.15, 0.2, 6, 16),
       new THREE.MeshLambertMaterial({ color: 0x141518, flatShading: true }),
     );
     this.key.object.add(this.ball);
+    // A unit triangle pointing along +x; each arrow is turned toward its direction.
+    this.arrowGeo = new THREE.BufferGeometry();
+    this.arrowGeo.setAttribute('position', new THREE.Float32BufferAttribute([0.5, 0, 0, -0.5, 0.55, 0, -0.5, -0.55, 0], 3));
+    for (const dir of DIRS) {
+      const mat = new THREE.MeshBasicMaterial({ color: COLOR.arrowOff.clone() });
+      const mesh = new THREE.Mesh(this.arrowGeo, mat);
+      mesh.rotation.z = DIR_ANGLE[dir];
+      this.arrows.set(dir, { mesh, mat, left: 0 });
+      this.group.add(mesh);
+    }
     this.group.add(this.socket, this.key.object);
   }
 
@@ -79,28 +82,21 @@ export class Trackball {
 
     if (this.ring) {
       this.group.remove(this.ring);
-      this.ring.dispose();
+      this.ring.geometry.dispose();
     }
-    const count = Math.max(3, Math.round(t.RING_SEGMENTS));
     const outer = (unit * t.RING_W) / 2;
-    const band = Math.max(0.02, outer - radius * 1.18);
-    const mid = outer - band / 2;
-    const arc = ((2 * Math.PI * mid) / count) * 0.74;
-    const ring = new THREE.InstancedMesh(this.segGeo, this.segMat, count);
-    for (let i = 0; i < count; i++) {
-      const a = Math.PI / 2 - (i / count) * Math.PI * 2;
-      const worn = 0.78 + wobble(i) * 0.42;
-      this.tmpP.set(cx + Math.cos(a) * mid, cy + Math.sin(a) * mid, 0.03);
-      this.tmpQ.setFromAxisAngle(new THREE.Vector3(0, 0, 1), a - Math.PI / 2);
-      this.tmpS.set(arc, band * worn, 0.16);
-      ring.setMatrixAt(i, this.tmpM.compose(this.tmpP, this.tmpQ, this.tmpS));
-      ring.setColorAt(i, COLOR.unlit);
+    const inner = Math.min(outer * 0.9, radius * 1.1);
+    this.ring = new THREE.Mesh(new THREE.RingGeometry(inner, outer, RING_SIDES), this.ringMat);
+    this.ring.position.set(cx, cy, 0.03);
+    this.group.add(this.ring);
+
+    const size = outer * ARROW_SIZE;
+    const at = outer * (1 + ARROW_GAP) + size / 2;
+    for (const [dir, a] of this.arrows) {
+      const angle = DIR_ANGLE[dir];
+      a.mesh.position.set(cx + Math.cos(angle) * at, cy + Math.sin(angle) * at, 0.03);
+      a.mesh.scale.setScalar(size);
     }
-    this.group.add(ring);
-    this.ring = ring;
-    this.flash.length = count;
-    this.flash.fill(0);
-    this.lit = -1;
   }
 
   press(): void {
@@ -115,16 +111,6 @@ export class Trackball {
     this.key.hover(on);
   }
 
-  /** A refused shot: the ring blinks red (spec §10.2). */
-  deny(): void {
-    this.denyLeft = tuning.terminal.DENIED_BLINK_TIME;
-  }
-
-  /** The hand refilled: the ring flares once, the beat that replaces the pause. */
-  pulse(): void {
-    this.flash.fill(tuning.terminal.ARROW_FLASH_TIME);
-  }
-
   /** Adds spin from a drag delta (CSS px). */
   roll(dx: number, dy: number): void {
     const g = tuning.terminal.TRACKBALL_ROLL_GAIN * SPIN_FROM_DRAG;
@@ -133,24 +119,17 @@ export class Trackball {
     this.spin.y += dx * g;
   }
 
-  /** Flashes the ring toward a step and gives the ball a nudge that way. */
+  /** Flashes the triangle of a step and gives the ball a nudge that way. */
   step(dir: Dir): void {
-    const count = this.flash.length;
-    if (count > 0) {
-      const angle = DIR_ANGLE[dir];
-      // Segment 0 sits at the top and they run clockwise.
-      const at = Math.round((((Math.PI / 2 - angle) / (2 * Math.PI)) * count + count) % count);
-      for (let d = -STEP_SPREAD; d <= STEP_SPREAD; d++) {
-        this.flash[(at + d + count) % count] = tuning.terminal.ARROW_FLASH_TIME;
-      }
-    }
+    const a = this.arrows.get(dir);
+    if (a) a.left = tuning.terminal.ARROW_FLASH_TIME;
     const nudge = 12;
     if (dir === 'left' || dir === 'right') this.roll(dir === 'right' ? nudge : -nudge, 0);
     else this.roll(0, dir === 'down' ? nudge : -nudge);
   }
 
-  /** `gauge` drives the lit segments; a full gauge pulses the whole ring. */
-  update(dt: number, gauge: number, time: number): void {
+  /** `armed`: a tap on the ball would act right now (spec §10.2), so the ring burns. */
+  update(dt: number, armed: boolean): void {
     this.key.update(dt);
     // Turn about the socket's fixed axes; accumulating Euler angles would turn
     // the second axis with the first and roll the ball the wrong way.
@@ -158,36 +137,14 @@ export class Trackball {
     this.ball.quaternion.premultiply(turn.setFromAxisAngle(AXIS_Y, this.spin.y * dt));
     this.spin.multiplyScalar(Math.exp(-dt * tuning.terminal.TRACKBALL_FRICTION));
 
-    const flashTime = tuning.terminal.ARROW_FLASH_TIME;
-    let flashing = false;
-    for (let i = 0; i < this.flash.length; i++) {
-      const left = Math.max(0, (this.flash[i] ?? 0) - dt);
-      this.flash[i] = left;
-      if (left > 0) flashing = true;
-    }
-    this.denyLeft = Math.max(0, this.denyLeft - dt);
-    const lit = gaugeSegments(gauge, this.flash.length);
-    const full = gauge >= 1;
-    if (lit !== this.lit || flashing || this.denyLeft > 0 || full) {
-      this.lit = lit;
-      this.paintRing(lit, full, flashTime, time);
-    }
-  }
+    const k = 1 - Math.exp(-dt * ARM_RATE);
+    this.armed += ((armed ? 1 : 0) - this.armed) * k;
+    this.ringMat.color.copy(COLOR.idle).lerp(COLOR.armed, this.armed);
 
-  private paintRing(lit: number, full: boolean, flashTime: number, time: number): void {
-    const ring = this.ring;
-    if (!ring) return;
-    const pulse = full ? 0.72 + 0.28 * Math.sin(time * Math.PI * 2 * tuning.terminal.GLOW_PULSE_HZ) : 1;
-    const denied = this.denyLeft > 0 && Math.floor(this.denyLeft * DENY_BLINK_HZ * 2) % 2 === 0;
-    for (let i = 0; i < this.flash.length; i++) {
-      const on = i < lit;
-      this.tmpC.copy(on ? COLOR.lit : COLOR.unlit);
-      if (on && full) this.tmpC.multiplyScalar(pulse);
-      if (denied) this.tmpC.copy(COLOR.lit);
-      const f = flashTime > 0 ? (this.flash[i] ?? 0) / flashTime : 0;
-      if (f > 0) this.tmpC.lerp(COLOR.flash, f);
-      ring.setColorAt(i, this.tmpC);
+    const flash = tuning.terminal.ARROW_FLASH_TIME;
+    for (const a of this.arrows.values()) {
+      a.left = Math.max(0, a.left - dt);
+      a.mat.color.copy(COLOR.arrowOff).lerp(COLOR.arrowOn, flash > 0 ? a.left / flash : 0);
     }
-    if (ring.instanceColor) ring.instanceColor.needsUpdate = true;
   }
 }

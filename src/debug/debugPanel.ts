@@ -69,7 +69,6 @@ const RANGES: Record<string, [number, number, number]> = {
   CRT_TILT: [0, 20, 1],
   BALL_W: [0.1, 0.5, 0.01],
   RING_W: [0.15, 0.6, 0.01],
-  RING_SEGMENTS: [6, 32, 1],
   CHIP_ACTIVE_PUSH: [0, 0.5, 0.01],
   CHIP_ACTIVE_GLOW: [0, 2, 0.05],
   HUD_BAND: [0, 0.3, 0.01],
