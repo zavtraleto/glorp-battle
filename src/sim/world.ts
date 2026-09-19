@@ -4,7 +4,7 @@ import { secondsToTicks, tuning } from '../config/tuning';
 import type { Command, Dir } from '../core/input/commands';
 import { Rng } from '../core/rng';
 import { debugEncounter, type Encounter } from '../data/encounters';
-import type { ChipDef, FieldAction } from '../data/chips';
+import { CHIPS, type ChipDef, type FieldAction } from '../data/chips';
 import type { FolderId } from '../data/folders';
 import type { FolderChip } from './chips/chipSystem';
 import type { Attack, AttackContext } from './attacks/attack';
@@ -15,6 +15,7 @@ import { FieldObject, type ObjectKind } from './fieldObject';
 import { ChipSystem, type ChipInstance } from './chips/chipSystem';
 import { startChip, type ActiveChip } from './chips/executor';
 import { lobArea, lobTarget, shapeCells } from './chips/patterns';
+import { chipAim, type Aim } from './chips/aim';
 import type { Enemy, EnemyContext } from './enemies/enemyBase';
 import { createEnemy } from './enemies/factory';
 import type { SimEvent } from './events';
@@ -346,6 +347,25 @@ export class World implements EnemyContext, AttackContext {
       this.events.push({ type: 'enemyKilled', id: enemy.id, x: enemy.x, y: enemy.y });
       if (this.mettikTurnId === enemy.id) this.passTurn(enemy);
     }
+  }
+
+  /**
+   * Aim preview of the first chip in the Attack Queue: where it would land if
+   * fired now (decision 2026-09-19). Read-only; null when nothing is loaded.
+   */
+  aimPreview(): Aim | null {
+    const chip = this.chips.attackChips()[0];
+    if (!chip || this.state !== 'ACTION' || !this.player.alive) return null;
+    const p = this.player;
+    return chipAim(CHIPS[chip.defId], {
+      px: p.x,
+      py: p.y,
+      firstTargetRow: this.firstTargetRow,
+      owner: (x, y) => this.field.owner(x, y),
+      hole: (x, y) => this.field.panel(x, y) === 'BROKEN',
+      object: (x, y) => this.objectAt(x, y) !== null,
+      occupied: (x, y) => !this.occupancy.isFree(x, y),
+    });
   }
 
   /** Row of the first target in lane `x` in front of row `py`; -1 if none. */

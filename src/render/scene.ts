@@ -175,7 +175,7 @@ export class SceneRenderer {
       wonTicks: secondsToTicks(fx.RESULT_DELAY_WIN),
       deadTicks: secondsToTicks(fx.RESULT_DELAY_LOSE),
     });
-    this.field.update(world, alpha, this.spawns, signal);
+    this.field.update(world, alpha, this.spawns, signal, world.aimPreview());
   }
 
   /** Renders the battle into a render target (the CRT), field fitted to the whole target. */

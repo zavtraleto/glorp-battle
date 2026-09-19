@@ -12,15 +12,16 @@ export interface HudLabel {
   x: number;
   y: number;
   tone: LabelTone;
+  /** Pixel-font scale; defaults to DAMAGE_SCALE. */
+  scale?: number;
 }
 
-/** Enemy HP segments centred above an enemy (CRT pixels). */
-export interface HpBar {
+/** Enemy HP as a small number centred above an enemy (CRT pixels), decision 2026-09-19. */
+export interface HpTag {
   x: number;
   y: number;
-  filled: number;
-  total: number;
-  /** Virus level: level − 1 accent dots above the bar. */
+  hp: number;
+  /** Virus level: level − 1 accent dots above the number. */
   level: number;
 }
 
@@ -35,14 +36,14 @@ export interface HudStatus {
 
 export interface HudModel {
   labels: HudLabel[];
-  bars: HpBar[];
+  hp: HpTag[];
   /** Battle status; null in menus. */
   status: HudStatus | null;
   /** A session menu covers the whole CRT (TERMINAL.md §8). */
   menu: { spec: MenuSpec; cursor: number } | null;
 }
 
-export const EMPTY_HUD: HudModel = { labels: [], bars: [], status: null, menu: null };
+export const EMPTY_HUD: HudModel = { labels: [], hp: [], status: null, menu: null };
 
 /** Redraw key: changes whenever the drawn HUD would change. */
 export function hudKey(m: HudModel, blinkOn: boolean): string {
@@ -52,6 +53,6 @@ export function hudKey(m: HudModel, blinkOn: boolean): string {
       : '',
     m.menu ? `${m.menu.spec.key}:${m.menu.cursor}:${blinkOn ? 1 : 0}` : '',
     m.labels.map((l) => `${l.text}@${Math.round(l.x)},${Math.round(l.y)}`).join(';'),
-    m.bars.map((b) => `${b.filled}/${b.total}L${b.level}@${Math.round(b.x)},${Math.round(b.y)}`).join(';'),
+    m.hp.map((b) => `${b.hp}L${b.level}@${Math.round(b.x)},${Math.round(b.y)}`).join(';'),
   ].join('|');
 }

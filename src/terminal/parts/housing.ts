@@ -20,7 +20,7 @@ const COLOR = {
 /** Thickness of the black frame around the glass, world units. */
 const BEZEL = 0.09;
 /** Centre depth of the backing panel; its front face must clear the tilted CRT and the top of the control panel. */
-const BODY_Z = -3;
+const BODY_Z = -6;
 
 export class Housing {
   readonly group = new THREE.Group();

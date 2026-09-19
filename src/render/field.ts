@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { secondsToTicks, tuning } from '../config/tuning';
 import { COLS, ROWS, type Cell } from '../sim/grid';
 import type { World } from '../sim/world';
+import type { Aim } from '../sim/chips/aim';
 import { LineBatch, QuadBatch } from './batch';
 import { NO_SIGNAL, type GridSignal } from './battleSignals';
 import { cellKey, cellStates, type AttackMark, type AttackTone, type CellView, type DebugCellState } from './cellStates';
@@ -28,6 +29,12 @@ const QUADS_CAP = 120;
 const SPAWN_RINGS = 3;
 const OBJECT_HEIGHT = 0.5;
 const DASHES = 12;
+/** Aim preview (decision 2026-09-19): bracket pulse and beam dot march, per second. */
+const AIM_PULSE_HZ = 1.4;
+const AIM_MARCH = 2.2;
+/** Spacing of the beam's dots along the lane, world units. */
+const AIM_DOT_GAP = 0.3;
+const AIM_DOT_LEN = 0.1;
 
 const col = {
   phosphor: new THREE.Color(),
@@ -118,7 +125,7 @@ export class FieldView {
     });
   }
 
-  update(world: World, alpha: number, spawns: ReadonlyMap<number, number>, fx: GridSignal = NO_SIGNAL): void {
+  update(world: World, alpha: number, spawns: ReadonlyMap<number, number>, fx: GridSignal = NO_SIGNAL, aim: Aim | null = null): void {
     const v = tuning.battleVisual;
     signal('phosphor', 1, col.phosphor);
     signal('phosphor', v.GRID_DIM, col.dim);
@@ -207,9 +214,41 @@ export class FieldView {
       }
     }
     this.borders(views, fx);
+    if (aim) this.aim(aim, time / tuning.sim.SIM_HZ);
 
     this.lines.end();
     this.fills.end();
+  }
+
+  /**
+   * The loaded chip's aim: yellow corner brackets breathing in the cells it
+   * will hit, and a line of dots marching up the lane for shots.
+   */
+  private aim(aim: Aim, seconds: number): void {
+    const v = tuning.battleVisual;
+    const hw = (CELL_WIDTH * (1 - v.CELL_GAP)) / 2;
+    const hd = (CELL_DEPTH * (1 - v.CELL_GAP)) / 2;
+    const breathe = 0.5 + 0.5 * Math.sin(seconds * Math.PI * 2 * AIM_PULSE_HZ);
+    const color = dimSignal(col.accent, 0.75 + 0.25 * breathe, col.tmp);
+    const c = new THREE.Vector3();
+    for (const cell of aim.cells) {
+      cellToWorld(cell.x, cell.y, c);
+      const k = 0.78 + 0.1 * breathe;
+      this.corners(c, hw * k, hd * k, color, 0.22);
+    }
+    const beam = aim.beam;
+    if (!beam) return;
+    const from = cellToWorld(beam.x, beam.fromY, new THREE.Vector3()).z - hd;
+    const to = cellToWorld(beam.x, beam.toY, c).z;
+    const x = c.x;
+    const len = from - to;
+    if (len <= 0) return;
+    const offset = (seconds * AIM_MARCH) % AIM_DOT_GAP;
+    const dot = dimSignal(col.accent, 0.6, new THREE.Color());
+    for (let d = offset; d < len; d += AIM_DOT_GAP) {
+      const z = from - d;
+      this.lines.line(x, LINE_Y, z, x, LINE_Y, Math.max(to, z - AIM_DOT_LEN), dot);
+    }
   }
 
   private outline(c: THREE.Vector3, hw: number, hd: number, color: THREE.Color): void {

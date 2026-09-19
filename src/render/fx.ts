@@ -10,13 +10,14 @@ import type { SimEvent } from '../sim/events';
 import type { World } from '../sim/world';
 import { LineBatch, QuadBatch } from './batch';
 import { CELL_DEPTH, CELL_WIDTH, cellToWorld } from './field';
-import { signal } from './palette';
+import { dimSignal, signal } from './palette';
+import { PLAYER_ID } from '../sim/player';
 
 // Attacks and hit effects as plain geometry (BATTLE_VISUAL.md §6): lines,
 // strips and dots in palette signals. Floor effects draw under the creatures,
 // air effects over them.
 
-type TimedKind = 'tracer' | 'enemyTracer' | 'slash' | 'enemySlash' | 'heal' | 'blast' | 'enemyBlast' | 'warp';
+type TimedKind = 'tracer' | 'enemyTracer' | 'slash' | 'enemySlash' | 'heal' | 'blast' | 'enemyBlast' | 'warp' | 'spark' | 'kill';
 
 interface Timed {
   kind: TimedKind;
@@ -33,11 +34,24 @@ const FLOOR_Y = 0.004;
 const BLAST_RINGS = 3;
 const HEAL_DOTS = 9;
 const CURSOR_LEN = 0.14;
+/** Hit sparks on an enemy: rays, their reach and the height they burst at (world units). */
+const SPARK_RAYS = 8;
+const SPARK_REACH = 0.42;
+const SPARK_Y = 0.5;
+const SPARK_TIME = 0.22;
+/** A kill: a bigger two-colour burst and a ring on the panel. */
+const KILL_TIME = 0.5;
+const KILL_RAYS = 16;
+const KILL_REACH = 0.9;
+/** Charge aura of the loaded chip on the player (decision 2026-09-19). */
+const AURA_HEAD_Y = 1.2;
+const AURA_CHEST_Y = 0.5;
 
 const col = {
   accent: new THREE.Color(),
   red: new THREE.Color(),
   phosphor: new THREE.Color(),
+  purple: new THREE.Color(),
   tmp: new THREE.Color(),
 };
 
@@ -90,6 +104,12 @@ export class FxView {
       case 'enemyShot':
         this.push('enemyTracer', tick, fx.CANNON_TRACER_TIME, e.x, e.fromY, e.toY);
         break;
+      case 'damaged':
+        if (e.targetId !== PLAYER_ID && e.amount > 0) this.push('spark', tick, SPARK_TIME, e.x, e.y, tick % 7);
+        break;
+      case 'enemyKilled':
+        this.push('kill', tick, KILL_TIME, e.x, e.y, tick % 5);
+        break;
       case 'enemyWarped':
         this.push('warp', tick, fx.WARP_FX_TIME, e.fromX, e.fromY);
         this.push('warp', tick, fx.WARP_FX_TIME, e.x, e.y);
@@ -101,6 +121,7 @@ export class FxView {
     signal('accent', 1, col.accent);
     signal('red', 1, col.red);
     signal('phosphor', 1, col.phosphor);
+    signal('purple', 1, col.purple);
     const tick = world.tick;
     this.floor.begin();
     this.floorFill.begin();
@@ -124,6 +145,7 @@ export class FxView {
       }
     }
     this.trail(world, tick, alpha);
+    this.aura(world, (tick + alpha) / tuning.sim.SIM_HZ);
 
     this.timed = this.timed.filter((t) => {
       const age = tick - t.startTick + alpha;
@@ -169,11 +191,120 @@ export class FxView {
       case 'enemyBlast':
         this.rings(this.floor, t.x, t.y, k, col.red, true);
         break;
+      case 'spark':
+        this.sparks(t.x, t.y, k, t.toY, SPARK_RAYS, SPARK_REACH, col.accent);
+        break;
+      case 'kill':
+        this.sparks(t.x, t.y, k, t.toY, KILL_RAYS, KILL_REACH, k < 0.5 ? col.accent : col.red);
+        this.rings(this.floor, t.x, t.y, k, col.accent, true);
+        break;
       case 'warp':
         this.rings(this.floor, t.x, t.y, k, col.red, false);
         // Blink the centre on even ticks.
         if (tick % 4 < 2) this.cross(this.air, t.x, t.y, 0.12, col.red);
         break;
+    }
+  }
+
+  /** A burst of short rays flying out of a hit enemy; `seed` turns the burst. */
+  private sparks(x: number, y: number, k: number, seed: number, rays: number, reach: number, base: THREE.Color): void {
+    cellToWorld(x, y, p);
+    const inner = reach * (0.2 + 0.8 * k);
+    const outer = inner + reach * 0.35 * (1 - k);
+    const color = dimSignal(base, 1 - k * 0.6, col.tmp);
+    for (let i = 0; i < rays; i++) {
+      const a = (i / rays) * Math.PI * 2 + seed * 0.7;
+      const cx = Math.cos(a);
+      const cy = Math.sin(a);
+      // Rays spread in the upright plane facing the camera, with a little depth.
+      this.air.line(p.x + cx * inner, SPARK_Y + cy * inner, p.z, p.x + cx * outer, SPARK_Y + cy * outer, p.z + 0.05, color);
+    }
+  }
+
+  /**
+   * The loaded chip shows on the player: sparks ahead for guns, a blade arc for
+   * swords, a bomb over the head, ripples at the feet for waves, rising dots
+   * for support chips and a turning ring on the panel for field chips.
+   */
+  private aura(world: World, seconds: number): void {
+    const chip = world.chips.attackChips()[0];
+    const pl = world.player;
+    if (!chip || world.state !== 'ACTION' || !pl.alive) return;
+    const def = CHIPS[chip.defId];
+    cellToWorld(pl.x, pl.y, p);
+    const t = seconds;
+    switch (def.shape.t) {
+      case 'lane': {
+        // Crackling charge in front of the chest.
+        const z = p.z - CELL_DEPTH * 0.3;
+        for (let i = 0; i < 4; i++) {
+          const a = t * 9 + i * 1.7;
+          const r = 0.1 + 0.06 * Math.sin(t * 23 + i * 3);
+          this.air.line(p.x, AURA_CHEST_Y, z, p.x + Math.cos(a) * r, AURA_CHEST_Y + Math.sin(a) * r, z, col.accent);
+        }
+        break;
+      }
+      case 'near': {
+        // A blade arc over the head, flickering like a charged edge.
+        if (Math.floor(t * 14) % 5 === 0) break;
+        const segs = 7;
+        for (let i = 0; i < segs; i++) {
+          const a0 = Math.PI * (0.15 + (0.7 * i) / segs);
+          const a1 = Math.PI * (0.15 + (0.7 * (i + 1)) / segs);
+          const r = 0.42;
+          this.air.line(p.x + Math.cos(a0) * r, AURA_HEAD_Y - 0.35 + Math.sin(a0) * r, p.z, p.x + Math.cos(a1) * r, AURA_HEAD_Y - 0.35 + Math.sin(a1) * r, p.z, col.accent);
+        }
+        break;
+      }
+      case 'lob': {
+        // A small bomb bobbing over the head, its fuse sparking.
+        const y = AURA_HEAD_Y + 0.04 * Math.sin(t * 5);
+        const sides = 8;
+        const r = 0.1;
+        for (let i = 0; i < sides; i++) {
+          const a0 = (i / sides) * Math.PI * 2;
+          const a1 = ((i + 1) / sides) * Math.PI * 2;
+          this.air.line(p.x + Math.cos(a0) * r, y + Math.sin(a0) * r, p.z, p.x + Math.cos(a1) * r, y + Math.sin(a1) * r, p.z, col.accent);
+        }
+        if (Math.floor(t * 16) % 2 === 0) this.cross(this.air, pl.x, pl.y, 0.05, col.red, y + r + 0.05);
+        break;
+      }
+      case 'wave': {
+        // Ripples running out from the feet.
+        for (let i = 0; i < 2; i++) {
+          const k = ((t * 1.2 + i * 0.5) % 1);
+          const hw = CELL_WIDTH * 0.45 * k;
+          const hd = CELL_DEPTH * 0.45 * k;
+          const c = dimSignal(col.accent, 1 - k, col.tmp);
+          this.floor.line(p.x - hw, FLOOR_Y, p.z - hd, p.x + hw, FLOOR_Y, p.z - hd, c);
+          this.floor.line(p.x - hw, FLOOR_Y, p.z + hd, p.x + hw, FLOOR_Y, p.z + hd, c);
+        }
+        break;
+      }
+      case 'self': {
+        if (def.field) {
+          // A dashed ring turning on the panel.
+          const segs = 10;
+          for (let i = 0; i < segs; i += 2) {
+            const a0 = t * 2 + (i / segs) * Math.PI * 2;
+            const a1 = t * 2 + ((i + 1) / segs) * Math.PI * 2;
+            const rx = CELL_WIDTH * 0.42;
+            const rz = CELL_DEPTH * 0.42;
+            this.floor.line(p.x + Math.cos(a0) * rx, FLOOR_Y, p.z + Math.sin(a0) * rz, p.x + Math.cos(a1) * rx, FLOOR_Y, p.z + Math.sin(a1) * rz, col.purple);
+          }
+        } else {
+          // Support: dots rising around the figure.
+          for (let i = 0; i < 6; i++) {
+            const k = (t * 0.8 + i / 6) % 1;
+            const a = i * 2.4;
+            const x = p.x + Math.cos(a) * 0.3;
+            const z = p.z + Math.sin(a) * 0.2;
+            const y = 0.1 + k * AURA_HEAD_Y;
+            this.air.line(x, y, z, x, y + 0.06, z, dimSignal(col.phosphor, 1 - k, col.tmp));
+          }
+        }
+        break;
+      }
     }
   }
 
@@ -245,10 +376,10 @@ export class FxView {
     batch.line(cx - hw, y, cz + hd, cx - hw, y, cz - hd, color);
   }
 
-  private cross(batch: LineBatch, x: number, y: number, s: number, color: THREE.Color): void {
+  private cross(batch: LineBatch, x: number, y: number, s: number, color: THREE.Color, height = AIR_Y): void {
     cellToWorld(x, y, p);
-    batch.line(p.x - s, AIR_Y - s, p.z, p.x + s, AIR_Y + s, p.z, color);
-    batch.line(p.x - s, AIR_Y + s, p.z, p.x + s, AIR_Y - s, p.z, color);
+    batch.line(p.x - s, height - s, p.z, p.x + s, height + s, p.z, color);
+    batch.line(p.x - s, height + s, p.z, p.x + s, height - s, p.z, color);
   }
 
   /** Ground wave: a chevron strip sliding through the cell (red from enemies, accent from the player). */

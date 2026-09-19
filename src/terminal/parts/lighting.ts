@@ -12,7 +12,15 @@ const COLOR = {
   crt: 0x9fe8dd,
   ring: 0xff3324,
   chip: 0xffd45e,
+  /** The alarm light of the room around the cabinet when the player is hit. */
+  alarm: 0xff2a2a,
 };
+
+/** How long the red room flash fades, seconds. */
+const ALARM_TIME = 0.45;
+/** Extra light at the peak of the flash. */
+const ALARM_AMBIENT = 0.55;
+const ALARM_CRT = 2.2;
 
 export class DarkLighting {
   readonly group = new THREE.Group();
@@ -22,6 +30,15 @@ export class DarkLighting {
   private readonly chip = new THREE.PointLight(COLOR.chip, 0, 0, 1);
   /** Where the chip light sits when no cartridge is active. */
   private readonly chipRest = new THREE.Vector3();
+  private alarmLeft = 0;
+  private readonly white = new THREE.Color(0xffffff);
+  private readonly alarm = new THREE.Color(COLOR.alarm);
+  private readonly crtColor = new THREE.Color(COLOR.crt);
+
+  /** The player was hit: red light floods the whole cabinet for a moment. */
+  flashAlarm(): void {
+    this.alarmLeft = ALARM_TIME;
+  }
 
   constructor() {
     this.group.add(this.ambient, this.crt, this.ring, this.chip);
@@ -49,10 +66,15 @@ export class DarkLighting {
   }
 
   /** Copies tuning into the lights; `gaugePulse` brightens the ring as the gauge fills. */
-  update(gaugePulse: number, chipActive: boolean): void {
+  update(gaugePulse: number, chipActive: boolean, dt = 0): void {
     const t = tuning.terminal;
-    this.ambient.intensity = t.AMBIENT;
-    this.crt.intensity = t.LIGHT_CRT;
+    this.alarmLeft = Math.max(0, this.alarmLeft - dt);
+    const a = this.alarmLeft / ALARM_TIME;
+    const k = a * a;
+    this.ambient.color.copy(this.white).lerp(this.alarm, Math.min(1, k * 4));
+    this.ambient.intensity = t.AMBIENT + ALARM_AMBIENT * k;
+    this.crt.color.copy(this.crtColor).lerp(this.alarm, k);
+    this.crt.intensity = t.LIGHT_CRT + ALARM_CRT * k;
     this.ring.intensity = t.LIGHT_RING * (0.6 + 0.4 * Math.max(0, Math.min(1, gaugePulse)));
     this.chip.intensity = t.LIGHT_CHIP * (chipActive ? 1 + t.CHIP_ACTIVE_GLOW : 0.35);
   }

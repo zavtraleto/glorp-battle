@@ -50,7 +50,8 @@ interface Cart {
 
 const COLOR = {
   frame: 0x1c1d1f,
-  glow: new THREE.Color(0x55ff66),
+  /** Yellow light along the bottom edge of a loaded chip. */
+  glow: new THREE.Color(0xffd45e),
   contactOff: new THREE.Color(0x8a7a4a),
   contactOn: new THREE.Color(0xffe9a8),
   faceActive: new THREE.Color(0xffffff),
@@ -68,18 +69,19 @@ const REST_Z = 0.14;
 const EJECT_POP = 0.25;
 /** How lit the active slot's contacts sit between flashes. */
 const ACTIVE_CONTACT = 0.55;
-/** Tremble of the active cartridge: radians and rate. */
-const ACTIVE_TREMBLE = 0.005;
-const ACTIVE_TREMBLE_HZ = 6;
 const LOAD_HEIGHT = 1.2;
 const GLOW_PULSE_HZ = 2;
 /** Cartridges slide to a new slot at this rate (1/s). */
 const SLIDE_RATE = 22;
 /** Cartridge width as a share of its slot pitch. */
 const CART_FILL = 0.92;
-/** An ejected cartridge ends this far in front of the camera and this far below its axis. */
-const EJECT_LENS_GAP = 2.5;
-const EJECT_UNDER_LENS = 1.4;
+/**
+ * Where an ejected cartridge ends, as shares of the camera's distance: short of
+ * the lens and well under its axis, so it leaves through the bottom of the
+ * frame while still growing instead of filling the screen.
+ */
+const EJECT_REACH = 0.7;
+const EJECT_UNDER_LENS = 0.18;
 
 function contactTexture(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
@@ -110,6 +112,10 @@ export class ChipRail {
   private hasActive = false;
   private texel = 0.02;
   private maxH = Infinity;
+  /** Cartridge height, world units: the tilt pivots on its bottom edge. */
+  private cartH = 1;
+  /** Called when a cartridge leaves its slot (a shot): the slot index. */
+  onEject: ((slot: number) => void) | null = null;
   /** World point the ejected cartridges fly at: just under the camera (set from it). */
   private readonly aimAt = new THREE.Vector3(0, 0, 30);
   private readonly aim: EjectAim = { x: 0, y: 0, z: 0 };
@@ -140,6 +146,7 @@ export class ChipRail {
     texel = this.texel;
     const w = CHIP_TEXELS_W * texel;
     const h = Math.min(CHIP_TEXELS_H * texel, this.maxH);
+    this.cartH = h;
     this.slotPos = [];
     for (let i = 0; i < RAIL_SLOTS; i++) {
       const x = rail.cx - rail.w * RAIL_LEFT + pitch * (i + 0.5);
@@ -158,9 +165,15 @@ export class ChipRail {
     for (const c of this.carts) c.cart.shape(texel, this.maxH);
   }
 
+  /** Top and bottom edges of each slot's cartridge, in the rail's plan space (the PCB meets them). */
+  slotEdges(): { x: number; top: number; bottom: number }[] {
+    const half = this.cartH / 2;
+    return this.slotPos.map((p) => ({ x: p.x, top: p.y + half, bottom: p.y - half }));
+  }
+
   /** Ejected cartridges fly at the camera: `camera` is its world position. */
   setCamera(camera: THREE.Vector3): void {
-    this.aimAt.set(camera.x, camera.y - EJECT_UNDER_LENS, Math.max(1, camera.z - EJECT_LENS_GAP));
+    this.aimAt.set(camera.x, camera.y - camera.z * EJECT_UNDER_LENS, camera.z * EJECT_REACH);
   }
 
   /** Position of the active cartridge in the rail's space, for the light that follows it. */
@@ -239,16 +252,19 @@ export class ChipRail {
           const view = this.slotViews?.[c.slot];
           const isActive = view?.state === 'queued';
           const blocked = view?.state === 'blocked';
-          // While a series is built, chips that could join it rise level with it.
+          // While a series is built, chips that could join it tilt level with it.
           const candidate = building && view?.state === 'ready';
           c.cart.setOrder(view?.order ?? 0);
-          c.lift.target = isActive || candidate ? t.CHIP_ACTIVE_LIFT : 0;
+          // Tilt toward the player about the bottom edge: the far (top) edge
+          // comes up out of the panel (decision 2026-09-19).
+          c.lift.target = isActive || candidate ? 1 : 0;
           c.lift.step(dt, t.SPRING_STIFFNESS, t.SPRING_DAMPING);
-          const out = c.lift.value / Math.max(1e-6, t.CHIP_ACTIVE_LIFT);
-          c.pos.set(rest.x, rest.y + c.lift.value * 0.4, rest.z + c.lift.value + out * t.CHIP_ACTIVE_PUSH);
+          const k = c.lift.value;
+          const tilt = THREE.MathUtils.degToRad(t.CHIP_TILT_DEG) * k;
+          const half = this.cartH / 2;
+          c.pos.set(rest.x, rest.y - half + half * Math.cos(tilt), rest.z + half * Math.sin(tilt) + k * t.CHIP_ACTIVE_PUSH);
           o.position.lerp(c.pos, slide);
-          // A barely visible tremble: the active chip is live, not just lit.
-          o.rotation.set(0, 0, isActive ? ACTIVE_TREMBLE * Math.sin(this.time * Math.PI * 2 * ACTIVE_TREMBLE_HZ) : 0);
+          o.rotation.set(tilt, 0, 0);
           o.scale.setScalar(1);
           o.visible = true;
           if (isActive) {
@@ -316,6 +332,7 @@ export class ChipRail {
     c.cart.glow.visible = false;
     c.cart.setFlying(true);
     this.flashContacts(slot);
+    this.onEject?.(slot);
   }
 
   private land(c: Cart): void {

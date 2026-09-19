@@ -179,8 +179,7 @@ export const DEFAULT_TUNING = {
     AFTER_TIME: 0.2,
     /** Spawn markers at the battle intro, seconds. */
     SPAWN_TIME: 0.6,
-    HP_SEGMENTS: 8,
-    DAMAGE_SCALE: 3,
+    DAMAGE_SCALE: 4,
     /** Height of the CRT status band, share of the picture (spec §8). */
     HUD_BAND: 0.11,
   },
@@ -203,7 +202,7 @@ export const DEFAULT_TUNING = {
     /** Horizontal bezel around the CRT glass, as a share of terminal width on each side. */
     CRT_MARGIN_X: 0.015,
     /** The control panel (rail, draw strip, trackball, pause) is one plane; its top edge leans away from the player, degrees. */
-    CONTROL_TILT: 25,
+    CONTROL_TILT: 45,
     /** The screen leans back about its lower edge, degrees (spec §3.1). */
     CRT_TILT: 4,
     /** A trackball gesture that never travelled counts as a chip shot within this long (spec §10.2). */
@@ -239,7 +238,7 @@ export const DEFAULT_TUNING = {
     BUTTON_PRESS_DEPTH: 0.12,
     /** Ball diameter and red ring outer diameter, shares of the body width (spec §10.1). */
     BALL_W: 0.19,
-    RING_W: 0.27,
+    RING_W: 0.235,
     /** Trackball rotation per CSS px of drag, radians. */
     TRACKBALL_ROLL_GAIN: 0.0067,
     /** Trackball spin decay, 1/s. */
@@ -254,7 +253,8 @@ export const DEFAULT_TUNING = {
     /** Flash of a trackball direction triangle on a step. */
     ARROW_FLASH_TIME: 0.15,
     /** Chip rail (spec §9.2): active chip lift and push (world units), animation times (s). */
-    CHIP_ACTIVE_LIFT: 0.18,
+    /** Loaded and compatible chips tilt toward the player about their bottom edge, degrees. */
+    CHIP_TILT_DEG: 32,
     /** How far the active cartridge slides out of its slot toward the player. */
     CHIP_ACTIVE_PUSH: 0.1,
     /** Brightness of the light the active cartridge throws on its own slot. */

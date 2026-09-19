@@ -27,6 +27,7 @@ uniform float uNoise;
 uniform float uAberr;
 uniform float uShake;
 uniform float uTime;
+uniform vec3 uEdge;
 varying vec2 vUv;
 
 vec2 curve(vec2 uv) {
@@ -92,6 +93,12 @@ void main() {
 
     vec2 v = uv * (1.0 - uv);
     c *= pow(clamp(v.x * v.y * 16.0, 0.0, 1.0), 0.15);
+    // Hit glow along the edges of the tube, following its rectangle
+    // (decision 2026-09-19): distance to the nearest edge, not to the centre.
+    vec2 toEdge = min(uv, 1.0 - uv) * vec2(uRes.x / uRes.y, 1.0);
+    float d = min(toEdge.x, toEdge.y);
+    float rim = 1.0 - smoothstep(0.0, 0.07, d);
+    c += uEdge * rim * rim;
     // Mostly multiplicative: a flat add would lift the black field to grey and
     // wash out the whole picture on every chip use.
     c = c * (1.15 + uFlash * 0.55) + uFlash * 0.06;
@@ -103,6 +110,8 @@ void main() {
 export class CrtMaterial extends THREE.ShaderMaterial {
   private flashLeft = 0;
   private shakeLeft = 0;
+  private edgeLeft = 0;
+  private readonly edgeColor = new THREE.Color(0, 0, 0);
   private time = 0;
 
   constructor() {
@@ -124,6 +133,7 @@ export class CrtMaterial extends THREE.ShaderMaterial {
         uAberr: { value: 0 },
         uShake: { value: 0 },
         uTime: { value: 0 },
+        uEdge: { value: new THREE.Vector3() },
       },
     });
   }
@@ -144,6 +154,18 @@ export class CrtMaterial extends THREE.ShaderMaterial {
     this.flashLeft = tuning.terminal.CRT_FLASH_TIME;
   }
 
+  /** Flashes the edges of the tube in `color` (hits); `strength` 0..1. */
+  edgeFlash(color: number, strength: number): void {
+    const c = new THREE.Color(color).multiplyScalar(strength);
+    if (c.r + c.g + c.b < this.edgeColor.r * this.edgeLeftShare() * 3) return;
+    this.edgeColor.copy(c);
+    this.edgeLeft = EDGE_TIME;
+  }
+
+  private edgeLeftShare(): number {
+    return this.edgeLeft / EDGE_TIME;
+  }
+
   /** Starts the picture shake shown when the player is hit. */
   shake(): void {
     this.shakeLeft = SHAKE_TIME;
@@ -155,7 +177,10 @@ export class CrtMaterial extends THREE.ShaderMaterial {
     this.time += dt;
     this.flashLeft = Math.max(0, this.flashLeft - dt);
     this.shakeLeft = Math.max(0, this.shakeLeft - dt);
+    this.edgeLeft = Math.max(0, this.edgeLeft - dt);
     const u = this.uniforms;
+    const edge = this.edgeLeftShare() * this.edgeLeftShare();
+    (u.uEdge!.value as THREE.Vector3).set(this.edgeColor.r * edge, this.edgeColor.g * edge, this.edgeColor.b * edge);
     u.uScan!.value = t.CRT_SCANLINES;
     u.uCurv!.value = t.CRT_CURVATURE;
     u.uBleed!.value = t.CRT_BLEED;
@@ -171,3 +196,5 @@ export class CrtMaterial extends THREE.ShaderMaterial {
 
 /** How long a hit shakes the picture, seconds (spec §5.3). */
 const SHAKE_TIME = 0.15;
+/** How long an edge flash takes to fade, seconds. */
+const EDGE_TIME = 0.3;

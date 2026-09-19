@@ -169,59 +169,89 @@ export interface MenuLayout {
   s: number;
 }
 
-/** Positions of everything on a W×H CRT canvas. */
+/**
+ * Positions of everything on a W×H CRT canvas. The whole menu (title, rows,
+ * items, hint) is one block centred on the screen, in a large font
+ * (decision 2026-09-19); anything too wide steps down a size.
+ */
 export function menuLayout(spec: MenuSpec, W: number, H: number, cursor = 0): MenuLayout {
   const s = Math.max(1, Math.floor(W / HUD_PX_PER_SCALE));
-  const M = 6 * s;
+  const big = s + 1;
+  const M = 5 * s;
+  const room = W - 2 * M;
+  const fit = (text: string, preferred: number) => {
+    let scale = preferred;
+    while (scale > 1 && measureText(text, scale) > room) scale--;
+    return scale;
+  };
   const centered = (text: string, y: number, scale: number): TextLine => ({
     text,
     x: Math.round((W - measureText(text, scale)) / 2),
     y,
     scale,
   });
-  const fit = (text: string, preferred: number) => (measureText(text, preferred) <= W - 2 * M ? preferred : s);
 
-  let y = Math.round(H * 0.16);
-  const title = centered(spec.title, y, fit(spec.title, s + 1));
-  y += GLYPH_H * title.scale + 4 * s;
+  const titleScale = fit(spec.title, s + 2);
+  const subScale = spec.subtitle ? fit(spec.subtitle, big) : big;
+  const rowScale = Math.min(...spec.rows.map(([l, v]) => fit(`${l}  ${v}`, big)), big);
+  const itemScale = Math.min(...spec.items.map((i) => fit(i.label.toUpperCase(), big)), big);
+  const itemH = GLYPH_H * itemScale + 6 * s;
+  const itemGap = 3 * s;
+  const rowH = GLYPH_H * rowScale + 4 * s;
+  const hintScale = big;
+  const hintLines = spec.hint.flatMap((h) => wrapText(h.toUpperCase(), Math.floor(room / (6 * hintScale))));
+  const hintLineH = GLYPH_H * hintScale + 3 * s;
+
+  const count = spec.items.length;
+  const shownCount = Math.min(count, MENU_VISIBLE);
+  const heights = [
+    GLYPH_H * titleScale,
+    spec.subtitle ? 3 * s + GLYPH_H * subScale : 0,
+    8 * s,
+    spec.rows.length ? spec.rows.length * rowH + 4 * s : 0,
+    shownCount ? shownCount * (itemH + itemGap) - itemGap : 0,
+    hintLines.length ? 8 * s + hintLines.length * hintLineH : 0,
+  ];
+  const total = heights.reduce((a, b) => a + b, 0);
+  let y = Math.max(M, Math.round((H - total) / 2));
+
+  const title = centered(spec.title, y, titleScale);
+  y += GLYPH_H * titleScale;
   let subtitle: TextLine | null = null;
   if (spec.subtitle) {
-    subtitle = centered(spec.subtitle, y, s);
-    y += GLYPH_H * s;
+    y += 3 * s;
+    subtitle = centered(spec.subtitle, y, subScale);
+    y += GLYPH_H * subScale;
   }
-  y += 10 * s;
+  y += 8 * s;
 
   const rows = spec.rows.map(([label, value]) => {
     const line = {
-      label: { text: label, x: M, y, scale: s },
-      value: { text: value, x: W - M - measureText(value, s), y, scale: s },
+      label: { text: label, x: M, y, scale: rowScale },
+      value: { text: value, x: W - M - measureText(value, rowScale), y, scale: rowScale },
     };
-    y += 11 * s;
+    y += rowH;
     return line;
   });
-  if (rows.length) y += 6 * s;
+  if (rows.length) y += 4 * s;
 
-  const itemH = 13 * s;
-  const count = spec.items.length;
   const first = Math.max(0, Math.min(count - MENU_VISIBLE, cursor - Math.floor(MENU_VISIBLE / 2)));
   const shown = spec.items.slice(first, first + MENU_VISIBLE);
   const more: TextLine[] = [];
-  if (first > 0) more.push(centered('...', y - 4 * s, s));
+  if (first > 0) more.push(centered('...', y - 3 * s, s));
   const items = shown.map((item, k) => {
-    const rect: Rect = { x: M, y, w: W - 2 * M, h: itemH };
+    const rect: Rect = { x: M, y, w: room, h: itemH };
     const label = item.label.toUpperCase();
-    const text = centered(label, y + Math.round((itemH - GLYPH_H * s) / 2), fit(label, s));
-    y += itemH + 3 * s;
+    const text = centered(label, y + Math.round((itemH - GLYPH_H * itemScale) / 2), itemScale);
+    y += itemH + itemGap;
     return { rect, text, index: first + k };
   });
-  if (first + shown.length < count) more.push(centered('...', y - 2 * s, s));
+  if (first + shown.length < count) more.push(centered('...', y - itemGap, s));
 
-  const hintScale = Math.max(1, s - 1);
-  const lines = spec.hint.flatMap((h) => wrapText(h.toUpperCase(), Math.floor((W - 2 * M) / (6 * hintScale))));
-  let hy = H - M - lines.length * 10 * hintScale;
-  const hint = lines.map((text) => {
-    const line = centered(text, hy, hintScale);
-    hy += 10 * hintScale;
+  if (hintLines.length) y += 8 * s - itemGap;
+  const hint = hintLines.map((text) => {
+    const line = centered(text, y, hintScale);
+    y += hintLineH;
     return line;
   });
 

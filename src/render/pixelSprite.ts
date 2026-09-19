@@ -10,6 +10,28 @@ import type { SpriteArt } from './spriteArt';
 /** Render layer of full-colour art, drawn after the palette pass. */
 export const ART_LAYER = 1;
 
+/**
+ * Hit ripple (decision 2026-09-19): the texture is sampled with a wavy
+ * sideways offset that dies out; `uRipple` 0..1 is its strength.
+ */
+function addRipple(material: THREE.SpriteMaterial, ripple: { value: number }, clock: { value: number }): void {
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uRipple = ripple;
+    shader.uniforms.uRippleTime = clock;
+    shader.fragmentShader = shader.fragmentShader
+      .replace('void main() {', 'uniform float uRipple;\nuniform float uRippleTime;\nvoid main() {')
+      .replace(
+        '#include <map_fragment>',
+        `#ifdef USE_MAP
+  vec2 rippleUv = vMapUv;
+  rippleUv.x += sin(vMapUv.y * 26.0 + uRippleTime * 55.0) * 0.045 * uRipple;
+  vec4 sampledDiffuseColor = texture2D( map, rippleUv );
+  diffuseColor *= sampledDiffuseColor;
+#endif`,
+      );
+  };
+}
+
 /** Lifts are counted in steps of this many CRT pixels per 48 px of sprite height. */
 const LIFT_STEP_HEIGHT = 48;
 
@@ -68,6 +90,8 @@ export class PixelSprite {
   private readonly material: THREE.SpriteMaterial;
   private readonly texW: number;
   private readonly texH: number;
+  private readonly ripple = { value: 0 };
+  private readonly rippleClock = { value: 0 };
   /** Art textures are shared by every sprite that uses them. */
   private readonly ownsTextures: boolean;
 
@@ -93,6 +117,7 @@ export class PixelSprite {
       depthTest: false,
       depthWrite: false,
     });
+    addRipple(this.material, this.ripple, this.rippleClock);
     this.sprite = new THREE.Sprite(this.material);
     // Feet on the anchor point.
     this.sprite.center.set(0.5, 0);
@@ -102,6 +127,12 @@ export class PixelSprite {
   setFlash(on: boolean): void {
     const map = on ? this.flashed : this.normal;
     if (this.material.map !== map) this.material.map = map;
+  }
+
+  /** Hit ripple strength 0..1; `seconds` drives the wave. */
+  setRipple(k: number, seconds: number): void {
+    this.ripple.value = Math.max(0, Math.min(1, k));
+    this.rippleClock.value = seconds;
   }
 
   /** 0 = whole, 1 = gone. */

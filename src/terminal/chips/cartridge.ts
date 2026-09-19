@@ -141,7 +141,9 @@ export class Cartridge {
     // The clip sits left of the cut corner so it does not float over the notch.
     this.clip.scale.set(w * 0.34, 3 * texel, depth * 1.1);
     this.clip.position.set(-w * 0.12, h / 2 - 1.5 * texel, 0);
-    this.glow.scale.set(w + 4 * texel, h + 4 * texel, depth * 0.6);
+    // A loaded chip glows yellow along its bottom edge (decision 2026-09-19).
+    this.glow.scale.set(w * 0.92, 3 * texel, depth * 0.5);
+    this.glow.position.set(0, -h / 2 - 2 * texel, depth * 0.25);
     // Bottom-left corner, clear of the cut and the code plaque.
     const badge = 14 * texel;
     this.order.scale.set(badge, badge, 1);

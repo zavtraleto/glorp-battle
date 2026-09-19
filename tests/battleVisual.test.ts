@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { ENEMY_SEEDS } from '../src/data/enemies';
 import { CREATURE_SIZE, generateCreature } from '../src/render/creatureGen';
-import { battleSignal, hpSegments, NO_SIGNAL } from '../src/render/battleSignals';
+import { battleSignal, NO_SIGNAL } from '../src/render/battleSignals';
 import { cellKey, cellStates, type CellInputs } from '../src/render/cellStates';
 import {
   dimSignal,
@@ -324,11 +324,3 @@ describe('battle signals', () => {
   });
 });
 
-describe('hpSegments', () => {
-  it('rounds up and keeps one segment while alive', () => {
-    expect(hpSegments(40, 40, 8)).toEqual({ filled: 8, total: 8 });
-    expect(hpSegments(1, 40, 8)).toEqual({ filled: 1, total: 8 });
-    expect(hpSegments(21, 40, 8)).toEqual({ filled: 5, total: 8 });
-    expect(hpSegments(0, 40, 8)).toEqual({ filled: 0, total: 8 });
-  });
-});

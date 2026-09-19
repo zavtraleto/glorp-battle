@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { tuning } from '../../config/tuning';
 import { PALETTE } from '../../render/palette';
 import { blinkPhase } from '../terminalMode';
-import { hudKey, type HpBar, type HudLabel, type HudModel, type HudStatus, type LabelTone } from './hudModel';
+import { hudKey, type HpTag, type HudLabel, type HudModel, type HudStatus, type LabelTone } from './hudModel';
 import { HUD_PX_PER_SCALE, menuLayout, type MenuSpec, type MenuTone } from './menuModel';
 import { drawText, measureText, type PixelSink } from './pixelFont';
 
@@ -38,7 +38,8 @@ const MENU = {
 };
 
 const LABEL_COLOR: Record<LabelTone, string> = {
-  damage: hex(PALETTE.accent),
+  /** Damage dealt: hot yellow-white. */
+  damage: '#fff0a8',
   playerDamage: hex(PALETTE.red),
   heal: hex(PALETTE.phosphor),
 };
@@ -94,7 +95,7 @@ export class CrtCanvas {
     }
 
     if (m.status) this.drawStatus(sink, m.status, H, s, M, blinkOn);
-    this.drawBars(ctx, m.bars, s);
+    this.drawHp(ctx, sink, m.hp, s);
     this.drawLabels(sink, m.labels);
     this.texture.needsUpdate = true;
   }
@@ -107,43 +108,34 @@ export class CrtCanvas {
     drawText(sink, String(st.hp), M, H - M - 7 * big, big, hpColor);
   }
 
-  /** Enemy HP as a row of big segments: lit = red block, lost = red outline. */
-  private drawBars(ctx: CanvasRenderingContext2D, bars: readonly HpBar[], s: number): void {
-    const size = 2 * s;
-    const gap = Math.max(1, Math.floor(s / 2));
-    for (const b of bars) {
-      const width = b.total * size + (b.total - 1) * gap;
-      const x0 = Math.round(b.x - width / 2);
-      const y0 = Math.round(b.y - size);
-      ctx.fillStyle = COLOR.outline;
-      ctx.fillRect(x0 - 1, y0 - 1, width + 2, size + 2);
-      for (let i = 0; i < b.total; i++) {
-        const x = x0 + i * (size + gap);
-        ctx.fillStyle = COLOR.red;
-        if (i < b.filled) {
-          ctx.fillRect(x, y0, size, size);
-        } else {
-          ctx.fillRect(x, y0, size, 1);
-          ctx.fillRect(x, y0 + size - 1, size, 1);
-          ctx.fillRect(x, y0, 1, size);
-          ctx.fillRect(x + size - 1, y0, 1, size);
-        }
+  /** Enemy HP as a small red number with a dark outline; level dots above it. */
+  private drawHp(ctx: CanvasRenderingContext2D, sink: PixelSink, tags: readonly HpTag[], s: number): void {
+    const scale = s;
+    for (const b of tags) {
+      const text = String(b.hp);
+      const x = Math.round(b.x - measureText(text, scale) / 2);
+      const y = Math.round(b.y - 7 * scale);
+      for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
+        drawText(sink, text, x + dx, y + dy, scale, COLOR.outline);
       }
-      // Level dots above the bar.
+      drawText(sink, text, x, y, scale, COLOR.red);
+      // Level dots above the number.
       ctx.fillStyle = COLOR.accent;
+      const dot = 2 * s;
       for (let i = 1; i < b.level; i++) {
-        ctx.fillRect(Math.round(b.x + (i - b.level / 2 - 0.5) * size * 2 + size / 2), y0 - size - gap, size, size);
+        ctx.fillRect(Math.round(b.x + (i - b.level / 2 - 0.5) * dot * 2 + dot / 2), y - dot - 2, dot, dot);
       }
     }
   }
 
   /** Damage and heal numbers: big pixel digits with a dark outline, centred on their anchors. */
   private drawLabels(sink: PixelSink, labels: readonly HudLabel[]): void {
-    const scale = tuning.battleVisual.DAMAGE_SCALE;
     for (const l of labels) {
+      const scale = l.scale ?? tuning.battleVisual.DAMAGE_SCALE;
       const x = Math.round(l.x - measureText(l.text, scale) / 2);
       const y = Math.round(l.y - (7 * scale) / 2);
-      for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
+      // A thick dark outline keeps big numbers readable over anything.
+      for (const [dx, dy] of [[-2, 0], [2, 0], [0, -2], [0, 2], [-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
         drawText(sink, l.text, x + dx, y + dy, scale, COLOR.outline);
       }
       drawText(sink, l.text, x, y, scale, LABEL_COLOR[l.tone]);

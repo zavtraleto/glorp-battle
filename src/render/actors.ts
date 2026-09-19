@@ -21,6 +21,8 @@ export function rowRenderOrder(y: number): number {
 const FOOT_OFFSET = 0.18;
 /** Enemies bob by one texel at this rate. */
 const IDLE_BOB_HZ = 1.2;
+/** A hit enemy ripples for this long, seconds (decision 2026-09-19). */
+const HIT_RIPPLE_TIME = 0.3;
 
 export interface SpriteFrame {
   camera: THREE.PerspectiveCamera;
@@ -118,7 +120,7 @@ export class EnemyView {
     const art = artId ? spriteArt(artId) : null;
     this.pixels = new PixelSprite(art ?? creature(ENEMY_SEEDS[enemy.kind], boss ? BOSS_SIZE : CREATURE_SIZE), 'red');
     this.sprite = this.pixels.sprite;
-    this.widthShare = art ? ENEMY_ART_WIDTH : tuning.battleVisual.SPRITE_CELL_FRAC * (boss ? BOSS_WIDTH : 1);
+    this.widthShare = (art ? ENEMY_ART_WIDTH : tuning.battleVisual.SPRITE_CELL_FRAC) * (boss ? BOSS_WIDTH : 1);
     this.phase = enemy.id * 1.7;
   }
 
@@ -142,6 +144,8 @@ export class EnemyView {
     // Paralysis: a steady flicker.
     if (enemy.paralyzeTicks > 0 && Math.floor(tick / 4) % 2 === 0) flash = true;
     this.pixels.setFlash(flash);
+    const sinceHit = (tick - enemy.lastHitTick + alpha) / tuning.sim.SIM_HZ;
+    this.pixels.setRipple(sinceHit >= 0 && sinceHit < HIT_RIPPLE_TIME ? 1 - sinceHit / HIT_RIPPLE_TIME : 0, time);
     if (enemy.offField) this.sprite.visible = false;
     this.pixels.setDissolve(enemy.alive ? 0 : deathProgress(enemy.deathTick, tick, alpha, dt));
   }

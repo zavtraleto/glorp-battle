@@ -6,8 +6,8 @@ import { plasticPattern } from '../src/terminal/textures/procedural';
 
 describe('hud model', () => {
   it('changes the redraw key with content, and with blink only in menus', () => {
-    const a = { ...EMPTY_HUD, bars: [{ x: 10, y: 20, filled: 3, total: 8, level: 1 }] };
-    const b = { ...EMPTY_HUD, bars: [{ x: 10, y: 20, filled: 2, total: 8, level: 1 }] };
+    const a = { ...EMPTY_HUD, hp: [{ x: 10, y: 20, hp: 40, level: 1 }] };
+    const b = { ...EMPTY_HUD, hp: [{ x: 10, y: 20, hp: 30, level: 1 }] };
     expect(hudKey(a, true)).toBe(hudKey(a, false));
     expect(hudKey(a, true)).not.toBe(hudKey(b, true));
     const c = { ...EMPTY_HUD, labels: [{ text: '40', x: 5, y: 5, tone: 'damage' as const }] };

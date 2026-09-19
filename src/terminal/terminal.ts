@@ -13,8 +13,7 @@ import { CrtCanvas } from './crt/crtCanvas';
 import { CrtMaterial } from './crt/crtMaterial';
 import { PLAYER_ID } from '../sim/player';
 import { FloaterList, floaterFromEvent } from './crt/floaters';
-import type { HpBar, HudLabel, HudStatus } from './crt/hudModel';
-import { hpSegments } from '../render/battleSignals';
+import type { HpTag, HudLabel, HudStatus } from './crt/hudModel';
 import { menuFor, menuItemAt, menuLayout, moveCursor, type MenuAction, type MenuSpec } from './crt/menuModel';
 import { cursorCss } from './interaction/cursor';
 import { attachPointers } from './interaction/pointerEvents';
@@ -35,6 +34,7 @@ import { HitZones } from './parts/hitZones';
 import { Housing } from './parts/housing';
 import { DarkLighting } from './parts/lighting';
 import { DrawStrip } from './parts/drawStrip';
+import { Pcb, PCB_PULSE_HZ } from './parts/pcb';
 import { SegmentDisplay } from './parts/segmentDisplay';
 import { chipDisplayText } from './chips/segmentFont';
 import { Mount } from './parts/mount';
@@ -42,6 +42,7 @@ import { mountCorners, screenBounds } from './interaction/project';
 import { Trackball } from './parts/trackball';
 import { terminalMode } from './terminalMode';
 import { chipName, t } from '../i18n';
+import { CHIPS } from '../data/chips';
 
 // NET-01 terminal (TERMINAL.md §13). Owns the terminal scene and camera, draws
 // the battle and the HUD into the CRT and the terminal into a low-resolution
@@ -52,12 +53,26 @@ const TERMINAL_CLEAR_COLOR = 0x000000;
 const HP_LOW_SHARE = 0.25;
 /** How long the HP number blinks after a hit, seconds. */
 const HP_HIT_TIME = 0.5;
+/** How far (plan space) the yellow PCB traces run on past the bottom of the glass, hidden under it. */
+const UNDER_SCREEN = 1.6;
 /** Camera near plane, world units: close enough for an ejected cartridge to fly at the lens. */
 const CAMERA_NEAR = 0.5;
 /** Damage numbers: start height and rise (world units), flicker after this share of their life. */
-const FLOATER_HEIGHT = 0.5;
-const FLOATER_RISE = 0.5;
-const FLOATER_FLICKER = 0.7;
+const FLOATER_HEIGHT = 0.6;
+const FLOATER_RISE = 0.7;
+const FLOATER_FLICKER = 0.75;
+/** Numbers pop in one size bigger for this share of their life. */
+const FLOATER_POP = 0.12;
+/** Damage to the player shakes for this share of its life. */
+const FLOATER_SHAKE = 0.35;
+/** Whole-terminal shake (decision 2026-09-19): world units at full strength, and fade time. */
+const CAM_SHAKE_TIME = 0.22;
+const SHAKE = { chip: 0.035, sword: 0.06, bomb: 0.07, kill: 0.09, playerHit: 0.16 };
+/** Edge glow of the tube: faint warm on a hit, bright warm on a kill, red on a hit taken. */
+const EDGE_HIT = 0xffb347;
+const EDGE_KILL = 0xffe2a0;
+const EDGE_HURT = 0xff2020;
+const EDGE = { hit: 0.18, kill: 0.6, hurt: 0.5 };
 /** HP segments sit this many CRT pixels above an enemy's head. */
 const HP_BAR_GAP = 3;
 
@@ -98,6 +113,7 @@ export class Terminal {
   private readonly lighting = new DarkLighting();
   private readonly drawStrip = new DrawStrip();
   private readonly chipDisplay = new SegmentDisplay();
+  private readonly pcb = new Pcb();
   private readonly crtMount = new Mount();
   /** The control panel: rail, draw strip, trackball and pause key on one tilted plane. */
   private readonly controlMount = new Mount();
@@ -117,6 +133,10 @@ export class Terminal {
   private layoutKey = '';
   /** CRT picture size in pixels: exactly the glass's render pixels, so nothing is resampled. */
   private readonly crtPx = { w: tuning.terminal.CRT_RES_W, h: tuning.terminal.CRT_RES_H };
+  /** Camera rest position; a shake offsets from it. */
+  private readonly camBase = new THREE.Vector3();
+  private camShake = 0;
+  private camShakeLeft = 0;
 
   constructor(private opts: TerminalOptions) {
     const { renderer, container } = opts;
@@ -129,6 +149,7 @@ export class Terminal {
 
     this.crtMount.inner.add(this.housing.crtGroup);
     this.controlMount.inner.add(
+      this.pcb.group,
       this.rail.group,
       this.drawStrip.group,
       this.chipDisplay.group,
@@ -138,6 +159,12 @@ export class Terminal {
     this.scene.add(this.lighting.group, this.housing.group, this.crtMount, this.controlMount, this.hitZones.group);
 
     this.layout = computeLayout(container.clientWidth, container.clientHeight);
+    // A shot runs through the PCB and flares the ring.
+    this.rail.onEject = (slot) => {
+      this.pcb.fire(slot);
+      this.trackball.flashTap();
+    };
+    this.trackball.breatheHz = PCB_PULSE_HZ;
     this.router = new PointerRouter((x, y) => this.zoneAt(x, y), {
       press: (z) => this.press(z, true),
       release: (z) => this.release(z),
@@ -195,7 +222,8 @@ export class Terminal {
     const bodyCy = this.layout.body.y + this.layout.body.h / 2;
     const cx = (vw / 2 - bodyCx) * k;
     const cy = -(vh / 2 - bodyCy) * k;
-    this.camera.position.set(cx, cy, dist);
+    this.camBase.set(cx, cy, dist);
+    this.camera.position.copy(this.camBase);
     this.camera.lookAt(cx, cy, 0);
     this.camera.fov = t.CAMERA_FOV;
     this.camera.aspect = vw / vh;
@@ -225,6 +253,11 @@ export class Terminal {
     // proportions on any screen (spec §10.1).
     // A little above centre: the tilted panel's lower edge comes toward the camera and grows.
     this.trackball.build(tb.cx, tb.cy + tb.h * 0.1, this.layout.worldWidth);
+    const r = this.trackball.ring3;
+    // The yellow traces run on up and pass under the screen: the panel leans
+    // back, so their far end disappears behind the glass and its frame.
+    const glassW = rectToWorld(this.layout, glass);
+    this.pcb.build(this.rail.slotEdges(), r.x, r.y, (r.inner + r.outer) / 2, glassW.cy - glassW.h / 2 + UNDER_SCREEN);
     this.placeMounts();
     this.lighting.build(this.layout);
   }
@@ -261,8 +294,40 @@ export class Terminal {
     return null;
   }
 
+  /** Shakes the whole cabinet (the camera); a stronger shake wins over a weaker one. */
+  private shakeCabinet(strength: number): void {
+    const left = this.camShakeLeft / CAM_SHAKE_TIME;
+    if (strength < this.camShake * left) return;
+    this.camShake = strength;
+    this.camShakeLeft = CAM_SHAKE_TIME;
+  }
+
+  private updateCabinetShake(dt: number): void {
+    this.camShakeLeft = Math.max(0, this.camShakeLeft - dt);
+    const k = this.camShakeLeft / CAM_SHAKE_TIME;
+    const a = this.camShake * k * k;
+    const t = this.time * 60;
+    this.camera.position.set(
+      this.camBase.x + Math.sin(t * 1.9) * a,
+      this.camBase.y + Math.cos(t * 2.3) * a,
+      this.camBase.z,
+    );
+  }
+
   onEvent(e: SimEvent, world: World): void {
-    if (e.type === 'chipUsed') this.crt.flash();
+    if (e.type === 'chipUsed') {
+      this.crt.flash();
+      const shape = CHIPS[e.defId].shape.t;
+      this.shakeCabinet(shape === 'near' ? SHAKE.sword : SHAKE.chip);
+    }
+    if (e.type === 'bombLanded') this.shakeCabinet(SHAKE.bomb);
+    if (e.type === 'damaged' && e.targetId !== PLAYER_ID && e.amount > 0) this.crt.edgeFlash(EDGE_HIT, EDGE.hit);
+    // A kill is the big beat: bright edges, a flash and a jolt of the cabinet.
+    if (e.type === 'enemyKilled') {
+      this.crt.edgeFlash(EDGE_KILL, EDGE.kill);
+      this.crt.flash();
+      this.shakeCabinet(SHAKE.kill);
+    }
     // Refresh is the beat that replaces the old Custom Screen pause (spec §11.4).
     if (e.type === 'handRefreshed') {
       this.crt.flash();
@@ -271,6 +336,10 @@ export class Terminal {
     if (e.type === 'damaged' && e.targetId === PLAYER_ID) {
       this.crt.shake();
       this.hpHitLeft = HP_HIT_TIME;
+      // The hit reaches out of the screen: red light floods the cabinet.
+      this.crt.edgeFlash(EDGE_HURT, EDGE.hurt);
+      this.lighting.flashAlarm();
+      this.shakeCabinet(SHAKE.playerHit);
     }
     const f = floaterFromEvent(e);
     if (f) this.floaters.add(f, world.tick);
@@ -301,13 +370,15 @@ export class Terminal {
     const menu = this.menu ? { spec: this.menu, cursor: this.menuCursor } : null;
     const marks = this.fieldMarks(world, alpha);
     const status = menu ? null : this.battleStatus(world);
-    this.hud.draw({ labels: marks.labels, bars: marks.bars, status, menu }, this.time);
+    this.hud.draw({ labels: marks.labels, hp: marks.hp, status, menu }, this.time);
 
     this.rail.update(dt);
-    this.syncIndicators(world);
+    this.syncIndicators(world, dt);
     this.deck.update(dt);
     this.drawStrip.update(dt);
+    this.pcb.update(dt, world.chips.hand.map((_, i) => this.opts.session.screen === 'BATTLE' && world.state === 'ACTION' && world.chips.slotState(i) === 'queued'));
     this.trackball.update(dt, this.trackballArmed(world));
+    this.updateCabinetShake(dt);
 
     renderer.setRenderTarget(null);
     renderer.setClearColor(TERMINAL_CLEAR_COLOR, 1);
@@ -412,38 +483,52 @@ export class Terminal {
   /** In battle the rail is the hand: one slot per chip, states from the sim. */
   private syncRail(world: World): void {
     const chips = world.chips;
+    // Chips live only inside a battle: when it is won or lost every cartridge
+    // flies out at once, and between battles the rail stays empty (2026-09-19).
+    const screen = this.opts.session.screen;
+    const inBattle = (screen === 'BATTLE' || screen === 'PAUSED') && world.state !== 'BATTLE_WON' && world.state !== 'PLAYER_DEAD';
     this.rail.setAttract(this.mode() === 'BATTLE');
     this.rail.syncHand(
-      chips.hand.map((chip, i) => ({ chip, state: chips.slotState(i), order: chips.queuePosition(i) })),
+      chips.hand.map((chip, i) => ({
+        chip: inBattle ? chip : null,
+        state: inBattle ? chips.slotState(i) : 'empty',
+        order: inBattle ? chips.queuePosition(i) : 0,
+      })),
     );
     // One preview tile lights per chip spent since the last Refresh (GDD §5).
-    this.drawStrip.set(chips.drawPreview(tuning.chips.DRAW_PREVIEW), chips.usedSinceRefresh);
-    const queued = this.mode() === 'MENU' ? [] : chips.attackChips().map((c) => chipName(c.defId));
+    this.drawStrip.set(inBattle ? chips.drawPreview(tuning.chips.DRAW_PREVIEW) : [], inBattle ? chips.usedSinceRefresh : 0);
+    const queued = !inBattle || this.mode() === 'MENU' ? [] : chips.attackChips().map((c) => chipName(c.defId));
     this.chipDisplay.set(chipDisplayText(queued, t('hud.noChip')));
   }
 
-  /** HP segments above each enemy and rising damage numbers, in CRT pixels. */
-  private fieldMarks(world: World, alpha: number): { labels: HudLabel[]; bars: HpBar[] } {
+  /** HP numbers above each enemy and rising damage numbers, in CRT pixels. */
+  private fieldMarks(world: World, alpha: number): { labels: HudLabel[]; hp: HpTag[] } {
     const { sceneRenderer } = this.opts;
     const W = this.battle.width;
     const H = this.battle.height;
     const labels: HudLabel[] = [];
-    const bars: HpBar[] = [];
+    const hp: HpTag[] = [];
     for (const e of world.enemies) {
       if (!e.alive) continue;
       const p = sceneRenderer.actorTopTargetPos(e.id);
       if (!p) continue;
-      const seg = hpSegments(e.hp, e.maxHp, tuning.battleVisual.HP_SEGMENTS);
-      bars.push({ x: p.x * W, y: p.y * H - HP_BAR_GAP, ...seg, level: e.level });
+      hp.push({ x: p.x * W, y: p.y * H - HP_BAR_GAP, hp: Math.max(0, Math.ceil(e.hp)), level: e.level });
     }
     const life = secondsToTicks(tuning.fx.DAMAGE_NUMBER_TIME);
     for (const { f, k } of this.floaters.live(world.tick, world.simFrozen ? 0 : alpha, life)) {
       // The number flickers out at the end instead of fading (flat colours only).
       if (k > FLOATER_FLICKER && Math.floor(world.tick / 3) % 2 === 1) continue;
-      const p = sceneRenderer.cellTargetPos(f.x, f.y, FLOATER_HEIGHT + FLOATER_RISE * k);
-      labels.push({ text: f.text, x: p.x * W, y: p.y * H, tone: f.kind });
+      // Ease-out rise with a small hop at the start: the number is thrown out of the hit.
+      const rise = 1 - (1 - k) * (1 - k);
+      const hop = Math.sin(Math.min(1, k / 0.3) * Math.PI) * 0.15;
+      const p = sceneRenderer.cellTargetPos(f.x, f.y, FLOATER_HEIGHT + FLOATER_RISE * rise + hop);
+      const base = tuning.battleVisual.DAMAGE_SCALE + (f.kind === 'playerDamage' ? 1 : 0);
+      const scale = base + (k < FLOATER_POP ? 1 : 0);
+      // Damage to the player trembles for a moment.
+      const shake = f.kind === 'playerDamage' && k < FLOATER_SHAKE ? (Math.floor(world.tick / 2) % 2 === 0 ? 2 : -2) : 0;
+      labels.push({ text: f.text, x: p.x * W + shake, y: p.y * H, tone: f.kind, scale });
     }
-    return { labels, bars };
+    return { labels, hp };
   }
 
   /** Session menu for the current screen; a new menu starts at its first item. */
@@ -546,11 +631,11 @@ export class Terminal {
   }
 
   /** Drives the lights that stand in for the cabinet's old indicators (spec §4). */
-  private syncIndicators(world: World): void {
+  private syncIndicators(world: World, dt: number): void {
     const active = this.rail.activePosition(this.activeChipAt);
     // The rail lies on the tilted panel: the light needs the cartridge in world space.
     if (active) this.rail.group.localToWorld(this.activeChipAt);
     this.lighting.setChipAt(active ? this.activeChipAt : null);
-    this.lighting.update(world.chips.usedSinceRefresh / Math.max(1, tuning.chips.REFRESH_AT), active);
+    this.lighting.update(world.chips.usedSinceRefresh / Math.max(1, tuning.chips.REFRESH_AT), active, dt);
   }
 }

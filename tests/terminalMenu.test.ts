@@ -144,6 +144,19 @@ describe('menu cursor and layout', () => {
     const first = scrolled.items[0]!.rect;
     expect(menuItemAt(scrolled, first.x + 5, first.y + 5)).toBe(7);
   });
+
+  // Menus sit in the middle of the CRT in a large font (decision 2026-09-19).
+  it('centres the menu block vertically, in a font larger than the HUD text', () => {
+    const W = 388;
+    const H = 534;
+    const l = menuLayout(menuFor(session('PAUSED'))!, W, H);
+    const top = l.title.y;
+    const lastItem = l.items[l.items.length - 1]!.rect;
+    const bottom = lastItem.y + lastItem.h;
+    expect(Math.abs(top - (H - bottom))).toBeLessThanOrEqual(l.s * 4);
+    expect(l.items[0]!.text.scale).toBeGreaterThan(l.s);
+    expect(l.title.scale).toBeGreaterThan(l.items[0]!.text.scale);
+  });
 });
 
 describe('pixel font coverage', () => {

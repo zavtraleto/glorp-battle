@@ -29,6 +29,24 @@ const GRAB_TRAVEL = 0.04;
 const RING_SIDES = 40;
 /** Ring colour follows the armed state at this rate, 1/s. */
 const ARM_RATE = 18;
+/** While armed the ring breathes: brightness range and rate (synced with the PCB pulses). */
+const ARM_BREATHE = 0.35;
+/** A tap that fires flares the ring toward white for this long, seconds. */
+const TAP_FLASH_TIME = 0.18;
+const TAP_WHITE = new THREE.Color(0xffd0c8);
+/**
+ * The ball is sunk into the panel like a real trackball: its centre sits this
+ * far below the panel surface (share of its radius), so only a cap stands out
+ * of the hole. Seen at a slant the cap still hides the far side of the ring
+ * lying on the panel (decision 2026-09-19).
+ */
+const BALL_SINK = 0.3;
+/** The hole in the panel, a little wider than the ball where it meets the surface. */
+const HOLE_R = 1.0;
+/** The panel plate around the ball: how far it reaches, share of the ring's outer radius. */
+const PLATE_REACH = 1.75;
+/** The ring lies on the panel, just above the PCB traces. */
+const RING_Z = 0.02;
 /** Triangle size and its gap from the ring, shares of the ring's outer radius. */
 const ARROW_SIZE = 0.16;
 const ARROW_GAP = 0.06;
@@ -41,12 +59,23 @@ export class Trackball {
   private readonly key = new PressKey(GRAB_TRAVEL);
   private readonly ball: THREE.Mesh;
   private readonly socket: THREE.Mesh;
+  /** Panel surface around the hole: hides the sunken part of the ball. */
+  private readonly plate: THREE.Mesh;
+  /** Dark floor of the hole, seen past the ball's edge. */
+  private readonly cavity: THREE.Mesh;
+  private readonly plateMat = new THREE.MeshLambertMaterial({ color: 0x15161a, flatShading: true });
   private readonly ringMat = new THREE.MeshBasicMaterial({ color: COLOR.idle.clone() });
   private ring: THREE.Mesh | null = null;
   private readonly arrowGeo: THREE.BufferGeometry;
   private readonly arrows = new Map<Dir, { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; left: number }>();
   private readonly spin = new THREE.Vector2();
   private armed = 0;
+  private tapLeft = 0;
+  private time = 0;
+  /** Breathing rate while armed, Hz (the PCB pulses arrive on the beat). */
+  breatheHz = 1.4;
+  /** Ring centre and radii in the control panel's plan space. */
+  readonly ring3 = { x: 0, y: 0, inner: 0, outer: 0 };
 
   constructor() {
     this.ball = new THREE.Mesh(
@@ -54,9 +83,12 @@ export class Trackball {
       new THREE.MeshPhongMaterial({ color: 0x4a4c50, specular: 0x3c3c3c, shininess: 22, flatShading: true }),
     );
     this.socket = new THREE.Mesh(
-      new THREE.TorusGeometry(1.15, 0.2, 6, 16),
-      new THREE.MeshLambertMaterial({ color: 0x141518, flatShading: true }),
+      // The lip of the hole the ball sits in; the red ring lies on the panel outside it.
+      new THREE.TorusGeometry(HOLE_R, 0.06, 6, 24),
+      new THREE.MeshLambertMaterial({ color: 0x0c0d10, flatShading: true }),
     );
+    this.plate = new THREE.Mesh(new THREE.RingGeometry(1, 2, RING_SIDES), this.plateMat);
+    this.cavity = new THREE.Mesh(new THREE.CircleGeometry(1, RING_SIDES), new THREE.MeshBasicMaterial({ color: 0x020203 }));
     this.key.object.add(this.ball);
     // A unit triangle pointing along +x; each arrow is turned toward its direction.
     this.arrowGeo = new THREE.BufferGeometry();
@@ -68,27 +100,35 @@ export class Trackball {
       this.arrows.set(dir, { mesh, mat, left: 0 });
       this.group.add(mesh);
     }
-    this.group.add(this.socket, this.key.object);
+    this.group.add(this.plate, this.cavity, this.socket, this.key.object);
   }
 
   /** `unit` is the terminal body width in world units; sizes are shares of it. */
   build(cx: number, cy: number, unit: number): void {
     const t = tuning.terminal;
     const radius = (unit * t.BALL_W) / 2;
-    this.key.place(cx, cy, 0.05);
+    this.key.place(cx, cy, -radius * BALL_SINK);
     this.ball.scale.setScalar(radius);
-    this.socket.position.set(cx, cy, 0.04);
+    this.socket.position.set(cx, cy, 0.005);
     this.socket.scale.setScalar(radius);
+    this.cavity.position.set(cx, cy, -radius * 0.9);
+    this.cavity.scale.setScalar(radius * HOLE_R);
 
     if (this.ring) {
       this.group.remove(this.ring);
       this.ring.geometry.dispose();
     }
     const outer = (unit * t.RING_W) / 2;
-    const inner = Math.min(outer * 0.9, radius * 1.1);
+    // A band around the ball, flat on the panel; the raised ball hides its far side.
+    const inner = Math.min(outer * 0.85, radius * 1.02);
+    Object.assign(this.ring3, { x: cx, y: cy, inner, outer });
     this.ring = new THREE.Mesh(new THREE.RingGeometry(inner, outer, RING_SIDES), this.ringMat);
-    this.ring.position.set(cx, cy, 0.03);
+    this.ring.position.set(cx, cy, RING_Z);
     this.group.add(this.ring);
+    // The plate: a disc of panel with the hole cut out, under the ring and the PCB.
+    this.plate.geometry.dispose();
+    this.plate.geometry = new THREE.RingGeometry(radius * HOLE_R, outer * PLATE_REACH, RING_SIDES);
+    this.plate.position.set(cx, cy, 0.004);
 
     const size = outer * ARROW_SIZE;
     const at = outer * (1 + ARROW_GAP) + size / 2;
@@ -109,6 +149,11 @@ export class Trackball {
 
   hover(on: boolean): void {
     this.key.hover(on);
+  }
+
+  /** A tap fired a chip: the ring flares. */
+  flashTap(): void {
+    this.tapLeft = TAP_FLASH_TIME;
   }
 
   /** Adds spin from a drag delta (CSS px). */
@@ -137,9 +182,15 @@ export class Trackball {
     this.ball.quaternion.premultiply(turn.setFromAxisAngle(AXIS_Y, this.spin.y * dt));
     this.spin.multiplyScalar(Math.exp(-dt * tuning.terminal.TRACKBALL_FRICTION));
 
+    this.time += dt;
+    this.tapLeft = Math.max(0, this.tapLeft - dt);
     const k = 1 - Math.exp(-dt * ARM_RATE);
     this.armed += ((armed ? 1 : 0) - this.armed) * k;
-    this.ringMat.color.copy(COLOR.idle).lerp(COLOR.armed, this.armed);
+    // Armed: breathing between a strong and a full red, peaking with each PCB pulse.
+    const beat = 0.5 + 0.5 * Math.cos(this.time * this.breatheHz * Math.PI * 2);
+    const level = this.armed * (1 - ARM_BREATHE + ARM_BREATHE * beat);
+    this.ringMat.color.copy(COLOR.idle).lerp(COLOR.armed, level);
+    if (this.tapLeft > 0) this.ringMat.color.lerp(TAP_WHITE, this.tapLeft / TAP_FLASH_TIME);
 
     const flash = tuning.terminal.ARROW_FLASH_TIME;
     for (const a of this.arrows.values()) {

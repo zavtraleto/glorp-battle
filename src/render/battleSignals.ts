@@ -66,8 +66,3 @@ export function battleSignal(i: SignalInput): GridSignal {
   }
 }
 
-/** Enemy HP as segments: any HP left shows at least one. */
-export function hpSegments(hp: number, maxHp: number, total: number): { filled: number; total: number } {
-  if (hp <= 0 || maxHp <= 0) return { filled: 0, total };
-  return { filled: Math.max(1, Math.min(total, Math.ceil((hp / maxHp) * total))), total };
-}
