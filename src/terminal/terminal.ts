@@ -115,6 +115,8 @@ export class Terminal {
   private cursor = '';
   private time = 0;
   private layoutKey = '';
+  /** CRT picture size in pixels: exactly the glass's render pixels, so nothing is resampled. */
+  private readonly crtPx = { w: tuning.terminal.CRT_RES_W, h: tuning.terminal.CRT_RES_H };
 
   constructor(private opts: TerminalOptions) {
     const { renderer, container } = opts;
@@ -203,10 +205,16 @@ export class Terminal {
     this.camera.updateProjectionMatrix();
     this.rail.setCamera(this.camera.position);
 
-    this.battle.setSize(t.CRT_RES_W, t.CRT_RES_H);
-    this.hud.setSize(t.CRT_RES_W, t.CRT_RES_H);
+    // The picture is drawn 1:1 with the glass's render pixels; CRT_RES only sets
+    // its aspect. A fixed resolution stretched onto the glass by a fraction
+    // made lines uneven and soft.
+    const glass = glassRect(this.layout, t.CRT_RES_W / t.CRT_RES_H);
+    this.crtPx.w = Math.max(16, Math.round(glass.w * scale));
+    this.crtPx.h = Math.max(16, Math.round(glass.h * scale));
+    this.battle.setSize(this.crtPx.w, this.crtPx.h);
+    this.hud.setSize(this.crtPx.w, this.crtPx.h);
     const texel = k / scale; // world size of one render pixel
-    this.housing.build(this.layout, texel, t.CRT_RES_W / t.CRT_RES_H);
+    this.housing.build(this.layout, texel, this.crtPx.w / this.crtPx.h);
     this.rail.build(this.layout, texel);
     this.drawStrip.build(this.layout, tuning.chips.DRAW_PREVIEW);
     this.placeChipDisplay();
@@ -404,6 +412,7 @@ export class Terminal {
   /** In battle the rail is the hand: one slot per chip, states from the sim. */
   private syncRail(world: World): void {
     const chips = world.chips;
+    this.rail.setAttract(this.mode() === 'BATTLE');
     this.rail.syncHand(
       chips.hand.map((chip, i) => ({ chip, state: chips.slotState(i), order: chips.queuePosition(i) })),
     );
@@ -460,11 +469,11 @@ export class Terminal {
   /** Menu item under a CSS point on the CRT glass, or -1. */
   private menuItemAtCss(x: number, y: number): number {
     if (!this.menu) return -1;
-    const t = tuning.terminal;
-    const g = glassRect(this.layout, t.CRT_RES_W / t.CRT_RES_H);
+    const g = glassRect(this.layout, this.crtPx.w / this.crtPx.h);
     if (!rectContains(g, x, y)) return -1;
-    const layout = menuLayout(this.menu, t.CRT_RES_W, t.CRT_RES_H, this.menuCursor);
-    return menuItemAt(layout, ((x - g.x) / g.w) * t.CRT_RES_W, ((y - g.y) / g.h) * t.CRT_RES_H);
+    const { w, h } = this.crtPx;
+    const layout = menuLayout(this.menu, w, h, this.menuCursor);
+    return menuItemAt(layout, ((x - g.x) / g.w) * w, ((y - g.y) / g.h) * h);
   }
 
   private menuDown(id: number, x: number, y: number): boolean {

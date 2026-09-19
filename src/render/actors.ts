@@ -7,6 +7,7 @@ import { CREATURE_SIZE, generateCreature, type CreatureBitmap } from './creature
 import { CELL_DEPTH, CELL_WIDTH, cellToWorld } from './field';
 import { PixelSprite } from './pixelSprite';
 import { playerBitmap } from './playerSprite';
+import { ENEMY_ART, spriteArt } from './spriteArt';
 
 // Player and enemy sprites (BATTLE_VISUAL.md §5): pixel bitmaps standing in
 // their cells, animated with whole-pixel lifts, flashes and a dissolve.
@@ -60,14 +61,25 @@ function deathProgress(deathTick: number, tick: number, alpha: number, dt: numbe
   return Math.min(1, ((tick - deathTick + alpha) * dt) / Math.max(1e-6, tuning.fx.DELETE_ANIM_TIME));
 }
 
+/** Hand-drawn art is wider than the thin procedural figure: share of a cell's width. */
+const PLAYER_ART_WIDTH = 0.9;
+const ENEMY_ART_WIDTH = 1.0;
+
 export class PlayerView {
-  private readonly pixels = new PixelSprite(playerBitmap(), 'phosphor');
-  readonly sprite = this.pixels.sprite;
+  private readonly pixels: PixelSprite;
+  readonly sprite: THREE.Sprite;
+  private readonly widthShare: number;
+
+  constructor() {
+    const art = spriteArt('player');
+    this.pixels = new PixelSprite(art ?? playerBitmap(), 'phosphor');
+    this.sprite = this.pixels.sprite;
+    this.widthShare = art ? PLAYER_ART_WIDTH : tuning.battleVisual.SPRITE_CELL_FRAC * 0.8;
+  }
 
   update(player: Player, tick: number, alpha: number, dt: number, usingChip: boolean, frame: SpriteFrame): void {
     const a = slideAnchor(player.prevX, player.prevY, player.x, player.y, player.lastMoveTick, tick, alpha, dt);
-    const width = CELL_WIDTH * tuning.battleVisual.SPRITE_CELL_FRAC * 0.8;
-    this.pixels.place(a, width, frame.camera, frame.width, frame.height, usingChip ? 1 : 0);
+    this.pixels.place(a, CELL_WIDTH * this.widthShare, frame.camera, frame.width, frame.height, usingChip ? 1 : 0);
     this.sprite.renderOrder = rowRenderOrder(player.y);
     // Paralysis flickers like a hit.
     this.pixels.setFlash(flashing(player.lastHitTick, tick) || (player.paralyzeTicks > 0 && Math.floor(tick / 4) % 2 === 0));
@@ -98,12 +110,15 @@ export class EnemyView {
   private readonly pixels: PixelSprite;
   readonly sprite: THREE.Sprite;
   private readonly phase: number;
-  private readonly boss: boolean;
+  private readonly widthShare: number;
 
   constructor(enemy: Enemy) {
-    this.boss = enemy.kind === 'monolith';
-    this.pixels = new PixelSprite(creature(ENEMY_SEEDS[enemy.kind], this.boss ? BOSS_SIZE : CREATURE_SIZE), 'red');
+    const boss = enemy.kind === 'monolith';
+    const artId = ENEMY_ART[enemy.kind];
+    const art = artId ? spriteArt(artId) : null;
+    this.pixels = new PixelSprite(art ?? creature(ENEMY_SEEDS[enemy.kind], boss ? BOSS_SIZE : CREATURE_SIZE), 'red');
     this.sprite = this.pixels.sprite;
+    this.widthShare = art ? ENEMY_ART_WIDTH : tuning.battleVisual.SPRITE_CELL_FRAC * (boss ? BOSS_WIDTH : 1);
     this.phase = enemy.id * 1.7;
   }
 
@@ -122,7 +137,7 @@ export class EnemyView {
       flash = true;
     }
 
-    this.pixels.place(a, CELL_WIDTH * tuning.battleVisual.SPRITE_CELL_FRAC * (this.boss ? BOSS_WIDTH : 1), frame.camera, frame.width, frame.height, lift);
+    this.pixels.place(a, CELL_WIDTH * this.widthShare, frame.camera, frame.width, frame.height, lift);
     this.sprite.renderOrder = rowRenderOrder(enemy.y);
     // Paralysis: a steady flicker.
     if (enemy.paralyzeTicks > 0 && Math.floor(tick / 4) % 2 === 0) flash = true;

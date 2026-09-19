@@ -3,7 +3,7 @@ import { tuning } from '../../config/tuning';
 import { PALETTE } from '../../render/palette';
 import { blinkPhase } from '../terminalMode';
 import { hudKey, type HpBar, type HudLabel, type HudModel, type HudStatus, type LabelTone } from './hudModel';
-import { menuLayout, type MenuSpec, type MenuTone } from './menuModel';
+import { HUD_PX_PER_SCALE, menuLayout, type MenuSpec, type MenuTone } from './menuModel';
 import { drawText, measureText, type PixelSink } from './pixelFont';
 
 // HUD layer of the CRT (TERMINAL.md §7.1): drawn at the CRT resolution with the
@@ -83,7 +83,7 @@ export class CrtCanvas {
     const { ctx } = this;
     const W = this.canvas.width;
     const H = this.canvas.height;
-    const s = Math.max(1, Math.floor(W / 120));
+    const s = Math.max(1, Math.floor(W / HUD_PX_PER_SCALE));
     const M = 3 * s;
     const sink = ctx as unknown as PixelSink;
     ctx.clearRect(0, 0, W, H);

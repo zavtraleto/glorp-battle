@@ -2,8 +2,8 @@ import * as THREE from 'three';
 
 // "Dark Terminal" palette (spec §6.1). The battle scene is drawn with unlit
 // "signal" colours — red channel carries the palette index, green the
-// brightness — and the palette pass turns every pixel into one of six flat
-// colours, using a 4×4 Bayer threshold for partial brightness.
+// brightness — and the palette pass turns every pixel into its palette colour,
+// dimmed toward the background by the brightness. No dithering (2026-09-19).
 
 export const PALETTE = {
   bg: 0x05070a,
@@ -54,38 +54,17 @@ export function dimSignal(src: THREE.Color, k: number, out = new THREE.Color()):
   return out.setRGB(src.r, Math.max(0, Math.min(1, src.g * k)), 0, THREE.LinearSRGBColorSpace);
 }
 
-function fract(v: number): number {
-  return v - Math.floor(v);
-}
-
-function bayer2(x: number, y: number): number {
-  const fx = Math.floor(x);
-  const fy = Math.floor(y);
-  return fract(fx / 2 + fy * fy * 0.75);
-}
-
-/** 4×4 ordered-dither threshold in [0, 1) — mirrors the palette shader. */
-export function bayer4(x: number, y: number): number {
-  return bayer2(x * 0.5, y * 0.5) * 0.25 + bayer2(x, y);
-}
-
-/** Half a Bayer step: full brightness always passes, zero never does. */
-export const DITHER_BIAS = 1 / 32;
-
-/** JS mirror of the palette pass for one pixel. */
-export function paletteIndex(r: number, g: number, b: number, x: number, y: number): PaletteIndex {
-  void b;
+/** Palette index a signal pixel resolves to; 0 (background) when dark or unknown. */
+export function paletteIndex(r: number, g: number): PaletteIndex {
   const index = Math.round(r * 255);
-  if (index <= 0 || index >= PALETTE_COLORS.length) return 0;
-  return g > bayer4(x, y) + DITHER_BIAS ? (index as PaletteIndex) : 0;
+  if (index <= 0 || index >= PALETTE_COLORS.length || g <= 0) return 0;
+  return index as PaletteIndex;
 }
 
-export const PALETTE_GLSL = /* glsl */ `
-float bayer2(vec2 a) {
-  a = floor(a);
-  return fract(a.x / 2.0 + a.y * a.y * 0.75);
+/** JS mirror of the palette pass for one pixel: the colour, mixed from the background by brightness. */
+export function paletteColor(r: number, g: number, out = new THREE.Color()): THREE.Color {
+  const bg = new THREE.Color(PALETTE_COLORS[0]);
+  const index = paletteIndex(r, 1);
+  if (index === 0) return out.copy(bg);
+  return out.copy(bg).lerp(new THREE.Color(PALETTE_COLORS[index]), Math.max(0, Math.min(1, g)));
 }
-float bayer4(vec2 a) {
-  return bayer2(0.5 * a) * 0.25 + bayer2(a);
-}
-`;

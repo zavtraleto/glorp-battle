@@ -6,6 +6,7 @@ import { Cartridge, cartridgeGlow } from '../chips/cartridge';
 import type { SlotState } from '../../sim/chips/chipSystem';
 import { ejectPose, type EjectAim } from '../chips/ejectArc';
 import { activeSlot, railChanges } from '../chips/railPlan';
+import { attractLevel } from '../chips/railAttract';
 import { CHIP_TEXELS_H, CHIP_TEXELS_W, RAIL_LEFT, RAIL_SLOTS, RAIL_SPAN } from '../chips/railLayout';
 import { rectToWorld, type TerminalLayout } from '../layout';
 
@@ -54,6 +55,10 @@ const COLOR = {
   contactOn: new THREE.Color(0xffe9a8),
   faceActive: new THREE.Color(0xffffff),
   faceIdle: new THREE.Color(0x9a9a9a),
+  /** Could join the series being built: lifted with the queued chips, faintly lit. */
+  faceCandidate: new THREE.Color(0xd2d2d2),
+  /** Warm lamp light of the idle "pick me" patterns. */
+  faceAttract: new THREE.Color(0xffc98a),
   /** Refused by the code rule: dark and cold, clearly out of play. */
   faceBlocked: new THREE.Color(0x2f3a44),
 };
@@ -110,6 +115,9 @@ export class ChipRail {
   private readonly aim: EjectAim = { x: 0, y: 0, z: 0 };
   private readonly flight = new THREE.Vector3();
   private time = 0;
+  /** How long the Attack Queue has been empty while the rail may call for a pick. */
+  private idleFor = 0;
+  private attractAllowed = false;
   private readonly unitBox = new THREE.BoxGeometry(1, 1, 1);
   private readonly unitPlane = new THREE.PlaneGeometry(1, 1);
   private readonly frameMat = new THREE.MeshLambertMaterial({ color: COLOR.frame, flatShading: true });
@@ -193,10 +201,18 @@ export class ChipRail {
     this.slots = new Array<number | null>(RAIL_SLOTS).fill(null);
   }
 
+  /** Battle only: with nothing queued for a while, the faces flash to call for a pick. */
+  setAttract(allowed: boolean): void {
+    this.attractAllowed = allowed;
+  }
+
   update(dt: number): void {
     const t = tuning.terminal;
     this.time += dt;
     const active = activeSlot(this.slots);
+    const building = this.slotViews?.some((v) => v.state === 'queued') ?? false;
+    this.idleFor = this.attractAllowed && !building ? this.idleFor + dt : 0;
+    const attractT = this.idleFor - t.RAIL_ATTRACT_DELAY;
     this.hasActive = false;
     const pulse = 0.75 + 0.25 * Math.sin(this.time * Math.PI * 2 * GLOW_PULSE_HZ);
     cartridgeGlow.color.copy(COLOR.glow).multiplyScalar(pulse);
@@ -223,8 +239,10 @@ export class ChipRail {
           const view = this.slotViews?.[c.slot];
           const isActive = view?.state === 'queued';
           const blocked = view?.state === 'blocked';
+          // While a series is built, chips that could join it rise level with it.
+          const candidate = building && view?.state === 'ready';
           c.cart.setOrder(view?.order ?? 0);
-          c.lift.target = isActive ? t.CHIP_ACTIVE_LIFT : 0;
+          c.lift.target = isActive || candidate ? t.CHIP_ACTIVE_LIFT : 0;
           c.lift.step(dt, t.SPRING_STIFFNESS, t.SPRING_DAMPING);
           const out = c.lift.value / Math.max(1e-6, t.CHIP_ACTIVE_LIFT);
           c.pos.set(rest.x, rest.y + c.lift.value * 0.4, rest.z + c.lift.value + out * t.CHIP_ACTIVE_PUSH);
@@ -238,7 +256,13 @@ export class ChipRail {
             this.hasActive = true;
           }
           c.cart.glow.visible = isActive;
-          face.copy(blocked ? COLOR.faceBlocked : isActive ? COLOR.faceActive : COLOR.faceIdle);
+          if (blocked) face.copy(COLOR.faceBlocked);
+          else if (isActive) face.copy(COLOR.faceActive);
+          else if (candidate) face.copy(COLOR.faceCandidate);
+          else if (attractT >= 0 && view?.state === 'ready') {
+            const k = attractLevel(c.slot, RAIL_SLOTS, attractT, t.RAIL_ATTRACT_STEP);
+            face.copy(COLOR.faceIdle).lerp(COLOR.faceAttract, k);
+          } else face.copy(COLOR.faceIdle);
           break;
         }
         case 'eject': {

@@ -3,6 +3,7 @@ import { secondsToTicks, tuning } from '../config/tuning';
 import type { SimEvent } from '../sim/events';
 import type { World } from '../sim/world';
 import { EnemyView, PlayerView, type SpriteFrame } from './actors';
+import { ART_LAYER } from './pixelSprite';
 import { FieldView, cellToWorld } from './field';
 import { FxView } from './fx';
 import { cellKey } from './cellStates';
@@ -29,7 +30,7 @@ export class SceneRenderer {
   readonly scene = new THREE.Scene();
   readonly field: FieldView;
   readonly camera = new THREE.PerspectiveCamera();
-  readonly playerView = new PlayerView();
+  playerView = new PlayerView();
   readonly fx = new FxView();
   private readonly enemyViews = new Map<number, EnemyView>();
   private readonly corners: THREE.Vector3[] = [];
@@ -109,6 +110,14 @@ export class SceneRenderer {
     else if (e.type === 'objectBroken') this.field.markAttack([{ x: e.x, y: e.y }], tick, 'red');
   }
 
+  /** Sprite art arrived: rebuild the views so they pick it up. */
+  refreshArt(): void {
+    this.scene.remove(this.playerView.sprite);
+    this.playerView = new PlayerView();
+    this.scene.add(this.playerView.sprite);
+    this.reset();
+  }
+
   /** Drops all per-battle views (called when a new World is created). */
   reset(): void {
     for (const v of this.enemyViews.values()) {
@@ -175,9 +184,25 @@ export class SceneRenderer {
     const h = target.height;
     this.fitCamera(w, h);
     this.prepare(world, alpha, dt, w, h);
+    this.camera.layers.set(0);
     this.renderer.setRenderTarget(target);
     this.renderer.setClearColor(BATTLE_CLEAR_COLOR, 1);
     this.renderer.render(this.scene, this.camera);
     this.renderer.setRenderTarget(null);
+  }
+
+  /**
+   * Draws the full-colour art layer over an already paletted target, without
+   * clearing it. Call after renderInto() for the same frame.
+   */
+  renderArtInto(target: THREE.WebGLRenderTarget): void {
+    const autoClear = this.renderer.autoClear;
+    this.renderer.autoClear = false;
+    this.camera.layers.set(ART_LAYER);
+    this.renderer.setRenderTarget(target);
+    this.renderer.render(this.scene, this.camera);
+    this.renderer.setRenderTarget(null);
+    this.camera.layers.set(0);
+    this.renderer.autoClear = autoClear;
   }
 }

@@ -1,13 +1,26 @@
 import * as THREE from 'three';
 import type { CreatureBitmap } from './creatureGen';
 import { signal, type Role } from './palette';
+import type { SpriteArt } from './spriteArt';
 
-// Camera-facing pixel sprite (BATTLE_VISUAL.md §2, §5): whole-pixel texels,
-// snapped to the CRT pixel grid, with a hit flash and a pixel dissolve.
+// Camera-facing sprite (BATTLE_VISUAL.md §2, §5), snapped to the CRT pixel
+// grid, with a hit flash and a pixel dissolve. Procedural creatures are palette
+// signals; hand-drawn art is full colour on its own render layer.
 
-/** Texel size in CRT pixels for a sprite that should be `worldWidth` wide. Pure. */
-export function texelScale(worldWidth: number, pxPerUnit: number, texels: number): number {
-  return Math.max(1, Math.round((worldWidth * pxPerUnit) / texels));
+/** Render layer of full-colour art, drawn after the palette pass. */
+export const ART_LAYER = 1;
+
+/** Lifts are counted in steps of this many CRT pixels per 48 px of sprite height. */
+const LIFT_STEP_HEIGHT = 48;
+
+/**
+ * Size in CRT pixels of a sprite `worldWidth` wide at `pxPerUnit`. It follows
+ * the perspective continuously, so the figure grows and shrinks smoothly from
+ * row to row instead of jumping by whole texel multiples [decision 2026-09-19]. Pure.
+ */
+export function spritePixels(worldWidth: number, pxPerUnit: number, texW: number, texH: number): { w: number; h: number } {
+  const w = Math.max(1, Math.round(worldWidth * pxPerUnit));
+  return { w, h: Math.max(1, Math.round((w * texH) / texW)) };
 }
 
 /** Stable per-pixel noise in [0, 1) for the dissolve order. */
@@ -53,14 +66,25 @@ export class PixelSprite {
   private readonly normal: THREE.DataTexture;
   private readonly flashed: THREE.DataTexture;
   private readonly material: THREE.SpriteMaterial;
+  private readonly texW: number;
+  private readonly texH: number;
+  /** Art textures are shared by every sprite that uses them. */
+  private readonly ownsTextures: boolean;
 
-  constructor(
-    private readonly bitmap: CreatureBitmap,
-    role: Role,
-  ) {
-    const accent = signal('accent');
-    this.normal = makeTexture(bitmap, signal(role), accent);
-    this.flashed = makeTexture(bitmap, accent, accent);
+  /** A procedural creature in `role`'s signal colour, or hand-drawn full-colour art. */
+  constructor(source: CreatureBitmap | SpriteArt, role: Role) {
+    if ('normal' in source) {
+      this.normal = source.normal;
+      this.flashed = source.flashed;
+      this.ownsTextures = false;
+    } else {
+      const accent = signal('accent');
+      this.normal = makeTexture(source, signal(role), accent);
+      this.flashed = makeTexture(source, accent, accent);
+      this.ownsTextures = true;
+    }
+    this.texW = source.w;
+    this.texH = source.h;
     // Opaque: alpha only drives the dissolve (alphaTest), never blending.
     this.material = new THREE.SpriteMaterial({
       map: this.normal,
@@ -72,6 +96,7 @@ export class PixelSprite {
     this.sprite = new THREE.Sprite(this.material);
     // Feet on the anchor point.
     this.sprite.center.set(0.5, 0);
+    if (!this.ownsTextures) this.sprite.layers.set(ART_LAYER);
   }
 
   setFlash(on: boolean): void {
@@ -85,8 +110,8 @@ export class PixelSprite {
   }
 
   /**
-   * Places the sprite with its feet at `anchor`, `worldWidth` wide, texels as
-   * whole CRT pixels, snapped to the pixel grid and lifted by `liftTexels`.
+   * Places the sprite with its feet at `anchor`, `worldWidth` wide, snapped to
+   * the CRT pixel grid and lifted by `liftTexels` steps.
    */
   place(anchor: THREE.Vector3, worldWidth: number, camera: THREE.PerspectiveCamera, w: number, h: number, liftTexels = 0): void {
     const depth = -tmp.copy(anchor).applyMatrix4(camera.matrixWorldInverse).z;
@@ -96,15 +121,16 @@ export class PixelSprite {
     }
     this.sprite.visible = true;
     const pxPerUnit = h / (2 * depth * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
-    const n = texelScale(worldWidth, pxPerUnit, this.bitmap.w);
-    const widthPx = n * this.bitmap.w;
-    this.sprite.scale.set(widthPx / pxPerUnit, (n * this.bitmap.h) / pxPerUnit, 1);
+    const size = spritePixels(worldWidth, pxPerUnit, this.texW, this.texH);
+    const widthPx = size.w;
+    this.sprite.scale.set(widthPx / pxPerUnit, size.h / pxPerUnit, 1);
+    const liftStep = Math.max(1, Math.round(size.h / LIFT_STEP_HEIGHT));
 
     tmp.copy(anchor).project(camera);
     const sx = ((tmp.x + 1) / 2) * w;
     const sy = ((1 - tmp.y) / 2) * h;
     const snappedX = Math.round(sx - widthPx / 2) + widthPx / 2;
-    const snappedY = Math.round(sy) - liftTexels * n;
+    const snappedY = Math.round(sy) - liftTexels * liftStep;
     right.setFromMatrixColumn(camera.matrixWorld, 0);
     up.setFromMatrixColumn(camera.matrixWorld, 1);
     this.sprite.position
@@ -114,8 +140,10 @@ export class PixelSprite {
   }
 
   dispose(): void {
-    this.normal.dispose();
-    this.flashed.dispose();
+    if (this.ownsTextures) {
+      this.normal.dispose();
+      this.flashed.dispose();
+    }
     this.material.dispose();
   }
 }

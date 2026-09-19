@@ -46,6 +46,9 @@ export interface MenuSession {
   totalTime: number;
 }
 
+/** CRT pixels per step of the HUD pixel scale: a 320–400 px wide picture draws text at 2×. */
+export const HUD_PX_PER_SCALE = 160;
+
 /** Most menu items shown at once; the list scrolls with the cursor. */
 export const MENU_VISIBLE = 5;
 
@@ -168,7 +171,7 @@ export interface MenuLayout {
 
 /** Positions of everything on a W×H CRT canvas. */
 export function menuLayout(spec: MenuSpec, W: number, H: number, cursor = 0): MenuLayout {
-  const s = Math.max(1, Math.floor(W / 120));
+  const s = Math.max(1, Math.floor(W / HUD_PX_PER_SCALE));
   const M = 6 * s;
   const centered = (text: string, y: number, scale: number): TextLine => ({
     text,

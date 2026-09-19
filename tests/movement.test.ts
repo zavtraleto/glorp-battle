@@ -165,15 +165,48 @@ describe('SwipeRecognizer', () => {
     expect(s.move(126, 110)).toBe('right');
   });
 
-  it('one gesture yields exactly one step', () => {
-    const s = new SwipeRecognizer(24, 0.35);
+  it('one stroke yields exactly one step, however long', () => {
+    const s = new SwipeRecognizer(24, 0.35, 0.07);
     s.begin(0, 0, 0);
-    expect(s.move(30, 0)).toBe('right');
-    expect(s.move(80, 0)).toBeNull();
-    expect(s.move(30, -60)).toBeNull();
-    s.end(0.1);
-    s.begin(0, 0, 1);
-    expect(s.move(0, -30)).toBe('up');
+    expect(s.move(30, 0, 0.02)).toBe('right');
+    expect(s.move(80, 0, 0.04)).toBeNull();
+    expect(s.move(200, 3, 0.06)).toBeNull();
+  });
+
+  // Finger held down: strokes with stops each step again (decision 2026-09-19).
+  it('steps again after the finger rests', () => {
+    const s = new SwipeRecognizer(24, 0.35, 0.07);
+    s.begin(0, 0, 0);
+    expect(s.move(30, 0, 0.02)).toBe('right');
+    // No movement until 0.12 s: the next stroke starts from the resting point.
+    expect(s.move(40, 0, 0.12)).toBeNull();
+    expect(s.move(60, 0, 0.14)).toBe('right');
+  });
+
+  it('does not re-arm on a rest shorter than the re-arm time', () => {
+    const s = new SwipeRecognizer(24, 0.35, 0.07);
+    s.begin(0, 0, 0);
+    expect(s.move(30, 0, 0.02)).toBe('right');
+    expect(s.move(70, 0, 0.06)).toBeNull();
+  });
+
+  it('steps again when the stroke turns, measured from where it turned', () => {
+    const s = new SwipeRecognizer(24, 0.35, 0.07);
+    s.begin(0, 0, 0);
+    expect(s.move(30, 0, 0.01)).toBe('right');
+    expect(s.move(90, 0, 0.02)).toBeNull();
+    expect(s.move(75, 0, 0.03)).toBeNull();
+    expect(s.move(60, 0, 0.04)).toBe('left');
+    expect(s.move(60, 30, 0.05)).toBe('down');
+  });
+
+  it('counts a gesture with steps as a step, not a tap', () => {
+    const s = new SwipeRecognizer(24, 0.35, 0.07);
+    s.begin(0, 0, 0);
+    s.move(30, 0, 0.02);
+    s.move(40, 0, 0.12);
+    s.move(70, 0, 0.14);
+    expect(s.end(0.2)).toBe('step');
   });
 
   it('detects all four directions in screen space', () => {

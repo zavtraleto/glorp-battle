@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { tuning } from '../../config/tuning';
 import type { SceneRenderer } from '../../render/scene';
 import type { World } from '../../sim/world';
-import { PALETTE_COLORS, PALETTE_GLSL, DITHER_BIAS } from '../../render/palette';
+import { PALETTE_COLORS } from '../../render/palette';
 
 // Battle → CRT render target (TERMINAL.md §9.1). With CRT_GHOSTING > 0 a
 // ping-pong pass keeps a decaying copy of previous frames (phosphor persistence).
@@ -14,20 +14,22 @@ void main() {
   gl_Position = vec4(position.xy, 0.0, 1.0);
 }`;
 
-// Index + brightness → 6-colour palette with a 4×4 Bayer threshold (spec §6.1).
-// Mirrors paletteIndex() in render/palette.ts; the twin is covered by a test.
+// Index + brightness → palette colour, dimmed toward the background by the
+// brightness (spec §6.1). No dithering [decision 2026-09-19]: a faint line is a
+// dimmer solid line. Mirrors paletteColor() in render/palette.ts (tested).
 const PALETTE_COUNT = PALETTE_COLORS.length;
 const PALETTE_FRAG = /* glsl */ `
 uniform sampler2D uScene;
 uniform vec3 uColors[${PALETTE_COUNT}];
 varying vec2 vUv;
-${PALETTE_GLSL}
 void main() {
   vec2 s = texture2D(uScene, vUv).rg;
   int index = int(floor(s.r * 255.0 + 0.5));
-  float t = bayer4(gl_FragCoord.xy) + ${DITHER_BIAS.toFixed(6)};
-  bool lit = index > 0 && index < ${PALETTE_COUNT} && s.g > t;
-  gl_FragColor = vec4(lit ? uColors[index] : uColors[0], 1.0);
+  vec3 c = uColors[0];
+  for (int i = 1; i < ${PALETTE_COUNT}; i++) {
+    if (i == index) c = mix(uColors[0], uColors[i], clamp(s.g, 0.0, 1.0));
+  }
+  gl_FragColor = vec4(c, 1.0);
 }`;
 
 const COMPOSE_FRAG = /* glsl */ `
@@ -123,6 +125,8 @@ export class BattleTarget {
     this.renderer.setRenderTarget(this.paletted);
     this.renderer.render(this.paletteScene, this.composeCamera);
     this.renderer.setRenderTarget(null);
+    // Hand-drawn sprites keep their colours: they skip the palette pass.
+    scene.renderArtInto(this.paletted);
     const ghost = tuning.terminal.CRT_GHOSTING;
     if (ghost <= 0) return this.paletted.texture;
 

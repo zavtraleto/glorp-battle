@@ -19,6 +19,7 @@ import type { Cheats } from './sim/world';
 import { Terminal } from './terminal/terminal';
 import { ENEMY_SEEDS } from './data/enemies';
 import { clearCreatureCache } from './render/actors';
+import { loadSpriteArt } from './render/spriteArt';
 import { cellKey } from './render/cellStates';
 import { COLS } from './sim/grid';
 
@@ -80,6 +81,8 @@ function togglePause(): void {
 
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
 const sceneRenderer = new SceneRenderer({ renderer });
+// Hand-drawn sprites load in the background; until then the procedural ones stand in.
+void loadSpriteArt().then(() => sceneRenderer.refreshArt());
 const terminal = new Terminal({
   renderer,
   container: stage,

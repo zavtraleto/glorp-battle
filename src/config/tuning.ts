@@ -150,6 +150,8 @@ export const DEFAULT_TUNING = {
   },
   input: {
     SWIPE_MIN_PX: 24,
+    /** Finger held on the trackball: resting this long lets the next stroke step again. */
+    SWIPE_REARM_TIME: 0.07,
     /** Delay before the first repeated step while a movement key is held. */
     HOLD_REPEAT_DELAY: 0.35,
     /** Interval between further repeated steps while the direction stays held. */
@@ -159,13 +161,13 @@ export const DEFAULT_TUNING = {
   battleVisual: {
     /** Camera pitch below the horizon and vertical field of view, degrees. */
     VIEW_PITCH: 41,
-    VIEW_FOV: 44,
+    VIEW_FOV: 56,
     /** Share of the CRT frame the field may fill. */
     /** Leaves the top band of the picture to the HUD (spec §8). */
     VIEW_FILL: 1,
     /** Gap between cell outlines (share of a cell). */
     CELL_GAP: 0.08,
-    /** Brightness of idle grid lines (dithered below 1). */
+    /** Brightness of idle grid lines. */
     GRID_DIM: 0.75,
     /** Fill brightness of the player's cell. */
     ACTIVE_FILL: 0.25,
@@ -186,7 +188,7 @@ export const DEFAULT_TUNING = {
   terminal: {
     /** Render pixels across the terminal body's short side; the canvas is upscaled without smoothing. */
     RENDER_SCALE_SHORT: 400,
-    /** Battle render target shown on the CRT; 320:440 = 1:1.375, the glass aspect (spec §5.2). */
+    /** Aspect of the CRT picture, 320:440 = 1:1.375 (spec §5.2). The picture itself is drawn 1:1 with the glass's render pixels. */
     CRT_RES_W: 320,
     CRT_RES_H: 440,
     /** Viewport aspect (w/h) range the terminal body stretches to; outside it the terminal is letterboxed. */
@@ -215,10 +217,10 @@ export const DEFAULT_TUNING = {
     CRT_CURVATURE: 0.06,
     CRT_BLEED: 0.35,
     /** Previous-frame persistence; 0 disables the ghosting pass entirely. */
-    CRT_GHOSTING: 0.58,
+    CRT_GHOSTING: 0.6,
     CRT_FLASH_TIME: 0.12,
     /** RGB phosphor triads across the texel columns. */
-    CRT_PHOSPHOR: 0.25,
+    CRT_PHOSPHOR: 0,
     /** Bloom around bright texels. */
     CRT_GLOW: 0.35,
     CRT_NOISE: 0.03,
@@ -262,6 +264,10 @@ export const DEFAULT_TUNING = {
     LOAD_TIME: 0.18,
     LOAD_STAGGER: 0.05,
     CONTACT_FLASH_TIME: 0.2,
+    /** Nothing queued this long in battle: the cassette faces start flashing to call for a pick (s). */
+    RAIL_ATTRACT_DELAY: 1.5,
+    /** One beat of those flashing patterns (s). */
+    RAIL_ATTRACT_STEP: 0.45,
   },
 };
 

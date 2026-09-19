@@ -5,8 +5,8 @@ import { CREATURE_SIZE, generateCreature } from '../src/render/creatureGen';
 import { battleSignal, hpSegments, NO_SIGNAL } from '../src/render/battleSignals';
 import { cellKey, cellStates, type CellInputs } from '../src/render/cellStates';
 import {
-  bayer4,
   dimSignal,
+  paletteColor,
   paletteIndex,
   signal,
   PALETTE,
@@ -15,25 +15,19 @@ import {
   type Role,
 } from '../src/render/palette';
 import { fitView } from '../src/render/viewCamera';
-import { texelScale } from '../src/render/pixelSprite';
+import { spritePixels } from '../src/render/pixelSprite';
+import { toneForCrt } from '../src/render/spriteArt';
 import { PLAYER_ROWS, playerBitmap } from '../src/render/playerSprite';
 import type { Panel } from '../src/sim/field';
 import { sideOfRow, type Side } from '../src/sim/grid';
 
 describe('palette', () => {
-  it('has a 4×4 Bayer matrix with 16 distinct steps', () => {
-    const values = new Set<number>();
-    for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) values.add(Math.round(bayer4(x, y) * 16));
-    expect([...values].sort((a, b) => a - b)).toEqual([...Array(16).keys()]);
-    expect(bayer4(5, 6)).toBe(bayer4(1, 2));
-  });
-
   // The material writes an index, not a role-per-channel (spec §6.1).
-  it('reads back every palette index at full brightness', () => {
+  it('reads back every palette index and colour at full brightness', () => {
     for (const [role, index] of Object.entries(ROLE_INDEX)) {
       const c = signal(role as Role, 1);
-      for (let y = 0; y < 4; y++)
-        for (let x = 0; x < 4; x++) expect(paletteIndex(c.r, c.g, c.b, x, y)).toBe(index);
+      expect(paletteIndex(c.r, c.g)).toBe(index);
+      expect(paletteColor(c.r, c.g).getHex()).toBe(new THREE.Color(PALETTE_COLORS[index]).getHex());
     }
   });
 
@@ -44,16 +38,21 @@ describe('palette', () => {
   });
 
   it('reads zero brightness as background whatever the index', () => {
-    for (const index of Object.values(ROLE_INDEX))
-      for (let y = 0; y < 4; y++)
-        for (let x = 0; x < 4; x++) expect(paletteIndex(index / 255, 0, 0, x, y)).toBe(0);
+    const bg = new THREE.Color(PALETTE.bg).getHex();
+    for (const index of Object.values(ROLE_INDEX)) {
+      expect(paletteIndex(index / 255, 0)).toBe(0);
+      expect(paletteColor(index / 255, 0).getHex()).toBe(bg);
+    }
   });
 
-  it('dithers partial brightness in proportion', () => {
-    let lit = 0;
+  // No dithering (2026-09-19): a faint line is a solid, dimmer line.
+  it('draws partial brightness as a dimmer solid colour, not a pattern', () => {
     const c = signal('phosphor', 0.5);
-    for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) if (paletteIndex(c.r, c.g, c.b, x, y)) lit++;
-    expect(lit).toBe(8);
+    const half = paletteColor(c.r, c.g);
+    const full = new THREE.Color(PALETTE.phosphor);
+    const bg = new THREE.Color(PALETTE.bg);
+    expect(half.g).toBeCloseTo((full.g + bg.g) / 2, 5);
+    expect(half.g).toBeLessThan(full.g);
   });
 
   // Scaling the whole colour would scale the index too and repaint the pixel.
@@ -61,7 +60,7 @@ describe('palette', () => {
     const half = dimSignal(signal('purple', 1), 0.5);
     expect(half.r).toBe(ROLE_INDEX.purple / 255);
     expect(half.g).toBeCloseTo(0.5, 6);
-    expect(paletteIndex(half.r, half.g, half.b, 0, 0)).toBe(ROLE_INDEX.purple);
+    expect(paletteIndex(half.r, half.g)).toBe(ROLE_INDEX.purple);
   });
 
   it('clamps a dimmed signal to the unit range', () => {
@@ -271,10 +270,25 @@ describe('player sprite and texel scale', () => {
     expect(Array.from(b.px).some((p) => p === 2)).toBe(true);
   });
 
-  it('rounds texels to whole pixels and never below one', () => {
-    expect(texelScale(1, 40, 32)).toBe(1);
-    expect(texelScale(1, 70, 32)).toBe(2);
-    expect(texelScale(1, 5, 32)).toBe(1);
+  // Continuous perspective scaling (2026-09-19): no jumps between rows.
+  it('sizes a sprite in proportion to its distance, keeping its aspect', () => {
+    const near = spritePixels(1, 100, 128, 160);
+    const far = spritePixels(1, 60, 128, 160);
+    expect(near).toEqual({ w: 100, h: 125 });
+    expect(far).toEqual({ w: 60, h: 75 });
+    const steps = [60, 61, 62, 63].map((p) => spritePixels(1, p, 36, 48).w);
+    expect(steps).toEqual([60, 61, 62, 63]);
+    expect(spritePixels(1, 0.1, 36, 48).w).toBe(1);
+  });
+
+  it('tones art down for the CRT: less saturated, a little darker, grey stays grey', () => {
+    const [r, g, b] = toneForCrt(255, 40, 40);
+    expect(r).toBeLessThan(255);
+    expect(g).toBeGreaterThan(40);
+    expect(b).toBe(g);
+    const grey = toneForCrt(200, 200, 200);
+    expect(grey[0]).toBe(grey[1]);
+    expect(grey[0]).toBeLessThan(200);
   });
 });
 

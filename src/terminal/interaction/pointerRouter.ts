@@ -56,7 +56,7 @@ export class PointerRouter {
     if (!zone || this.handlers.accepts?.(zone) === false) return false;
     let swipe: SwipeRecognizer | null = null;
     if (zone === 'trackball') {
-      swipe = new SwipeRecognizer(tuning.input.SWIPE_MIN_PX, tuning.terminal.TAP_MAX_TIME);
+      swipe = new SwipeRecognizer(tuning.input.SWIPE_MIN_PX, tuning.terminal.TAP_MAX_TIME, tuning.input.SWIPE_REARM_TIME);
       swipe.begin(x, y, this.now());
     }
     this.captures.set(id, { zone, downX: x, downY: y, lastX: x, lastY: y, swipe });
@@ -72,7 +72,8 @@ export class PointerRouter {
     c.lastX = x;
     c.lastY = y;
     c.swipe.threshold = tuning.input.SWIPE_MIN_PX;
-    const dir = c.swipe.move(x, y);
+    c.swipe.rearmTime = tuning.input.SWIPE_REARM_TIME;
+    const dir = c.swipe.move(x, y, this.now());
     if (dir) this.handlers.move(dir);
   }
 

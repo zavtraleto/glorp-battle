@@ -31,7 +31,7 @@ Before every commit: `npm test` and `npm run build` must pass. Pushing to `main`
 - **Deliberate deviations — do not undo them:**
   - There is no Buster (GDD §4): only chips deal damage. Spent chips reshuffle into the draw pile when it runs dry (GDD §5).
   - The run is linear and the folder never changes during it: no path choice, rewards, legacy or saves between runs (GDD §10).
-  - One trackball gesture = exactly one panel. No hold-to-repeat on gestures (keyboard keeps it).
+  - One trackball stroke = exactly one panel. With the finger held down, a new stroke starts after a rest (`SWIPE_REARM_TIME`) or a turn; a long drag in one direction is still one panel. No hold-to-repeat on gestures (keyboard keeps it).
   - A `DBG` button (bottom-right) toggles debug tools in every build; the pause key sits bottom-left on the control panel.
   - Working names replace Capcom names: Mettik, Canodron, Spiker, … (see GDD §0.1).
 - When behavior changes, update the GDD in the same change. Mark new decisions `[решение YYYY-MM-DD]`, estimates `[оценка]`, and keep §17 (tuning table) in sync with `src/config/tuning.ts`.
@@ -58,7 +58,7 @@ Invariants:
 - **Determinism.** All sim randomness uses `world.rngFolder` / `world.rngAi` (seeded, forked streams). No `Math.random()` in `src/sim`. Session derives a seed per run; the run derives its folder, each step's encounter pick and each step's battle from it.
 - **Enemies** extend `Enemy` (`src/sim/enemies/enemyBase.ts`), act only through `EnemyContext`, register in `factory.ts`, get a seed in `data/enemies.ts`, and are placed in `data/encounters.ts`. Scale damage and timings with `this.dmg()` / `this.ticks()` so levels work. Lane attacks implement `LaneMover` so FX can interpolate them.
 - **New tunables** go into the right group in `tuning.ts`; the debug panel picks them up automatically (add a slider range in `RANGES` if the auto range is wrong).
-- **Battle palette.** Battle materials emit a signal, not a colour: G = phosphor, R = red, B = accent (`render/palette.ts`); the palette pass maps them to the three colours with Bayer dithering. No text in battle: HUD shows only HP segments, damage numbers and menus.
+- **Battle palette.** Battle materials emit a signal, not a colour: G = phosphor, R = red, B = accent (`render/palette.ts`); the palette pass maps each pixel to its palette colour dimmed by the signal's brightness (no dithering since 2026-09-19). The CRT picture is drawn 1:1 with the glass's render pixels; `CRT_RES_W/H` only set its aspect. No text in battle: HUD shows only HP segments, damage numbers and menus.
 - **Panels live in the sim.** `world.field` owns panel state and ownership; movement, warps and waves ask `field.canStand` / `field.panel`, and anything leaving a cell calls `field.onLeave`. Objects (`world.objects`) sit in `Occupancy` and stop shots.
 - **New chips** are data: a `shape`, optional `onHit` / `field` / `heal` / `invis`, `codes` and `rarity` in `data/chips.ts`; a new shape or field action goes into `sim/chips/patterns.ts` / `World.applyFieldAction`. Add strings to `i18n/en.ts`, an icon to `terminal/chips/chipIcons.ts`, and a test in `tests/chipUse.test.ts`.
 
