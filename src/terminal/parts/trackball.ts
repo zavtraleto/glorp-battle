@@ -30,9 +30,9 @@ const RING_SIDES = 40;
 /** Ring colour follows the armed state at this rate, 1/s. */
 const ARM_RATE = 18;
 /** While armed the ring breathes: brightness range and rate (synced with the PCB pulses). */
-const ARM_BREATHE = 0.35;
+export const ARM_BREATHE = 0.35;
 /** Tutorial hint level 1: the breathing amplitude is multiplied by this (tutorial spec §5). */
-const HINT_PULSE_GAIN = 2.2;
+export const HINT_PULSE_GAIN = 2.2;
 /** A tap that fires flares the ring toward white for this long, seconds. */
 const TAP_FLASH_TIME = 0.18;
 const TAP_WHITE = new THREE.Color(0xffd0c8);
@@ -55,6 +55,21 @@ const ARROW_GAP = 0.06;
 const AXIS_X = new THREE.Vector3(1, 0, 0);
 const AXIS_Y = new THREE.Vector3(0, 1, 0);
 const turn = new THREE.Quaternion();
+
+/**
+ * Ring brightness 0..1 from the armed fraction and the breathing phase
+ * (`beat`, 0..1, peaks at 1). A hint pulse gets its own floor along the same
+ * phase, so the ring visibly breathes even with an empty Attack Queue
+ * (`armed` 0) — the level is never lower than what plain arming would give
+ * (tutorial spec §5).
+ */
+export function ringPulseLevel(armed: number, beat: number, hintPulse: boolean): number {
+  const breathe = ARM_BREATHE * (hintPulse ? HINT_PULSE_GAIN : 1);
+  const armedLevel = armed * (1 - breathe + breathe * beat);
+  if (!hintPulse) return armedLevel;
+  const hintFloor = 1 - breathe + breathe * beat;
+  return Math.max(armedLevel, hintFloor);
+}
 
 export class Trackball {
   readonly group = new THREE.Group();
@@ -196,8 +211,7 @@ export class Trackball {
     this.armed += ((armed ? 1 : 0) - this.armed) * k;
     // Armed: breathing between a strong and a full red, peaking with each PCB pulse.
     const beat = 0.5 + 0.5 * Math.cos(this.time * this.breatheHz * Math.PI * 2);
-    const breathe = ARM_BREATHE * (this.hintPulse ? HINT_PULSE_GAIN : 1);
-    const level = this.armed * (1 - breathe + breathe * beat);
+    const level = ringPulseLevel(this.armed, beat, this.hintPulse);
     this.ringMat.color.copy(COLOR.idle).lerp(COLOR.armed, level);
     if (this.tapLeft > 0) this.ringMat.color.lerp(TAP_WHITE, this.tapLeft / TAP_FLASH_TIME);
 
