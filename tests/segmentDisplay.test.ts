@@ -7,7 +7,7 @@ import { chipDisplayText, DISPLAY_CHARS, glyph, hasGlyph } from '../src/terminal
 // The amber chip display under the rail and the trackball ring (TERMINAL.md §3.1).
 describe('14-segment display', () => {
   it('has a glyph for every character it can be asked to show', () => {
-    const texts = [t('hud.noChip'), '+0123456789', ...(Object.keys(CHIPS) as ChipId[]).map((id) => chipName(id))];
+    const texts = [t('hud.selectChip'), '+0123456789', ...(Object.keys(CHIPS) as ChipId[]).map((id) => chipName(id))];
     for (const text of texts) {
       for (const ch of text) expect(hasGlyph(ch), `${text}: '${ch}'`).toBe(true);
     }
@@ -23,7 +23,7 @@ describe('14-segment display', () => {
   });
 
   it('shows NO CHIP for an empty queue', () => {
-    expect(chipDisplayText([], t('hud.noChip'))).toBe('NO CHIP');
+    expect(chipDisplayText([], t('hud.selectChip'))).toBe('SELECT CHIP');
   });
 
   it('shows the first loaded chip and how many more follow it', () => {

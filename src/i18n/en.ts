@@ -29,7 +29,7 @@ export const en = {
   'btn.next': 'Next',
   'btn.resume': 'Resume',
   'btn.debug': 'DBG',
-  'hud.noChip': 'NO CHIP',
+  'hud.selectChip': 'SELECT CHIP',
   'result.time': 'Time',
   'result.step': 'Step',
   'result.hits': 'Hits taken',

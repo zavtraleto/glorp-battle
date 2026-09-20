@@ -498,7 +498,8 @@ export class Terminal {
     // One preview tile lights per chip spent since the last Refresh (GDD §5).
     this.drawStrip.set(inBattle ? chips.drawPreview(tuning.chips.DRAW_PREVIEW) : [], inBattle ? chips.usedSinceRefresh : 0);
     const queued = !inBattle || this.mode() === 'MENU' ? [] : chips.attackChips().map((c) => chipName(c.defId));
-    this.chipDisplay.set(chipDisplayText(queued, t('hud.noChip')));
+    // Empty queue in battle: the display asks for a chip; outside a battle it stays dark.
+    this.chipDisplay.set(chipDisplayText(queued, inBattle ? t('hud.selectChip') : ''));
   }
 
   /** HP numbers above each enemy and rising damage numbers, in CRT pixels. */
