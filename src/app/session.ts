@@ -2,16 +2,23 @@ import { secondsToTicks, tuning } from '../config/tuning';
 import { deriveSeed } from '../core/rng';
 import { debugEncounter, encounterById, type Encounter, type EncounterTier } from '../data/encounters';
 import type { FolderId } from '../data/folders';
+import type { SimEvent } from '../sim/events';
 import { folderChips, type FolderChip } from '../sim/chips/chipSystem';
 import { World, type Cheats } from '../sim/world';
 import { Run, RUN_STEPS, type StartFolder } from './run';
+import { TutorialDirector, type TutorialHint } from './tutorial/director';
 
 // Roguelite run and out-of-battle screens (GDD §10–11). Pure: no DOM.
 //
 // TITLE → PATH → BATTLE → PATH … → BATTLE (boss) → COMPLETE → TITLE
 //                  └→ death / abandon → GAME_OVER → TITLE
+//
+// The tutorial (tutorial spec §2) reuses BATTLE/PAUSED/COMPLETE instead:
+// TITLE → BATTLE → … (4 steps, auto-advancing) → COMPLETE → TITLE
+//                  └→ abandon → TITLE (never GAME_OVER; the player cannot die)
 
 export type Screen = 'TITLE' | 'PATH' | 'BATTLE' | 'PAUSED' | 'GAME_OVER' | 'COMPLETE';
+export type SessionMode = 'run' | 'tutorial';
 
 export interface BattleResult {
   /** Run step of the battle. */
@@ -42,10 +49,12 @@ export class Session {
   worldVersion = 0;
   run: Run | null = null;
   results: BattleResult[] = [];
+  mode: SessionMode = 'run';
   /** Runs started in this session (each gets its own seed). */
   private runCount = 0;
   /** Debug battles use the debug folder instead of the run folder. */
   private debugFolder: FolderChip[] | null = null;
+  private director: TutorialDirector | null = null;
 
   constructor(private options: SessionOptions) {
     this.seed = options.seed;
@@ -124,6 +133,26 @@ export class Session {
     this.screen = 'PATH';
   }
 
+  /** Title → the first tutorial battle (tutorial spec §2). */
+  startTutorial(): void {
+    if (this.screen !== 'TITLE') return;
+    this.mode = 'tutorial';
+    this.run = null;
+    this.debugFolder = null;
+    this.director = new TutorialDirector();
+    this.replaceWorld(this.director.newWorld(this.options.cheats));
+    this.screen = 'BATTLE';
+  }
+
+  get tutorial(): boolean {
+    return this.mode === 'tutorial';
+  }
+
+  /** The hint the terminal should show, or null outside the tutorial. */
+  tutorialHint(): TutorialHint | null {
+    return this.director?.hint() ?? null;
+  }
+
   private startBattle(encounter: Encounter): void {
     const run = this.run as Run;
     this.replaceWorld(
@@ -155,15 +184,31 @@ export class Session {
     this.screen = 'BATTLE';
   }
 
-  /** Pause menu: give up the run; it counts as a death. */
+  /** Pause menu: give up the run; it counts as a death (or leaves the tutorial). */
   abandon(): void {
-    if (this.screen !== 'PAUSED' || !this.run) return;
+    if (this.screen !== 'PAUSED') return;
+    if (this.mode === 'tutorial') {
+      this.endTutorial();
+      return;
+    }
+    if (!this.run) return;
     this.run.finishBattle(false, 0);
     this.screen = 'GAME_OVER';
   }
 
+  private endTutorial(): void {
+    this.mode = 'run';
+    this.director = null;
+    this.replaceWorld(this.titleWorld());
+    this.screen = 'TITLE';
+  }
+
   /** Called every frame: leaves the battle once the end-of-battle signal has played. */
-  update(): void {
+  update(dt: number, events: readonly SimEvent[]): void {
+    if (this.mode === 'tutorial') {
+      this.updateTutorial(dt, events);
+      return;
+    }
     if (this.screen !== 'BATTLE' || !this.run) return;
     const w = this.world;
     if (w.state === 'BATTLE_WON' && w.stateElapsed >= secondsToTicks(tuning.fx.RESULT_DELAY_WIN)) {
@@ -180,9 +225,28 @@ export class Session {
     }
   }
 
+  /** Runs the director and rolls a won battle into the next step, or COMPLETE. */
+  private updateTutorial(dt: number, events: readonly SimEvent[]): void {
+    const d = this.director;
+    if (!d || this.screen !== 'BATTLE') return;
+    const w = this.world;
+    d.update(w, events, dt);
+    if (w.state !== 'BATTLE_WON' || w.stateElapsed < secondsToTicks(tuning.fx.RESULT_DELAY_WIN)) return;
+    d.advanceStep();
+    if (d.done) {
+      this.screen = 'COMPLETE';
+      return;
+    }
+    this.replaceWorld(d.newWorld(this.options.cheats));
+  }
+
   /** COMPLETE / GAME_OVER → TITLE. */
   toTitle(): void {
     if (this.screen !== 'COMPLETE' && this.screen !== 'GAME_OVER') return;
+    if (this.mode === 'tutorial') {
+      this.endTutorial();
+      return;
+    }
     this.run = null;
     this.debugFolder = null;
     this.replaceWorld(this.titleWorld());

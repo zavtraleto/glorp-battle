@@ -159,12 +159,13 @@ const loop = new GameLoop(
     tick: (dt) => {
       const world = session.world;
       world.step(dt, { commands: input.drain(), held: input.heldDir });
-      for (const e of world.drainEvents()) {
+      const drained = world.drainEvents();
+      for (const e of drained) {
         sceneRenderer.handleEvent(e, world);
         terminal.onEvent(e, world);
         if (events.logEnabled) console.debug('[sim]', world.tick, e);
       }
-      session.update();
+      session.update(dt, drained);
     },
     render: (alpha, frameSeconds) => {
       syncWorld();
