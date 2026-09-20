@@ -46,6 +46,12 @@ export const DEFAULT_TUNING = {
     /** Player ShockWave: seconds per panel. */
     PLAYER_WAVE_STEP: 0.15,
   },
+  /** Tutorial hint ladder (tutorial spec §5), seconds of inaction. */
+  tutorial: {
+    TUT_HINT_PULSE: 2,
+    TUT_HINT_SEG: 4,
+    TUT_HINT_LINE: 8,
+  },
   mettik: {
     MET_HP: 40,
     MET_DMG: 10,
