@@ -192,7 +192,7 @@ export const DEFAULT_TUNING = {
   /** Physical terminal NET-01 (docs/TERMINAL.md §17). */
   terminal: {
     /** Render pixels across the terminal body's short side; the canvas is upscaled without smoothing. */
-    RENDER_SCALE_SHORT: 400,
+    RENDER_SCALE_SHORT: 600,
     /** Aspect of the CRT picture, 320:440 = 1:1.375 (spec §5.2). The picture itself is drawn 1:1 with the glass's render pixels. */
     CRT_RES_W: 320,
     CRT_RES_H: 440,
@@ -263,6 +263,7 @@ export const DEFAULT_TUNING = {
     CHIP_TILT_DEG: 32,
     /** How far the active cartridge slides out of its slot toward the player. */
     CHIP_ACTIVE_PUSH: 0.1,
+    CHIP_BLOCKED_SINK: 0.04,
     /** Brightness of the light the active cartridge throws on its own slot. */
     CHIP_ACTIVE_GLOW: 0.7,
     EJECT_LIFT_TIME: 0.06,

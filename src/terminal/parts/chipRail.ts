@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { tuning } from '../../config/tuning';
 import type { ChipCode, ChipId } from '../../data/chips';
 import { Spring } from '../anim/spring';
-import { Cartridge, cartridgeGlow } from '../chips/cartridge';
+import { Cartridge } from '../chips/cartridge';
 import type { SlotState } from '../../sim/chips/chipSystem';
 import { ejectPose, type EjectAim } from '../chips/ejectArc';
 import { activeSlot, railChanges } from '../chips/railPlan';
@@ -12,7 +12,9 @@ import { rectToWorld, type TerminalLayout } from '../layout';
 
 // Chip rail (TERMINAL.md §6.3–6.5): five slots with contacts and chip
 // cartridges. It mirrors the hand slot for slot: used chips eject, new ones
-// load in.
+// load in. The rail also owns the three lit states of a cartridge (spec §6.2,
+// decision 2026-09-20): a cartridge only carries the light, the rail decides
+// how much of it and in which colour.
 
 export { RAIL_SLOTS };
 
@@ -50,18 +52,29 @@ interface Cart {
 
 const COLOR = {
   frame: 0x1c1d1f,
-  /** Yellow light along the bottom edge of a loaded chip. */
-  glow: new THREE.Color(0xffd45e),
   contactOff: new THREE.Color(0x8a7a4a),
   contactOn: new THREE.Color(0xffe9a8),
-  faceActive: new THREE.Color(0xffffff),
-  faceIdle: new THREE.Color(0x9a9a9a),
-  /** Could join the series being built: lifted with the queued chips, faintly lit. */
-  faceCandidate: new THREE.Color(0xd2d2d2),
-  /** Warm lamp light of the idle "pick me" patterns. */
-  faceAttract: new THREE.Color(0xffc98a),
+  /** Queued: warm yellow, the colour of action across the cabinet. */
+  glowSelected: new THREE.Color(0xffd45e),
+  /** Could join the series being built: cool neutral light, never yellow. */
+  glowPossible: new THREE.Color(0xc6d2dc),
+  /** The faint "pick me" breathing of an idle rail. */
+  glowAttract: new THREE.Color(0xffc98a),
+  /** Nothing tints the plastic of a cartridge that is in play. */
+  tintPlain: new THREE.Color(0xffffff),
   /** Refused by the code rule: dark and cold, clearly out of play. */
-  faceBlocked: new THREE.Color(0x2f3a44),
+  tintBlocked: new THREE.Color(0x59636e),
+  /**
+   * Face brightness is the state's own scale (decision 2026-09-20). The face is
+   * unlit, so without this a resting cartridge would burn at full white in a
+   * cabinet that is otherwise nearly dark and fall out of the picture. Panel and
+   * label are always scaled by the same number, so the ink keeps its contrast
+   * and the number, the letter and the icon stay legible at every step.
+   */
+  faceSelected: new THREE.Color(0xffffff),
+  facePossible: new THREE.Color(0xdcd8d0),
+  faceNormal: new THREE.Color(0xaaa69e),
+  faceBlocked: new THREE.Color(0x6b727b),
 };
 
 const REST_Z = 0.14;
@@ -70,7 +83,22 @@ const EJECT_POP = 0.25;
 /** How lit the active slot's contacts sit between flashes. */
 const ACTIVE_CONTACT = 0.55;
 const LOAD_HEIGHT = 1.2;
-const GLOW_PULSE_HZ = 2;
+/**
+ * The breath of a queued cartridge: slow and shallow on purpose (decision
+ * 2026-09-20) — the plastic should feel like a physical shell with a lamp
+ * inside whose brightness drifts, never like a blinking indicator.
+ */
+const GLOW_PULSE_HZ = 0.28;
+/** Internal light of a queued cartridge: floor and how much the breath adds. */
+const GLOW_SELECTED_BASE = 0.58;
+const GLOW_SELECTED_PULSE = 0.14;
+/** Internal light of a cartridge that could join the series. */
+const GLOW_POSSIBLE = 0.3;
+/** NORMAL: barely lit, breathing between these while the rail calls for a pick. */
+const GLOW_IDLE = 0.03;
+const GLOW_ATTRACT = 0.16;
+/** In flight the cartridge leaves the lit rail, so it carries its own light. */
+const GLOW_FLIGHT = 0.45;
 /** Cartridges slide to a new slot at this rate (1/s). */
 const SLIDE_RATE = 22;
 /** Cartridge width as a share of its slot pitch. */
@@ -116,6 +144,9 @@ export class ChipRail {
   private maxH = Infinity;
   /** Cartridge height, world units: the tilt pivots on its bottom edge. */
   private cartH = 1;
+  /** One instanced bar per slot: the light that ties a queued chip to the PCB. */
+  private bars: THREE.InstancedMesh | null = null;
+  private readonly barColor = new THREE.Color();
   /** Called when a cartridge leaves its slot (a shot): the slot index. */
   onEject: ((slot: number) => void) | null = null;
   /** World point the ejected cartridges fly at: just under the camera (set from it). */
@@ -131,12 +162,27 @@ export class ChipRail {
   private readonly unitPlane = new THREE.PlaneGeometry(1, 1);
   private readonly frameMat = new THREE.MeshLambertMaterial({ color: COLOR.frame, flatShading: true });
   private readonly contactTex = contactTexture();
+  /**
+   * The bar of light under a queued cartridge: a hard-edged rectangle, no
+   * gradient and no texture — it has to read as the same pixel object the
+   * cartridges are (decision 2026-09-20).
+   */
+  private readonly barMat = new THREE.MeshBasicMaterial({
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  private readonly m = new THREE.Matrix4();
+  /** Bar brightness per slot, reused every frame (no allocation in the loop). */
+  private readonly barLevel = new Array<number>(RAIL_SLOTS).fill(0);
 
   constructor() {
     this.group.add(this.statics);
   }
 
   build(layout: TerminalLayout, texel: number): void {
+    this.bars?.dispose();
+    this.bars = null;
     this.statics.clear();
     for (const c of this.contacts) c.mat.dispose();
     this.contacts = [];
@@ -151,6 +197,7 @@ export class ChipRail {
     const h = Math.min(CHIP_TEXELS_H * texel, this.maxH);
     this.cartH = h;
     this.slotPos = [];
+    const bars = new THREE.InstancedMesh(this.unitPlane, this.barMat, RAIL_SLOTS);
     for (let i = 0; i < RAIL_SLOTS; i++) {
       const x = rail.cx - rail.w * RAIL_LEFT + pitch * (i + 0.5);
       this.slotPos.push(new THREE.Vector3(x, rail.cy, REST_Z));
@@ -164,7 +211,17 @@ export class ChipRail {
       pad.scale.set(w * 0.8, 10 * texel, 1);
       this.statics.add(pad);
       this.contacts.push({ mat, left: 0 });
+      // The bar lies on the panel just below the slot, where the PCB traces start.
+      // As wide as the cartridge and no wider: two queued chips side by side
+      // must read as two bars, not one slab.
+      this.m.makeScale(w, 6 * texel, 1);
+      this.m.setPosition(x, rail.cy - h / 2 - 3 * texel, 0.09);
+      bars.setMatrixAt(i, this.m);
+      bars.setColorAt(i, this.barColor.setScalar(0));
     }
+    bars.instanceMatrix.needsUpdate = true;
+    this.statics.add(bars);
+    this.bars = bars;
     for (const c of this.carts) c.cart.shape(texel, this.maxH);
   }
 
@@ -236,13 +293,12 @@ export class ChipRail {
     const attractT = this.idleFor - t.RAIL_ATTRACT_DELAY;
     this.hasActive = false;
     const pulse = 0.75 + 0.25 * Math.sin(this.time * Math.PI * 2 * GLOW_PULSE_HZ);
-    cartridgeGlow.color.copy(COLOR.glow).multiplyScalar(pulse);
     const slide = 1 - Math.exp(-dt * SLIDE_RATE);
+    this.barLevel.fill(0);
 
     for (const c of [...this.carts]) {
       c.t += dt;
       const o = c.cart.object;
-      const face = c.cart.faceMat.color;
       const rest = this.slotPos[c.slot];
       switch (c.phase) {
         case 'load': {
@@ -262,7 +318,7 @@ export class ChipRail {
           const blocked = view?.state === 'blocked';
           // While a series is built, chips that could join it tilt level with it.
           const candidate = building && view?.state === 'ready';
-          c.cart.setOrder(view?.order ?? 0);
+          c.cart.setLitContacts(isActive ? (view?.order ?? 0) : 0);
           // Tilt toward the player about the bottom edge: the far (top) edge
           // comes up out of the panel (decision 2026-09-19).
           c.lift.target = isActive || candidate ? 1 : 0;
@@ -270,7 +326,9 @@ export class ChipRail {
           const k = c.lift.value;
           const tilt = THREE.MathUtils.degToRad(t.CHIP_TILT_DEG) * k;
           const half = this.cartH / 2;
-          c.pos.set(rest.x, rest.y - half + half * Math.cos(tilt), rest.z + half * Math.sin(tilt) + k * t.CHIP_ACTIVE_PUSH);
+          // A refused chip sits a little deeper in its socket than the rest.
+          const sink = blocked ? t.CHIP_BLOCKED_SINK : 0;
+          c.pos.set(rest.x, rest.y - half + half * Math.cos(tilt), rest.z + half * Math.sin(tilt) + k * t.CHIP_ACTIVE_PUSH - sink);
           o.position.lerp(c.pos, slide);
           o.rotation.set(tilt, 0, 0);
           o.scale.setScalar(1);
@@ -279,15 +337,23 @@ export class ChipRail {
             this.activeAt.copy(o.position);
             this.hasActive = true;
           }
-          c.cart.glow.visible = isActive;
-          if (blocked) face.copy(COLOR.faceBlocked);
-          else if (isActive) face.copy(COLOR.faceActive);
-          else if (candidate) face.copy(COLOR.faceCandidate);
-          else if (attractT >= 0 && view?.state === 'ready') {
-            const raw = attractLevel(c.slot, RAIL_SLOTS, attractT, t.RAIL_ATTRACT_STEP);
-            const k = Math.min(1, raw * (this.hintPulse ? HINT_PULSE_GAIN : 1));
-            face.copy(COLOR.faceIdle).lerp(COLOR.faceAttract, k);
-          } else face.copy(COLOR.faceIdle);
+          if (blocked) {
+            c.cart.setTint(COLOR.tintBlocked, COLOR.faceBlocked);
+            c.cart.setGlow(COLOR.glowPossible, 0);
+          } else if (isActive) {
+            c.cart.setTint(COLOR.tintPlain, COLOR.faceSelected);
+            c.cart.setGlow(COLOR.glowSelected, GLOW_SELECTED_BASE + GLOW_SELECTED_PULSE * pulse);
+            this.barLevel[c.slot] = 0.72 + 0.28 * pulse;
+          } else if (candidate) {
+            c.cart.setTint(COLOR.tintPlain, COLOR.facePossible);
+            c.cart.setGlow(COLOR.glowPossible, GLOW_POSSIBLE);
+          } else {
+            c.cart.setTint(COLOR.tintPlain, COLOR.faceNormal);
+            // NORMAL: almost dark, breathing only while the rail calls for a pick.
+            const raw = attractT >= 0 && view?.state === 'ready' ? attractLevel(c.slot, RAIL_SLOTS, attractT, t.RAIL_ATTRACT_STEP) : 0;
+            const a = Math.min(1, raw * (this.hintPulse ? HINT_PULSE_GAIN : 1));
+            c.cart.setGlow(COLOR.glowAttract, GLOW_IDLE + (GLOW_ATTRACT - GLOW_IDLE) * a);
+          }
           break;
         }
         case 'eject': {
@@ -309,11 +375,12 @@ export class ChipRail {
           o.position.copy(this.group.worldToLocal(this.flight));
           o.rotation.set(pose.rotX, pose.rotY, pose.rotZ);
           o.scale.setScalar(pose.scale);
-          face.copy(COLOR.faceActive);
           break;
         }
       }
     }
+
+    this.updateBars(this.barLevel);
 
     const flash = t.CONTACT_FLASH_TIME;
     this.contacts.forEach((ct, i) => {
@@ -323,6 +390,17 @@ export class ChipRail {
       const k = Math.max(base, flash > 0 ? ct.left / flash : 0);
       ct.mat.color.copy(COLOR.contactOff).lerp(COLOR.contactOn, k);
     });
+  }
+
+  /** The bars under the queued cartridges, one instance per slot. */
+  private updateBars(level: readonly number[]): void {
+    const bars = this.bars;
+    if (!bars) return;
+    for (let i = 0; i < RAIL_SLOTS; i++) {
+      this.barColor.copy(COLOR.glowSelected).multiplyScalar(level[i] ?? 0);
+      bars.setColorAt(i, this.barColor);
+    }
+    if (bars.instanceColor) bars.instanceColor.needsUpdate = true;
   }
 
   private startLeave(c: Cart): void {
@@ -338,7 +416,9 @@ export class ChipRail {
     c.drift = (slot - 2) * 0.15;
     c.spin = 0.4;
     c.delay = 0;
-    c.cart.glow.visible = false;
+    c.cart.setTint(COLOR.tintPlain, COLOR.faceSelected);
+    c.cart.setGlow(COLOR.glowSelected, GLOW_FLIGHT);
+    c.cart.setLitContacts(0);
     c.cart.setFlying(true);
     this.flashContacts(slot);
     this.onEject?.(slot);
@@ -359,7 +439,8 @@ export class ChipRail {
   private makeCart(chip: RailChip, slot: number, delay: number): Cart {
     const cart = new Cartridge(chip.defId, chip.code);
     cart.shape(this.texel, this.maxH);
-    cart.faceMat.color.copy(COLOR.faceIdle);
+    cart.setTint(COLOR.tintPlain, COLOR.faceNormal);
+    cart.setGlow(COLOR.glowAttract, GLOW_IDLE);
     const o = cart.object;
     o.visible = false;
     this.group.add(o);

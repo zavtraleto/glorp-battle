@@ -4,15 +4,16 @@ import type { Dir } from '../../core/input/commands';
 import { PressKey } from './pressKey';
 
 // NAVIGATION trackball (spec §10.1): the only battle organ. A graphite ball in
-// a thick socket, inside a plain red ring. The ring burns bright only while a
-// tap would do something (a loaded chip in battle, any menu); four small
-// triangles around it flash with each step.
+// a thick socket, inside a plain yellow ring. The ring burns bright only while
+// a tap would do something (a loaded chip in battle, any menu); four small
+// triangles around it flash with each step. Yellow is the colour of action
+// across the cabinet (decision 2026-09-20) — the same one the chips glow with.
 
 const COLOR = {
-  armed: new THREE.Color(0xff403f),
-  idle: new THREE.Color(0x3a1110),
-  arrowOff: new THREE.Color(0x2a0d0c),
-  arrowOn: new THREE.Color(0xff403f),
+  armed: new THREE.Color(0xffd45e),
+  idle: new THREE.Color(0x3d3010),
+  arrowOff: new THREE.Color(0x2a2109),
+  arrowOn: new THREE.Color(0xffd45e),
 };
 const DIR_ANGLE: Record<Dir, number> = {
   right: 0,
@@ -35,7 +36,7 @@ export const ARM_BREATHE = 0.35;
 export const HINT_PULSE_GAIN = 2.2;
 /** A tap that fires flares the ring toward white for this long, seconds. */
 const TAP_FLASH_TIME = 0.18;
-const TAP_WHITE = new THREE.Color(0xffd0c8);
+const TAP_WHITE = new THREE.Color(0xfff0c0);
 /**
  * The ball is sunk into the panel like a real trackball: its centre sits this
  * far below the panel surface (share of its radius), so only a cap stands out
@@ -101,7 +102,7 @@ export class Trackball {
       new THREE.MeshPhongMaterial({ color: 0x4a4c50, specular: 0x3c3c3c, shininess: 22, flatShading: true }),
     );
     this.socket = new THREE.Mesh(
-      // The lip of the hole the ball sits in; the red ring lies on the panel outside it.
+      // The lip of the hole the ball sits in; the yellow ring lies on the panel outside it.
       new THREE.TorusGeometry(HOLE_R, 0.06, 6, 24),
       new THREE.MeshLambertMaterial({ color: 0x0c0d10, flatShading: true }),
     );
@@ -209,7 +210,7 @@ export class Trackball {
     this.tapLeft = Math.max(0, this.tapLeft - dt);
     const k = 1 - Math.exp(-dt * ARM_RATE);
     this.armed += ((armed ? 1 : 0) - this.armed) * k;
-    // Armed: breathing between a strong and a full red, peaking with each PCB pulse.
+    // Armed: breathing between a strong and a full yellow, peaking with each PCB pulse.
     const beat = 0.5 + 0.5 * Math.cos(this.time * this.breatheHz * Math.PI * 2);
     const level = ringPulseLevel(this.armed, beat, this.hintPulse);
     this.ringMat.color.copy(COLOR.idle).lerp(COLOR.armed, level);

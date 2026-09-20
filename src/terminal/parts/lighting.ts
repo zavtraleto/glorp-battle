@@ -3,14 +3,14 @@ import { tuning } from '../../config/tuning';
 import { rectToWorld, type TerminalLayout } from '../layout';
 
 // Darkness (spec §4). The cabinet is never lit as a whole: only the screen, the
-// red ring and the active chip throw light, and everything outside their reach
+// yellow ring and the active chip throw light, and everything outside their reach
 // falls into black. Linear falloff (decay 1 with an explicit distance) is easier
 // to tune by eye than physical 1/d² and keeps the pools of light readable.
 
 const COLOR = {
   /** Phosphor white-cyan spill from the picture. */
   crt: 0x9fe8dd,
-  ring: 0xff3324,
+  ring: 0xffbe2e,
   chip: 0xffd45e,
   /** The alarm light of the room around the cabinet when the player is hit. */
   alarm: 0xff2a2a,

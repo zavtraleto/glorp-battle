@@ -1,18 +1,17 @@
 import * as THREE from 'three';
 
 // Circuit traces on the control panel (TERMINAL.md §3.1, decision 2026-09-19).
-// They teach the wiring of the cabinet: red traces run from the bottom edge of
+// They teach the wiring of the cabinet: traces run from the bottom edge of
 // every chip slot to the trackball ring (a loaded chip lights its trace and
-// sends pulses into the ring; a shot runs back ring → chip), yellow traces run
-// from the top edge of the slots into the screen (a shot runs chip → screen).
-// Each trace is a row of short dashes on one instanced mesh, so a pulse is only
-// a moving brightness along the dashes.
+// sends pulses into the ring; a shot runs back ring → chip), and from the top
+// edge of the slots into the screen (a shot runs chip → screen). Both carry the
+// yellow of action (decision 2026-09-20), so the wiring reads by its geometry
+// and by when it pulses. Each trace is a row of short dashes on one instanced
+// mesh, so a pulse is only a moving brightness along the dashes.
 
 const COLOR = {
-  redOff: new THREE.Color(0x4a1614),
-  redOn: new THREE.Color(0xff403f),
-  yellowOff: new THREE.Color(0x3d3010),
-  yellowOn: new THREE.Color(0xffd45e),
+  off: new THREE.Color(0x3d3010),
+  on: new THREE.Color(0xffd45e),
 };
 
 /** Dash length along a trace and trace width, world units. */
@@ -25,8 +24,12 @@ const PULSE_LEN = 0.22;
 /** A shot: ring → chip, then chip → screen, seconds. */
 const FIRE_DOWN_TIME = 0.12;
 const FIRE_UP_TIME = 0.12;
-/** Share of full brightness a loaded chip's trace sits at between pulses. */
-const LIT_BASE = 0.45;
+/**
+ * Share of full brightness a loaded chip's trace sits at between pulses. Raised
+ * 2026-09-20 so the trace carries on from the bar of light under the queued
+ * cartridge instead of fading out next to it.
+ */
+const LIT_BASE = 0.62;
 
 export interface SlotEdge {
   x: number;
@@ -67,7 +70,7 @@ export class Pcb {
 
   /**
    * Lays out the traces: `slots` are the chip slots' edges, the ring is the
-   * trackball's red ring, `screenY` is where the traces go under the screen.
+   * trackball's ring, `screenY` is where the traces go under the screen.
    */
   build(slots: readonly SlotEdge[], ringX: number, ringY: number, ringR: number, screenY: number): void {
     if (this.mesh) {
@@ -115,7 +118,7 @@ export class Pcb {
     dashes.forEach((d, i) => {
       q.setFromAxisAngle(new THREE.Vector3(0, 0, 1), d.angle);
       mesh.setMatrixAt(i, m.compose(new THREE.Vector3(d.p.x, d.p.y, 0.012), q, scale));
-      mesh.setColorAt(i, COLOR.redOff);
+      mesh.setColorAt(i, COLOR.off);
     });
     this.mesh = mesh;
     this.group.add(mesh);
@@ -142,7 +145,7 @@ export class Pcb {
         let b = on ? LIT_BASE + (1 - LIT_BASE) * bump(s, phase) : 0;
         // The shot runs back from the ring (s = 1) to the chip (s = 0).
         if (firing >= 0) b = Math.max(b, bump(s, firing) * 1.2);
-        this.c.copy(COLOR.redOff).lerp(COLOR.redOn, Math.min(1, b));
+        this.c.copy(COLOR.off).lerp(COLOR.on, Math.min(1, b));
         mesh.setColorAt(tr.first + k, this.c);
       }
     });
@@ -152,7 +155,7 @@ export class Pcb {
       for (let k = 0; k < tr.count; k++) {
         const s = tr.count > 1 ? k / (tr.count - 1) : 0;
         const b = p >= 0 ? bump(s, p) * 1.2 : 0;
-        this.c.copy(COLOR.yellowOff).lerp(COLOR.yellowOn, Math.min(1, b));
+        this.c.copy(COLOR.off).lerp(COLOR.on, Math.min(1, b));
         mesh.setColorAt(tr.first + k, this.c);
       }
     });
