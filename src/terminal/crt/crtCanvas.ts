@@ -4,7 +4,7 @@ import { PALETTE } from '../../render/palette';
 import { blinkPhase } from '../terminalMode';
 import { hudKey, type HpTag, type HudLabel, type HudModel, type HudStatus, type LabelTone } from './hudModel';
 import { HUD_PX_PER_SCALE, menuLayout, type MenuSpec, type MenuTone } from './menuModel';
-import { drawText, measureText, type PixelSink } from './pixelFont';
+import { drawText, GLYPH_GAP, GLYPH_W, measureText, wrapText, type PixelSink } from './pixelFont';
 
 // HUD layer of the CRT (TERMINAL.md §7.1): drawn at the CRT resolution with the
 // pixel font and composited over the battle by the CRT shader.
@@ -44,22 +44,9 @@ const LABEL_COLOR: Record<LabelTone, string> = {
   heal: hex(PALETTE.phosphor),
 };
 
-/** Greedy word-wrap: as many words per line as fit `maxWidth` at `scale`. */
-function wrapHintLines(text: string, scale: number, maxWidth: number): string[] {
-  const words = text.split(' ');
-  const lines: string[] = [];
-  let cur = '';
-  for (const w of words) {
-    const candidate = cur ? `${cur} ${w}` : w;
-    if (measureText(candidate, scale) <= maxWidth) {
-      cur = candidate;
-      continue;
-    }
-    if (cur) lines.push(cur);
-    cur = w;
-  }
-  if (cur) lines.push(cur);
-  return lines;
+/** Character budget that keeps every line of `wrapText` within `maxWidth` at `scale` (fixed-width font, `menuModel.ts`'s own trick). */
+function colsFor(scale: number, maxWidth: number): number {
+  return Math.floor(maxWidth / ((GLYPH_W + GLYPH_GAP) * scale));
 }
 
 /**
@@ -69,13 +56,13 @@ function wrapHintLines(text: string, scale: number, maxWidth: number): string[] 
  * neither line wider than `maxWidth`; a smaller scale is tried before a
  * third line, so the text stays as big as the width allows.
  */
-function fitHint(text: string, maxScale: number, maxWidth: number): { scale: number; lines: string[] } {
+export function fitHint(text: string, maxScale: number, maxWidth: number): { scale: number; lines: string[] } {
   for (let scale = maxScale; scale >= 1; scale--) {
     if (measureText(text, scale) <= maxWidth) return { scale, lines: [text] };
-    const lines = wrapHintLines(text, scale, maxWidth);
+    const lines = wrapText(text, colsFor(scale, maxWidth));
     if (lines.length <= 2 && lines.every((l) => measureText(l, scale) <= maxWidth)) return { scale, lines };
   }
-  return { scale: 1, lines: wrapHintLines(text, 1, maxWidth) };
+  return { scale: 1, lines: wrapText(text, colsFor(1, maxWidth)) };
 }
 
 export class CrtCanvas {

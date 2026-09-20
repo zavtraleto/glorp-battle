@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { fitHint } from '../src/terminal/crt/crtCanvas';
 import { EMPTY_HUD, hudKey, type HudStatus } from '../src/terminal/crt/hudModel';
 import { drawText, glyphRows, measureText, GLYPH_H } from '../src/terminal/crt/pixelFont';
 import { terminalMode } from '../src/terminal/terminalMode';
@@ -78,6 +79,35 @@ describe('pixelFont', () => {
     expect(rects).toHaveLength(lit);
     expect(sink.fillStyle).toBe('#fff');
     expect(rects[0]).toEqual([10 + 1 * 2, 20, 2, 2]); // first row ".###."
+  });
+});
+
+describe('fitHint', () => {
+  it('keeps a short line at the requested scale when it already fits', () => {
+    const { scale, lines } = fitHint('TAP CHIP', 3, 200);
+    expect(scale).toBe(3);
+    expect(lines).toEqual(['TAP CHIP']);
+  });
+
+  // Regression: the tutorial's longest hint line used to run off both edges of
+  // the CRT at phone scale instead of wrapping (task 7).
+  it('wraps a long sentence onto at most two lines instead of overflowing', () => {
+    const maxWidth = 320 - 2 * 6; // narrowest CRT width found overflowing, minus margins
+    const text = 'LOAD BOTH CANNONS, FIRE TWICE';
+    const { scale, lines } = fitHint(text, 3, maxWidth);
+    expect(lines.length).toBeGreaterThan(1);
+    expect(lines.length).toBeLessThanOrEqual(2);
+    expect(lines.join(' ')).toBe(text); // wrapped, not truncated or reworded
+    for (const line of lines) expect(measureText(line, scale)).toBeLessThanOrEqual(maxWidth);
+  });
+
+  it('never returns a line wider than the given width, across a range of widths', () => {
+    for (const text of ['SWIPE THE BALL TO STEP', 'TAKE A PANEL, STEP UP, SWING']) {
+      for (const maxWidth of [400, 320, 260, 200, 150, 100]) {
+        const { scale, lines } = fitHint(text, 3, maxWidth);
+        for (const line of lines) expect(measureText(line, scale)).toBeLessThanOrEqual(maxWidth);
+      }
+    }
   });
 });
 

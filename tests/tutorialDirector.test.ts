@@ -38,6 +38,19 @@ describe('TutorialDirector', () => {
     expect(d.hint().line).toBe('SWIPE THE BALL TO STEP');
   });
 
+  it('gives no hint at all on a beat with no seg or line (the exam battle)', () => {
+    const d = new TutorialDirector();
+    for (let i = 0; i < 3; i++) d.advanceStep();
+    const w = d.newWorld(CHEATS);
+    expect(d.beatId).toBe('exam');
+    idle(d, w, tuning.tutorial.TUT_HINT_LINE + DT);
+    const hint = d.hint();
+    expect(hint.level).toBe(0);
+    expect(hint.focus).toBeNull();
+    expect(hint.seg).toBeNull();
+    expect(hint.line).toBeNull();
+  });
+
   it('resets the hint timer when the player acts', () => {
     const d = new TutorialDirector();
     const w = d.newWorld(CHEATS);

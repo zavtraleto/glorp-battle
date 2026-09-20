@@ -41,7 +41,7 @@ export interface HudModel {
   status: HudStatus | null;
   /** A session menu covers the whole CRT (TERMINAL.md §8). */
   menu: { spec: MenuSpec; cursor: number } | null;
-  /** Tutorial hint line, centred under the field; null when there is none. */
+  /** Tutorial hint line(s), centred in the top status band; null when there is none. */
   hint: string | null;
 }
 
