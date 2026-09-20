@@ -97,6 +97,11 @@ const terminal = new Terminal({
       if (session.screen === 'BATTLE' || session.screen === 'PAUSED') togglePause();
     },
     menu: (action) => {
+      if (action === 'start:tutorial') {
+        session.startTutorial();
+        void keepAwake();
+        return;
+      }
       const [kind, arg] = action.split(':');
       if (kind === 'start') {
         session.start(arg as StartFolder);

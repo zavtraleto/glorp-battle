@@ -7,7 +7,7 @@ import { GLYPH_H, measureText, wrapText } from './pixelFont';
 // Session menus drawn inside the CRT (TERMINAL.md §8). Pure: what each screen
 // shows, where it goes on the CRT canvas, and cursor movement.
 
-export type MenuAction = `start:${StartFolder}` | 'resume' | 'abandon' | 'title' | 'fight';
+export type MenuAction = `start:${StartFolder}` | 'start:tutorial' | 'resume' | 'abandon' | 'title' | 'fight';
 export type MenuTone = 'title' | 'info' | 'win' | 'lose';
 
 export interface MenuItem {
@@ -44,6 +44,7 @@ export interface MenuSession {
   results: readonly MenuResult[];
   lastResult: MenuResult | undefined;
   totalTime: number;
+  tutorial: boolean;
 }
 
 /** CRT pixels per step of the HUD pixel scale: a 320–400 px wide picture draws text at 2×. */
@@ -79,6 +80,7 @@ export function menuFor(s: MenuSession): MenuSpec | null {
           { label: t('title.basic'), action: 'start:basic' },
           { label: t('title.field'), action: 'start:field' },
           { label: t('title.random'), action: 'start:random' },
+          { label: t('tutorial.title'), action: 'start:tutorial' },
         ],
         hint: [t('title.hintTerminal'), t('title.hintKeys')],
       };
@@ -124,6 +126,17 @@ export function menuFor(s: MenuSession): MenuSpec | null {
         hint: [],
       };
     case 'COMPLETE':
+      if (s.tutorial) {
+        return {
+          key: 'tutorialComplete',
+          tone: 'win',
+          title: t('tutorial.complete.title'),
+          subtitle: null,
+          rows: [],
+          items: [{ label: t('btn.title'), action: 'title' }],
+          hint: [t('tutorial.complete.hint')],
+        };
+      }
       return {
         key: `complete-${s.results.length}`,
         tone: 'win',

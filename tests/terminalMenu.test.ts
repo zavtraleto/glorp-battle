@@ -24,6 +24,7 @@ function session(screen: Screen, over: Partial<MenuSession> = {}): MenuSession {
     results,
     lastResult: results[1],
     totalTime: 42.5,
+    tutorial: false,
     ...over,
   };
 }
@@ -34,11 +35,25 @@ describe('menuFor', () => {
   });
 
   it('builds each screen with its actions', () => {
-    expect(menuFor(session('TITLE'))!.items.map((i) => i.action)).toEqual(['start:basic', 'start:field', 'start:random']);
+    expect(menuFor(session('TITLE'))!.items.map((i) => i.action)).toEqual([
+      'start:basic', 'start:field', 'start:random', 'start:tutorial',
+    ]);
     expect(menuFor(session('PATH'))!.items.map((i) => i.action)).toEqual(['fight']);
     expect(menuFor(session('PAUSED'))!.items.map((i) => i.action)).toEqual(['resume', 'abandon']);
     expect(menuFor(session('GAME_OVER'))!.items.map((i) => i.action)).toEqual(['title']);
     expect(menuFor(session('COMPLETE'))!.items.map((i) => i.action)).toEqual(['title']);
+  });
+
+  it('shows the tutorial ending, not the run ending', () => {
+    const spec = menuFor(session('COMPLETE', { tutorial: true }));
+    expect(spec!.title).toBe('TUTORIAL CLEAR');
+    expect(spec!.items.map((i) => i.action)).toEqual(['title']);
+    expect(spec!.rows).toEqual([]);
+  });
+
+  it('keeps the run ending for a finished run', () => {
+    const spec = menuFor(session('COMPLETE'));
+    expect(spec!.rows.length).toBeGreaterThan(0);
   });
 
   it('GAME OVER shows the step reached and one Title item', () => {
