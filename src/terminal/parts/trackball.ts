@@ -31,6 +31,8 @@ const RING_SIDES = 40;
 const ARM_RATE = 18;
 /** While armed the ring breathes: brightness range and rate (synced with the PCB pulses). */
 const ARM_BREATHE = 0.35;
+/** Tutorial hint level 1: the breathing amplitude is multiplied by this (tutorial spec §5). */
+const HINT_PULSE_GAIN = 2.2;
 /** A tap that fires flares the ring toward white for this long, seconds. */
 const TAP_FLASH_TIME = 0.18;
 const TAP_WHITE = new THREE.Color(0xffd0c8);
@@ -72,6 +74,7 @@ export class Trackball {
   private armed = 0;
   private tapLeft = 0;
   private time = 0;
+  private hintPulse = false;
   /** Breathing rate while armed, Hz (the PCB pulses arrive on the beat). */
   breatheHz = 1.4;
   /** Ring centre and radii in the control panel's plan space. */
@@ -156,6 +159,11 @@ export class Trackball {
     this.tapLeft = TAP_FLASH_TIME;
   }
 
+  /** Tutorial hint level 1: pulse harder so the eye goes here (tutorial spec §5). */
+  setHintPulse(on: boolean): void {
+    this.hintPulse = on;
+  }
+
   /** Adds spin from a drag delta (CSS px). */
   roll(dx: number, dy: number): void {
     const g = tuning.terminal.TRACKBALL_ROLL_GAIN * SPIN_FROM_DRAG;
@@ -188,7 +196,8 @@ export class Trackball {
     this.armed += ((armed ? 1 : 0) - this.armed) * k;
     // Armed: breathing between a strong and a full red, peaking with each PCB pulse.
     const beat = 0.5 + 0.5 * Math.cos(this.time * this.breatheHz * Math.PI * 2);
-    const level = this.armed * (1 - ARM_BREATHE + ARM_BREATHE * beat);
+    const breathe = ARM_BREATHE * (this.hintPulse ? HINT_PULSE_GAIN : 1);
+    const level = this.armed * (1 - breathe + breathe * beat);
     this.ringMat.color.copy(COLOR.idle).lerp(COLOR.armed, level);
     if (this.tapLeft > 0) this.ringMat.color.lerp(TAP_WHITE, this.tapLeft / TAP_FLASH_TIME);
 

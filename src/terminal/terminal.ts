@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { Session } from '../app/session';
+import type { TutorialHint } from '../app/tutorial/director';
 import { secondsToTicks, tuning } from '../config/tuning';
 import type { Dir } from '../core/input/commands';
 import type { PerfProbe } from '../debug/perfProbe';
@@ -365,12 +366,13 @@ export class Terminal {
     const screen = this.battle.render(sceneRenderer, world, alpha, dt);
     this.crt.setScreen(screen, this.battle.width, this.battle.height);
     this.crt.update(dt);
-    this.syncRail(world);
+    const hint = this.opts.session.tutorialHint();
+    this.syncRail(world, hint);
     this.syncMenu();
     const menu = this.menu ? { spec: this.menu, cursor: this.menuCursor } : null;
     const marks = this.fieldMarks(world, alpha);
     const status = menu ? null : this.battleStatus(world);
-    this.hud.draw({ labels: marks.labels, hp: marks.hp, status, menu }, this.time);
+    this.hud.draw({ labels: marks.labels, hp: marks.hp, status, menu, hint: hint?.line ?? null }, this.time);
 
     this.rail.update(dt);
     this.syncIndicators(world, dt);
@@ -481,7 +483,7 @@ export class Terminal {
   }
 
   /** In battle the rail is the hand: one slot per chip, states from the sim. */
-  private syncRail(world: World): void {
+  private syncRail(world: World, hint: TutorialHint | null): void {
     const chips = world.chips;
     // Chips live only inside a battle: when it is won or lost every cartridge
     // flies out at once, and between battles the rail stays empty (2026-09-19).
@@ -498,8 +500,14 @@ export class Terminal {
     // One preview tile lights per chip spent since the last Refresh (GDD §5).
     this.drawStrip.set(inBattle ? chips.drawPreview(tuning.chips.DRAW_PREVIEW) : [], inBattle ? chips.usedSinceRefresh : 0);
     const queued = !inBattle || this.mode() === 'MENU' ? [] : chips.attackChips().map((c) => chipName(c.defId));
-    // Empty queue in battle: the display asks for a chip; outside a battle it stays dark.
-    this.chipDisplay.set(chipDisplayText(queued, inBattle ? t('hud.selectChip') : ''));
+    // The segment display prefers a tutorial hint over the usual "select a chip" fallback.
+    const hintSeg = hint?.seg ?? null;
+    const fallback = hintSeg ?? (inBattle ? t('hud.selectChip') : '');
+    this.chipDisplay.set(chipDisplayText(queued, fallback));
+
+    const focus = hint?.focus ?? null;
+    this.rail.setHintPulse(focus === 'chip');
+    this.trackball.setHintPulse(focus === 'move' || focus === 'fire');
   }
 
   /** HP numbers above each enemy and rising damage numbers, in CRT pixels. */

@@ -41,9 +41,11 @@ export interface HudModel {
   status: HudStatus | null;
   /** A session menu covers the whole CRT (TERMINAL.md §8). */
   menu: { spec: MenuSpec; cursor: number } | null;
+  /** Tutorial hint line, centred under the field; null when there is none. */
+  hint: string | null;
 }
 
-export const EMPTY_HUD: HudModel = { labels: [], hp: [], status: null, menu: null };
+export const EMPTY_HUD: HudModel = { labels: [], hp: [], status: null, menu: null, hint: null };
 
 /** Redraw key: changes whenever the drawn HUD would change. */
 export function hudKey(m: HudModel, blinkOn: boolean): string {
@@ -54,5 +56,6 @@ export function hudKey(m: HudModel, blinkOn: boolean): string {
     m.menu ? `${m.menu.spec.key}:${m.menu.cursor}:${blinkOn ? 1 : 0}` : '',
     m.labels.map((l) => `${l.text}@${Math.round(l.x)},${Math.round(l.y)}`).join(';'),
     m.hp.map((b) => `${b.hp}L${b.level}@${Math.round(b.x)},${Math.round(b.y)}`).join(';'),
+    m.hint ?? '',
   ].join('|');
 }

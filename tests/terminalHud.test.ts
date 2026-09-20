@@ -13,6 +13,12 @@ describe('hud model', () => {
     const c = { ...EMPTY_HUD, labels: [{ text: '40', x: 5, y: 5, tone: 'damage' as const }] };
     expect(hudKey(c, true)).not.toBe(hudKey(EMPTY_HUD, true));
   });
+
+  it('redraws when the hint line changes', () => {
+    const a = { ...EMPTY_HUD, hint: 'TAP A CHIP TO LOAD IT' };
+    const b = { ...EMPTY_HUD, hint: null };
+    expect(hudKey(a, true)).not.toBe(hudKey(b, true));
+  });
 });
 
 describe('battle status', () => {

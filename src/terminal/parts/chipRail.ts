@@ -82,6 +82,8 @@ const CART_FILL = 0.92;
  */
 const EJECT_REACH = 0.7;
 const EJECT_UNDER_LENS = 0.18;
+/** Tutorial hint level 1: the "pick me" attract amplitude is multiplied by this (tutorial spec §5). */
+const HINT_PULSE_GAIN = 2.2;
 
 function contactTexture(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
@@ -124,6 +126,7 @@ export class ChipRail {
   /** How long the Attack Queue has been empty while the rail may call for a pick. */
   private idleFor = 0;
   private attractAllowed = false;
+  private hintPulse = false;
   private readonly unitBox = new THREE.BoxGeometry(1, 1, 1);
   private readonly unitPlane = new THREE.PlaneGeometry(1, 1);
   private readonly frameMat = new THREE.MeshLambertMaterial({ color: COLOR.frame, flatShading: true });
@@ -219,6 +222,11 @@ export class ChipRail {
     this.attractAllowed = allowed;
   }
 
+  /** Tutorial hint level 1: pulse harder so the eye goes here (tutorial spec §5). */
+  setHintPulse(on: boolean): void {
+    this.hintPulse = on;
+  }
+
   update(dt: number): void {
     const t = tuning.terminal;
     this.time += dt;
@@ -276,7 +284,8 @@ export class ChipRail {
           else if (isActive) face.copy(COLOR.faceActive);
           else if (candidate) face.copy(COLOR.faceCandidate);
           else if (attractT >= 0 && view?.state === 'ready') {
-            const k = attractLevel(c.slot, RAIL_SLOTS, attractT, t.RAIL_ATTRACT_STEP);
+            const raw = attractLevel(c.slot, RAIL_SLOTS, attractT, t.RAIL_ATTRACT_STEP);
+            const k = Math.min(1, raw * (this.hintPulse ? HINT_PULSE_GAIN : 1));
             face.copy(COLOR.faceIdle).lerp(COLOR.faceAttract, k);
           } else face.copy(COLOR.faceIdle);
           break;

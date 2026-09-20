@@ -44,6 +44,9 @@ const LABEL_COLOR: Record<LabelTone, string> = {
   heal: hex(PALETTE.phosphor),
 };
 
+/** The hint line sits this many CRT pixels above the player's HP number (tutorial spec §5). */
+const HINT_LIFT = 18;
+
 export class CrtCanvas {
   readonly texture: THREE.CanvasTexture;
   private readonly canvas: HTMLCanvasElement;
@@ -97,6 +100,7 @@ export class CrtCanvas {
     if (m.status) this.drawStatus(sink, m.status, H, s, M, blinkOn);
     this.drawHp(ctx, sink, m.hp, s);
     this.drawLabels(sink, m.labels);
+    if (m.hint) this.drawHint(sink, m.hint, W, H, s, M);
     this.texture.needsUpdate = true;
   }
 
@@ -106,6 +110,18 @@ export class CrtCanvas {
     // A hit blinks the number; otherwise low HP just sits amber.
     const hpColor = st.hpHit && blinkOn ? COLOR.red : st.hpLow ? COLOR.hpLow : COLOR.hp;
     drawText(sink, String(st.hp), M, H - M - 7 * big, big, hpColor);
+  }
+
+  /** Tutorial hint: one centred line above the player's HP (tutorial spec §5). */
+  private drawHint(sink: PixelSink, text: string, W: number, H: number, s: number, M: number): void {
+    const big = s + 1;
+    const x = Math.round((W - measureText(text, big)) / 2);
+    // Sits a line above the HP number in the bottom-left corner.
+    const y = H - M - 7 * big - HINT_LIFT * s;
+    for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
+      drawText(sink, text, x + dx, y + dy, big, COLOR.outline);
+    }
+    drawText(sink, text, x, y, big, COLOR.accent);
   }
 
   /** Enemy HP as a small red number with a dark outline; level dots above it. */
