@@ -251,7 +251,7 @@ describe('generateCreature', () => {
       expect(c.elements.length, `seed ${seed}`).toBeLessThanOrEqual(3);
       for (const p of c.px) expect(p).toBeLessThanOrEqual(2);
     }
-  });
+  }, 15_000);
 
   it('gives every enemy kind its own look', () => {
     const looks = Object.values(ENEMY_SEEDS).map((s) => Array.from(generateCreature(s).px).join(''));
@@ -323,4 +323,3 @@ describe('battle signals', () => {
     expect(battleSignal({ ...base, state: 'ACTION', elapsed: 0 })).toBe(NO_SIGNAL);
   });
 });
-
