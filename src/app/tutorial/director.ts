@@ -81,9 +81,26 @@ export class TutorialDirector {
   private startBeat(world: World): void {
     this.counts = { steps: 0, enemyAttacks: 0, selected: 0, fired: 0 };
     this.idle = 0;
+    this.syncBaseline(world);
+    this.entered = false;
+  }
+
+  /** Snapshots the player's cell and the Attack Queue length. */
+  private syncBaseline(world: World): void {
     this.lastCell = `${world.player.x},${world.player.y}`;
     this.lastQueued = world.chips.attack.length;
-    this.entered = false;
+  }
+
+  /**
+   * Runs a beat's `enter` hook, if it has one, and re-syncs the baseline right
+   * after — so a hook that moves the player or queues a chip (none does today)
+   * cannot have its own effect misread as a player action on this same update.
+   */
+  private runEnter(world: World): void {
+    const enter = this.beat.enter;
+    if (!enter) return;
+    enter(world);
+    this.syncBaseline(world);
   }
 
   update(world: World, events: readonly SimEvent[], dt: number): void {
@@ -92,7 +109,7 @@ export class TutorialDirector {
     // `newWorld` — so its effect (e.g. a dealt cassette) lands on a real tick.
     if (!this.entered) {
       this.entered = true;
-      this.beat.enter?.(world);
+      this.runEnter(world);
     }
 
     let acted = false;
@@ -129,9 +146,7 @@ export class TutorialDirector {
       // Run the new beat's `enter` right away: this update is its first tick,
       // and the caller does not get another chance before reading `beatId`.
       this.entered = true;
-      this.beat.enter?.(world);
-      this.lastCell = `${world.player.x},${world.player.y}`;
-      this.lastQueued = world.chips.attack.length;
+      this.runEnter(world);
     }
   }
 

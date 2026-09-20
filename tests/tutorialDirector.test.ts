@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { TutorialDirector } from '../src/app/tutorial/director';
 import { DEFAULT_TUNING, mergeTuning, tuning } from '../src/config/tuning';
+import { TUTORIAL } from '../src/data/tutorial';
 import type { SimEvent } from '../src/sim/events';
 import type { World } from '../src/sim/world';
 
@@ -86,5 +87,38 @@ describe('TutorialDirector', () => {
     expect(d.done).toBe(false);
     for (let i = 0; i < 4; i++) d.advanceStep();
     expect(d.done).toBe(true);
+  });
+
+  // Regression: a step's first beat has no `enter` hook today, but if a future
+  // one moved the player or queued a chip, that side effect must not be read
+  // back as a player action on the same tick (the bug already fixed for the
+  // beat-transition path in this file's other tests).
+  it("does not credit a beat's own enter hook with the player's first step", () => {
+    const beat = TUTORIAL[0]?.beats[0];
+    if (!beat) throw new Error('tutorial step 1 has no first beat');
+    const originalEnter = beat.enter;
+    beat.enter = (w) => {
+      w.player.x = (w.player.x + 1) % 3;
+      w.chips.attack.push(0);
+    };
+    try {
+      const d = new TutorialDirector();
+      const w = d.newWorld(CHEATS);
+      // First update runs the stubbed `enter`, which moves the player and
+      // queues a chip by itself — this must not count as the player acting.
+      d.update(w, [], DT);
+      expect(d.beatId).toBe('swipe');
+      // Two real player steps plus one enemy attack: three steps in total
+      // only if the hook's own move was (wrongly) counted as the first one.
+      for (let i = 0; i < 2; i++) {
+        w.player.x = (w.player.x + 1) % 3;
+        d.update(w, [], DT);
+      }
+      const attack: SimEvent = { type: 'attackSpawned', id: 1, kind: 'shockwave', x: 1, y: 2 };
+      d.update(w, [attack], DT);
+      expect(d.beatId).toBe('swipe');
+    } finally {
+      beat.enter = originalEnter;
+    }
   });
 });
