@@ -153,6 +153,9 @@ export class TutorialDirector {
   hint(): TutorialHint {
     if (this.finished) return NO_HINT;
     const beat = this.beat;
+    // A beat with neither text hints (the exam battle, tutorial spec §3) gets
+    // no hint at all — not even the control pulse, which is itself a hint.
+    if (!beat.seg && !beat.line) return NO_HINT;
     const { TUT_HINT_PULSE, TUT_HINT_SEG, TUT_HINT_LINE } = tuning.tutorial;
     let level: TutorialHint['level'] = 0;
     if (this.idle >= TUT_HINT_LINE) level = 3;

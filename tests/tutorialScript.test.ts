@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { CHIPS } from '../src/data/chips';
+import { ENEMY_LEVELS } from '../src/data/enemies';
 import { TUTORIAL } from '../src/data/tutorial';
+import { canAddToSelection } from '../src/sim/chips/selection';
+import { shapeCells, type TargetRow } from '../src/sim/chips/patterns';
 import { DISPLAY_CHARS } from '../src/terminal/chips/segmentFont';
 import { t } from '../src/i18n';
 import { tuning } from '../src/config/tuning';
-import { COLS, ROWS } from '../src/sim/grid';
+import { COLS, ENEMY_ROWS, ROWS } from '../src/sim/grid';
 
 describe('tutorial script', () => {
   it('is four steps, each with at least one beat', () => {
@@ -60,5 +63,54 @@ describe('tutorial script', () => {
   it('has unique beat ids', () => {
     const ids = TUTORIAL.flatMap((s) => s.beats.map((b) => `${s.id}/${b.id}`));
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  // Cross-cutting facts the tutorial's lessons silently depend on (task 7 brief).
+  // A balance change that breaks one of these must break a test, not a lesson.
+  describe('lessons stay true under balance changes', () => {
+    it('battle 1: the Cannon one-shots the tutorial Mettik', () => {
+      const step1 = TUTORIAL[0]!;
+      const mettik = step1.encounter.enemies[0];
+      expect(mettik).toBeDefined();
+      const mettikHp = Math.round(tuning.mettik.MET_HP * ENEMY_LEVELS[mettik!.level ?? 1].hp);
+      const cannon = step1.folder[0];
+      expect(cannon).toBeDefined();
+      expect(CHIPS[cannon!.defId].power).toBe(mettikHp);
+    });
+
+    it("battle 3: the sword's reach clears the player's own row but reaches a stolen one", () => {
+      const step3 = TUTORIAL[2]!;
+      const enemy = step3.encounter.enemies[0];
+      expect(enemy).toBeDefined();
+      const swordDefId = step3.folder.find((c) => CHIPS[c.defId].kind === 'attack' && CHIPS[c.defId].useTime === 'SWORD')?.defId;
+      expect(swordDefId).toBeDefined();
+      const sword = CHIPS[swordDefId!];
+      const noTarget: TargetRow = () => -1;
+      const px = tuning.player.PLAYER_START_X;
+
+      // From the player's own starting row, the sword must not reach the enemy.
+      const reachFromOwnRow = shapeCells(sword.shape, px, tuning.player.PLAYER_START_Y, noTarget).map((c) => c.y);
+      expect(reachFromOwnRow).not.toContain(enemy!.y);
+
+      // From the row a PanlGrab steals (the enemy row nearest the player's
+      // territory), the sword must reach it — that is the whole lesson.
+      const stolenRow = ENEMY_ROWS.max;
+      const reachFromStolenRow = shapeCells(sword.shape, px, stolenRow, noTarget).map((c) => c.y);
+      expect(reachFromStolenRow).toContain(enemy!.y);
+    });
+
+    it("battle 2: the third chip shares neither name nor code with the first two", () => {
+      const [first, second, third] = TUTORIAL[1]!.hand;
+      expect(first).toBeDefined();
+      expect(second).toBeDefined();
+      expect(third).toBeDefined();
+      // Same lesson the queue beat relies on: adding the third chip to a
+      // selection already holding the first two must be rejected outright.
+      expect(canAddToSelection([first!, second!], third!, tuning.chips.HAND_SIZE)).toBe(false);
+      expect(third!.defId).not.toBe(first!.defId);
+      expect(third!.code).not.toBe(first!.code);
+      expect(third!.code).not.toBe('*');
+      expect(first!.code).not.toBe('*');
+    });
   });
 });
