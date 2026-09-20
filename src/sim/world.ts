@@ -39,6 +39,8 @@ export type GameState =
 export interface Cheats {
   god: boolean;
   aiEnabled: boolean;
+  /** Tutorial: damage lands but the player never drops below 1 HP (spec §4.3). */
+  noKo?: boolean;
 }
 
 export interface WorldOptions {
@@ -51,6 +53,8 @@ export interface WorldOptions {
   folder?: FolderId | readonly FolderChip[];
   /** Skip the intro and start in ACTION with the hand dealt (tests). */
   skipIntro?: boolean;
+  /** Tutorial: the exact starting hand by slot instead of a dealt one (spec §4.4). */
+  hand?: readonly (FolderChip | null)[];
 }
 
 /** States in which the battle simulation (enemies, attacks, timers) is frozen. */
@@ -105,6 +109,7 @@ export class World implements EnemyContext, AttackContext {
   private mettikTurnId: number | null = null;
   private nextEnemyId = 100;
   private attackIdCounter = 1;
+  private readonly handSpec: readonly (FolderChip | null)[] | null;
 
   constructor(options: WorldOptions) {
     this.seed = options.seed;
@@ -116,9 +121,10 @@ export class World implements EnemyContext, AttackContext {
     this.rngAi = root.fork('ai');
     this.player = new Player(this.occupancy, this.field, options.playerHp);
     this.chips = new ChipSystem(options.folder ?? 'basic', this.rngFolder);
+    this.handSpec = options.hand ?? null;
     this.spawnBattle();
     if (options.skipIntro) {
-      this.chips.dealHand();
+      this.dealStartingHand();
       this.state = 'ACTION';
     }
   }
@@ -275,7 +281,9 @@ export class World implements EnemyContext, AttackContext {
     // Hits on an invulnerable player are ignored entirely (GDD §9).
     if (p.invulnerable || p.invisTicks > 0) return false;
     attack.hitIds.add(p.id);
-    const amount = this.cheats.god ? 0 : damage;
+    let amount = this.cheats.god ? 0 : damage;
+    // Tutorial: the hit lands and shows, but never kills (spec §4.3).
+    if (this.cheats.noKo) amount = Math.min(amount, Math.max(0, p.hp - 1));
     p.takeHit(amount, this.tick);
     this.events.push({ type: 'damaged', targetId: p.id, amount, x, y, hpLeft: p.hp });
     // A hit interrupts the chip; if it had not resolved yet, it is lost (GDD §6.5).
@@ -570,6 +578,16 @@ export class World implements EnemyContext, AttackContext {
     this.chips.toggleSelect(slot);
   }
 
+  private dealStartingHand(): void {
+    if (this.handSpec) this.chips.dealHandExact(this.handSpec);
+    else this.chips.dealHand();
+  }
+
+  /** Tutorial: a cassette arrives in this slot mid-battle (spec §4.4). */
+  dealChip(slot: number, spec: FolderChip): boolean {
+    return this.chips.dealSlot(slot, spec) !== null;
+  }
+
   killAllEnemies(): void {
     for (const e of this.enemies) {
       if (!e.alive) continue;
@@ -589,7 +607,7 @@ export class World implements EnemyContext, AttackContext {
         if (this.stateElapsed >= secondsToTicks(tuning.fx.INTRO_TIME)) {
           // The hand is dealt into the rail and the battle starts; there is no
           // Custom Screen to stop for (GDD §7.6).
-          this.chips.dealHand();
+          this.dealStartingHand();
           this.setState('ACTION');
         }
         return;

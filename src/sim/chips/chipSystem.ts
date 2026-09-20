@@ -122,6 +122,33 @@ export class ChipSystem {
     this.hand = Array.from({ length: tuning.chips.HAND_SIZE }, () => this.draw());
   }
 
+  /** Tutorial (spec §4.4): the exact hand by slot; null leaves the slot empty. */
+  dealHandExact(spec: readonly (FolderChip | null)[]): void {
+    this.hand = new Array<ChipInstance | null>(tuning.chips.HAND_SIZE).fill(null);
+    for (let i = 0; i < Math.min(spec.length, this.hand.length); i++) {
+      const want = spec[i];
+      if (want) this.dealSlot(i, want);
+    }
+  }
+
+  /**
+   * Takes the named chip out of the draw pile and puts it in an empty slot,
+   * stamped with a new deal serial so the rail flies the cassette in (GDD §7.5).
+   * Returns null when the slot is taken or the pile has no such chip.
+   */
+  dealSlot(slot: number, spec: FolderChip): ChipInstance | null {
+    if (slot < 0 || slot >= this.hand.length || this.hand[slot] !== null) return null;
+    const at = this.drawPile.findIndex(
+      (c, i) => i >= this.drawIndex && c.defId === spec.defId && c.code === spec.code,
+    );
+    if (at < 0) return null;
+    const [chip] = this.drawPile.splice(at, 1) as [ChipInstance];
+    chip.state = 'hand';
+    chip.deal = ++this.deals;
+    this.hand[slot] = chip;
+    return chip;
+  }
+
   /** The next chips of the draw queue, for the preview strip (GDD §7.5). */
   drawPreview(n: number): ChipInstance[] {
     return this.drawPile.slice(this.drawIndex, this.drawIndex + Math.max(0, n));
