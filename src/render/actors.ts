@@ -5,6 +5,7 @@ import type { Enemy } from '../sim/enemies/enemyBase';
 import type { Player } from '../sim/player';
 import { CREATURE_SIZE, generateCreature, type CreatureBitmap } from './creatureGen';
 import { CELL_DEPTH, CELL_WIDTH, cellToWorld } from './field';
+import { hologramMotion } from './hologramMotion';
 import { PixelSprite } from './pixelSprite';
 import { playerBitmap } from './playerSprite';
 import { ENEMY_ART, spriteArt } from './spriteArt';
@@ -33,6 +34,7 @@ export interface SpriteFrame {
 const from = new THREE.Vector3();
 const to = new THREE.Vector3();
 const anchor = new THREE.Vector3();
+const motionFrame = { leanX: 0, pitch: 0, distortion: 0 };
 
 function slideAnchor(
   prevX: number,
@@ -44,15 +46,21 @@ function slideAnchor(
   alpha: number,
   dt: number,
 ): THREE.Vector3 {
-  const elapsed = (tick - lastMoveTick + alpha) * dt;
-  const t = Math.min(1, Math.max(0, elapsed / Math.max(1e-6, tuning.player.MOVE_VISUAL_TIME)));
+  const t = moveProgress(prevX, prevY, x, y, lastMoveTick, tick, alpha, dt);
   // Ease-out keeps the "snap" feel of MMBN while still reading as motion.
   const k = 1 - (1 - t) * (1 - t);
   cellToWorld(prevX, prevY, from);
   cellToWorld(x, y, to);
+  from.z += FOOT_OFFSET * CELL_DEPTH;
+  to.z += FOOT_OFFSET * CELL_DEPTH;
   anchor.lerpVectors(from, to, k);
-  anchor.z += FOOT_OFFSET * CELL_DEPTH;
   return anchor;
+}
+
+function moveProgress(prevX: number, prevY: number, x: number, y: number, lastMoveTick: number, tick: number, alpha: number, dt: number): number {
+  if (prevX === x && prevY === y) return 1;
+  const elapsed = (tick - lastMoveTick + alpha) * dt;
+  return Math.min(1, Math.max(0, elapsed / Math.max(1e-6, tuning.player.MOVE_VISUAL_TIME)));
 }
 
 function flashing(lastHitTick: number, tick: number): boolean {
@@ -70,25 +78,43 @@ const ENEMY_ART_WIDTH = 1.0;
 export class PlayerView {
   private readonly pixels: PixelSprite;
   readonly sprite: THREE.Sprite;
+  readonly reflection: THREE.Mesh;
+  readonly echo: THREE.Sprite;
+  readonly halo: THREE.Points;
   private readonly widthShare: number;
 
   constructor() {
     const art = spriteArt('player');
     this.pixels = new PixelSprite(art ?? playerBitmap(), 'phosphor');
     this.sprite = this.pixels.sprite;
+    this.reflection = this.pixels.reflection;
+    this.echo = this.pixels.echo;
+    this.halo = this.pixels.halo;
     this.widthShare = art ? PLAYER_ART_WIDTH : tuning.battleVisual.SPRITE_CELL_FRAC * 0.8;
   }
 
   update(player: Player, tick: number, alpha: number, dt: number, usingChip: boolean, frame: SpriteFrame): void {
     const a = slideAnchor(player.prevX, player.prevY, player.x, player.y, player.lastMoveTick, tick, alpha, dt);
+    const progress = moveProgress(player.prevX, player.prevY, player.x, player.y, player.lastMoveTick, tick, alpha, dt);
+    const motion = hologramMotion(player.x - player.prevX, player.y - player.prevY, progress, motionFrame);
     this.pixels.place(a, CELL_WIDTH * this.widthShare, frame.camera, frame.width, frame.height, usingChip ? 1 : 0);
     this.sprite.renderOrder = rowRenderOrder(player.y);
+    this.pixels.setHologram(motion.distortion, (tick + alpha) * dt, motion.leanX, motion.pitch);
+    this.halo.renderOrder = this.sprite.renderOrder + 0.2;
+    this.pixels.setEcho(from, progress);
     // Paralysis flickers like a hit.
     this.pixels.setFlash(flashing(player.lastHitTick, tick) || (player.paralyzeTicks > 0 && Math.floor(tick / 4) % 2 === 0));
     // Blink while invulnerable.
     const blinkTicks = Math.max(1, Math.round(tuning.sim.SIM_HZ / Math.max(1, tuning.fx.IFRAME_BLINK_HZ) / 2));
     this.sprite.visible = !player.invulnerable || Math.floor(tick / blinkTicks) % 2 === 0;
+    this.pixels.reflection.visible = this.sprite.visible && player.alive;
+    this.pixels.echo.visible &&= this.sprite.visible;
+    this.halo.visible = this.sprite.visible && player.alive && motion.distortion > 0.02;
     this.pixels.setDissolve(!player.alive ? 0.6 : player.invisTicks > 0 ? 0.5 : 0);
+  }
+
+  dispose(): void {
+    this.pixels.dispose();
   }
 }
 
@@ -111,6 +137,9 @@ function creature(seed: number, size: number): CreatureBitmap {
 export class EnemyView {
   private readonly pixels: PixelSprite;
   readonly sprite: THREE.Sprite;
+  readonly reflection: THREE.Mesh;
+  readonly echo: THREE.Sprite;
+  readonly halo: THREE.Points;
   private readonly phase: number;
   private readonly widthShare: number;
 
@@ -120,12 +149,17 @@ export class EnemyView {
     const art = artId ? spriteArt(artId) : null;
     this.pixels = new PixelSprite(art ?? creature(ENEMY_SEEDS[enemy.kind], boss ? BOSS_SIZE : CREATURE_SIZE), 'red');
     this.sprite = this.pixels.sprite;
+    this.reflection = this.pixels.reflection;
+    this.echo = this.pixels.echo;
+    this.halo = this.pixels.halo;
     this.widthShare = (art ? ENEMY_ART_WIDTH : tuning.battleVisual.SPRITE_CELL_FRAC) * (boss ? BOSS_WIDTH : 1);
     this.phase = enemy.id * 1.7;
   }
 
   update(enemy: Enemy, tick: number, alpha: number, dt: number, frame: SpriteFrame): void {
     const a = slideAnchor(enemy.prevX, enemy.prevY, enemy.x, enemy.y, enemy.lastMoveTick, tick, alpha, dt);
+    const progress = moveProgress(enemy.prevX, enemy.prevY, enemy.x, enemy.y, enemy.lastMoveTick, tick, alpha, dt);
+    const motion = hologramMotion(enemy.x - enemy.prevX, enemy.y - enemy.prevY, progress, motionFrame);
     const time = (tick + alpha) / tuning.sim.SIM_HZ;
     let lift = Math.sin(time * Math.PI * 2 * IDLE_BOB_HZ + this.phase) > 0.3 ? 1 : 0;
     let flash = flashing(enemy.lastHitTick, tick);
@@ -141,12 +175,18 @@ export class EnemyView {
 
     this.pixels.place(a, CELL_WIDTH * this.widthShare, frame.camera, frame.width, frame.height, lift);
     this.sprite.renderOrder = rowRenderOrder(enemy.y);
+    this.pixels.setHologram(motion.distortion, time, motion.leanX, motion.pitch);
+    this.halo.renderOrder = this.sprite.renderOrder + 0.2;
+    this.pixels.setEcho(from, progress);
     // Paralysis: a steady flicker.
     if (enemy.paralyzeTicks > 0 && Math.floor(tick / 4) % 2 === 0) flash = true;
     this.pixels.setFlash(flash);
     const sinceHit = (tick - enemy.lastHitTick + alpha) / tuning.sim.SIM_HZ;
     this.pixels.setRipple(sinceHit >= 0 && sinceHit < HIT_RIPPLE_TIME ? 1 - sinceHit / HIT_RIPPLE_TIME : 0, time);
     if (enemy.offField) this.sprite.visible = false;
+    this.pixels.reflection.visible = this.sprite.visible && enemy.alive && !enemy.offField;
+    this.pixels.echo.visible &&= this.sprite.visible && !enemy.offField;
+    this.halo.visible = this.sprite.visible && enemy.alive && !enemy.offField && motion.distortion > 0.02;
     this.pixels.setDissolve(enemy.alive ? 0 : deathProgress(enemy.deathTick, tick, alpha, dt));
   }
 

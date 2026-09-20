@@ -48,7 +48,7 @@ export class SceneRenderer {
     for (const x of [min.x, max.x]) {
       this.corners.push(new THREE.Vector3(x, 0, min.z), new THREE.Vector3(x, 0, max.z), new THREE.Vector3(x, max.y, min.z));
     }
-    this.scene.add(this.playerView.sprite, this.fx.group);
+    this.scene.add(this.playerView.sprite, this.playerView.reflection, this.playerView.echo, this.playerView.halo, this.fx.group);
   }
 
   private fitCamera(w: number, h: number): void {
@@ -112,16 +112,17 @@ export class SceneRenderer {
 
   /** Sprite art arrived: rebuild the views so they pick it up. */
   refreshArt(): void {
-    this.scene.remove(this.playerView.sprite);
+    this.scene.remove(this.playerView.sprite, this.playerView.reflection, this.playerView.echo, this.playerView.halo);
+    this.playerView.dispose();
     this.playerView = new PlayerView();
-    this.scene.add(this.playerView.sprite);
+    this.scene.add(this.playerView.sprite, this.playerView.reflection, this.playerView.echo, this.playerView.halo);
     this.reset();
   }
 
   /** Drops all per-battle views (called when a new World is created). */
   reset(): void {
     for (const v of this.enemyViews.values()) {
-      this.scene.remove(v.sprite);
+      this.scene.remove(v.sprite, v.reflection, v.echo, v.halo);
       v.dispose();
     }
     this.enemyViews.clear();
@@ -137,13 +138,13 @@ export class SceneRenderer {
       if (!view) {
         view = new EnemyView(e);
         this.enemyViews.set(e.id, view);
-        this.scene.add(view.sprite);
+        this.scene.add(view.sprite, view.reflection, view.echo, view.halo);
       }
       view.update(e, world.tick, alpha, dt, frame);
     }
     for (const [id, view] of this.enemyViews) {
       if (live.has(id)) continue;
-      this.scene.remove(view.sprite);
+      this.scene.remove(view.sprite, view.reflection, view.echo, view.halo);
       view.dispose();
       this.enemyViews.delete(id);
     }

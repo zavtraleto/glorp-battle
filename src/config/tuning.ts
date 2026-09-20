@@ -12,7 +12,7 @@ export const DEFAULT_TUNING = {
     PLAYER_MAX_HP: 100,
     PLAYER_START_X: 1,
     PLAYER_START_Y: 4,
-    MOVE_VISUAL_TIME: 0.066,
+    MOVE_VISUAL_TIME: 0.09,
     MOVE_COOLDOWN: 0.1,
     PLAYER_FLINCH_TIME: 0.4,
     PLAYER_IFRAMES: 2.0,
@@ -179,6 +179,12 @@ export const DEFAULT_TUNING = {
     ACTIVE_FILL: 0.25,
     /** Creature sprite width as a share of a cell; texels are then rounded to whole CRT pixels. */
     SPRITE_CELL_FRAC: 0.95,
+    /** Colour-preserving dimming of character projections. */
+    HOLO_BRIGHTNESS: 0.72,
+    /** Strength of the striped floor projection. */
+    HOLO_REFLECTION_OPACITY: 0.48,
+    /** Strength of the trail during a cell change. */
+    HOLO_ECHO_OPACITY: 0.28,
     DANGER_PULSE_HZ: 6,
     /** Hit stripe, then the flickering afterglow, seconds. */
     ATTACK_CELL_TIME: 0.15,
