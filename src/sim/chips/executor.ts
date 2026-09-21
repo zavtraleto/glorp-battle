@@ -7,6 +7,8 @@ import type { ChipInstance } from './chipSystem';
 
 export interface ActiveChip {
   readonly chip: ChipInstance;
+  /** Hand slot this chip left when the chain started it. */
+  readonly slot: number;
   readonly def: ChipDef;
   readonly startTick: number;
   readonly hitTick: number;
@@ -19,9 +21,9 @@ export function useTicks(def: ChipDef): number {
   return Math.max(1, secondsToTicks(tuning.chips[key]));
 }
 
-export function startChip(chip: ChipInstance, tick: number): ActiveChip {
+export function startChip(chip: ChipInstance, slot: number, tick: number): ActiveChip {
   const def = CHIPS[chip.defId];
   const total = useTicks(def);
   const hitDelay = def.kind !== 'attack' ? 0 : Math.min(total, secondsToTicks(tuning.chips.CHIP_HIT_FRAME));
-  return { chip, def, startTick: tick, hitTick: tick + hitDelay, endTick: tick + total, resolved: false };
+  return { chip, slot, def, startTick: tick, hitTick: tick + hitDelay, endTick: tick + total, resolved: false };
 }

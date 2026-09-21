@@ -53,6 +53,8 @@ export interface ChipDef {
   power: number | null;
   kind: 'attack' | 'support' | 'field';
   useTime: UseTimeGroup;
+  /** Seconds before this chip's spent slot refills; the common tuning is used when omitted. */
+  cooldown?: number;
   /** Codes this chip can come with. */
   codes: readonly ChipCode[];
   rarity: Rarity;

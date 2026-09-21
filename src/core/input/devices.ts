@@ -18,7 +18,7 @@ function isTextField(target: EventTarget | null): boolean {
   return target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement;
 }
 
-/** Keys that fire the first chip of the Attack Queue (GDD §12). */
+/** Keys that launch the selected Attack Queue (GDD §12). */
 const CHIP_KEYS = new Set(['Space', 'KeyF']);
 /** Digits 1..5 pick the chip in that hand slot. */
 const SLOT_KEYS = 5;

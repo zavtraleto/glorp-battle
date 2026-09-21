@@ -15,6 +15,8 @@ export type SimEvent =
   | { type: 'stateChanged'; from: string; to: string }
   | { type: 'chipUsed'; defId: ChipId; x: number; y: number }
   | { type: 'chipInterrupted'; defId: ChipId }
+  /** Frozen-chain cartridges that did not resolve and returned to ready. */
+  | { type: 'chipChainCancelled'; chips: { slot: number; deal: number }[] }
   /** Visual footprint of a resolved chip; `cells` are the panels it swept or hit. */
   | { type: 'chipEffect'; defId: ChipId; shape: ShapeKind; x: number; fromY: number; cells: Cell[]; toY: number }
   | { type: 'healed'; amount: number; x: number; y: number }
@@ -32,7 +34,5 @@ export type SimEvent =
   | { type: 'enemyWarped'; id: EntityId; fromX: number; fromY: number; x: number; y: number }
   /** HeatShot burst: the hit panel plus the panel behind it. */
   | { type: 'explosion'; cells: Cell[] }
-  /** The hand refilled its spent slots (GDD §5). */
-  | { type: 'handRefreshed'; refreshes: number }
   /** The draw pile ran dry and the spent chips shuffled back in (decision 2026-09-18 А). */
   | { type: 'drawReshuffled'; count: number };

@@ -23,7 +23,6 @@ export interface DebugActions {
   killAll(): void;
   setPlayerHp(hp: number): void;
   forceAttack(): void;
-  advanceRefresh(): void;
   giveChip(id: ChipId): void;
   /** Battle field look (BATTLE_VISUAL.md §10). */
   setCellState(x: number, y: number, state: DebugCellState | 'NONE'): void;
@@ -72,9 +71,11 @@ const RANGES: Record<string, [number, number, number]> = {
   CHIP_ACTIVE_PUSH: [0, 0.5, 0.01],
   CHIP_TILT_DEG: [0, 60, 1],
   CHIP_ACTIVE_GLOW: [0, 2, 0.05],
+  CHIP_CANCEL_FLASH_TIME: [0, 2, 0.05],
   HUD_BAND: [0, 0.3, 0.01],
   LAYOUT_DRAW: [0, 0.12, 0.01],
-  REFRESH_AT: [1, 6, 1],
+  CHIP_CHAIN_DELAY: [0, 1, 0.01],
+  CHIP_REFILL_COOLDOWN: [0, 10, 0.1],
   DRAW_PREVIEW: [0, 6, 1],
   HAND_SIZE: [3, 8, 1],
 };
@@ -157,7 +158,6 @@ export class DebugPanel {
     cf.add(a.cheats, 'aiEnabled').name('enemy AI');
     cf.add({ kill: () => a.killAll() }, 'kill').name('kill all enemies');
     cf.add({ force: () => a.forceAttack() }, 'force').name('force enemy attack');
-    cf.add({ step: () => a.advanceRefresh() }, 'step').name('advance refresh counter');
     const give = { chip: 'cannon' as ChipId };
     cf.add(give, 'chip', Object.keys(CHIPS)).name('chip to give');
     cf.add({ give: () => a.giveChip(give.chip) }, 'give').name('add chip to queue');

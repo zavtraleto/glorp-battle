@@ -321,6 +321,7 @@ export class Terminal {
       const shape = CHIPS[e.defId].shape.t;
       this.shakeCabinet(shape === 'near' ? SHAKE.sword : SHAKE.chip);
     }
+    if (e.type === 'chipChainCancelled') this.rail.flashCancelled(e.chips);
     if (e.type === 'bombLanded') this.shakeCabinet(SHAKE.bomb);
     if (e.type === 'damaged' && e.targetId !== PLAYER_ID && e.amount > 0) this.crt.edgeFlash(EDGE_HIT, EDGE.hit);
     // A kill is the big beat: bright edges, a flash and a jolt of the cabinet.
@@ -328,10 +329,6 @@ export class Terminal {
       this.crt.edgeFlash(EDGE_KILL, EDGE.kill);
       this.crt.flash();
       this.shakeCabinet(SHAKE.kill);
-    }
-    // Refresh is the beat that replaces the old Custom Screen pause (spec §11.4).
-    if (e.type === 'handRefreshed') {
-      this.crt.flash();
     }
     // A hit shakes the picture, not the cabinet (spec §5.3).
     if (e.type === 'damaged' && e.targetId === PLAYER_ID) {
@@ -375,7 +372,7 @@ export class Terminal {
     this.hud.draw({ labels: marks.labels, hp: marks.hp, status, menu, hint: hint?.line ?? null }, this.time);
 
     this.rail.update(dt);
-    this.syncIndicators(world, dt);
+    this.syncIndicators(dt);
     this.deck.update(dt);
     this.drawStrip.update(dt);
     this.pcb.update(dt, world.chips.hand.map((_, i) => this.opts.session.screen === 'BATTLE' && world.state === 'ACTION' && world.chips.slotState(i) === 'queued'));
@@ -497,8 +494,7 @@ export class Terminal {
         order: inBattle ? chips.queuePosition(i) : 0,
       })),
     );
-    // One preview tile lights per chip spent since the last Refresh (GDD §5).
-    this.drawStrip.set(inBattle ? chips.drawPreview(tuning.chips.DRAW_PREVIEW) : [], inBattle ? chips.usedSinceRefresh : 0);
+    this.drawStrip.set(inBattle ? chips.drawPreview(tuning.chips.DRAW_PREVIEW) : [], 0);
     const queued = !inBattle || this.mode() === 'MENU' ? [] : chips.attackChips().map((c) => chipName(c.defId));
     // The segment display prefers a tutorial hint over the usual "select a chip" fallback.
     const hintSeg = hint?.seg ?? null;
@@ -640,11 +636,11 @@ export class Terminal {
   }
 
   /** Drives the lights that stand in for the cabinet's old indicators (spec §4). */
-  private syncIndicators(world: World, dt: number): void {
+  private syncIndicators(dt: number): void {
     const active = this.rail.activePosition(this.activeChipAt);
     // The rail lies on the tilted panel: the light needs the cartridge in world space.
     if (active) this.rail.group.localToWorld(this.activeChipAt);
     this.lighting.setChipAt(active ? this.activeChipAt : null);
-    this.lighting.update(world.chips.usedSinceRefresh / Math.max(1, tuning.chips.REFRESH_AT), active, dt);
+    this.lighting.update(0, active, dt);
   }
 }

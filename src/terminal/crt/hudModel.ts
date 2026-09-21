@@ -1,7 +1,7 @@
 import type { MenuSpec } from './menuModel';
 
 // What the CRT HUD layer shows (spec §8): the player's HP in the bottom-left
-// corner, enemy HP segments and damage numbers. The Refresh countdown lives on
+// corner, enemy HP segments and damage numbers. Draw information lives on
 // the draw strip and the loaded chip on the segment display under the rail. Pure.
 
 export type LabelTone = 'damage' | 'playerDamage' | 'heal';

@@ -208,18 +208,27 @@ describe('chip use', () => {
     expect(events.filter((e) => e.type === 'healed').map((e) => (e as { amount: number }).amount)).toEqual([50, 20]);
   });
 
-  it('chips are used in queue order and consumed', () => {
+  it('one attack command uses the frozen chip selection in order', () => {
     const w = makeWorld();
     give(w, 'recover50', 'cannon');
     use(w);
     expect(w.activeChip?.def.id).toBe('recover50');
     run(w, useTicks(CHIPS.recover50));
-    use(w);
     expect(w.activeChip?.def.id).toBe('cannon');
     expect(w.chips.attackChips()).toHaveLength(0);
   });
 
-  it('locks movement for the use time and ignores presses while busy', () => {
+  it('does not allow the frozen selection to change while the chain is running', () => {
+    const w = makeWorld();
+    give(w, 'recover50', 'cannon', 'cannon');
+    const readyChip = w.chips.attackChips()[2]!;
+    const readySlot = w.chips.hand.indexOf(readyChip);
+    expect(w.selectChip(readySlot)).toBe(true);
+    use(w);
+    expect(w.selectChip(readySlot)).toBe(false);
+  });
+
+  it('locks movement for the whole automatic chain and ignores extra attack presses', () => {
     const w = makeWorld();
     give(w, 'cannon', 'cannon');
     use(w);
@@ -227,21 +236,144 @@ describe('chip use', () => {
     expect(w.player.x).toBe(1);
     expect(w.chips.attackChips()).toHaveLength(1);
     run(w, useTicks(CHIPS.cannon));
-    expect(w.activeChip).toBeNull();
+    expect(w.activeChip?.def.id).toBe('cannon');
+    step(w, [{ type: 'move', dir: 'left' }, { type: 'useChip' }]);
+    expect(w.player.x).toBe(1);
+    run(w, useTicks(CHIPS.cannon));
     step(w, [{ type: 'move', dir: 'left' }]);
     expect(w.player.x).toBe(0);
   });
 
-  it('a hit before the hit frame interrupts the chip and it is lost', () => {
+  it('does not allow movement on the exact tick between chained chips', () => {
+    const w = makeWorld();
+    give(w, 'cannon', 'cannon');
+    use(w);
+    run(w, useTicks(CHIPS.cannon) - 1);
+    step(w, [{ type: 'move', dir: 'left' }]);
+    expect(w.player.x).toBe(1);
+    expect(w.activeChip?.def.id).toBe('cannon');
+  });
+
+  it('honors a positive chain delay while keeping the player locked', () => {
+    tuning.chips.CHIP_CHAIN_DELAY = 0.2;
+    const w = makeWorld();
+    give(w, 'cannon', 'cannon');
+    use(w);
+    run(w, useTicks(CHIPS.cannon));
+    expect(w.activeChip).toBeNull();
+    step(w, [{ type: 'move', dir: 'left' }]);
+    expect(w.player.x).toBe(1);
+    run(w, T(0.2) - 2);
+    expect(w.activeChip).toBeNull();
+    run(w, 1);
+    expect(w.activeChip?.def.id).toBe('cannon');
+  });
+
+  it('a hit before the hit frame returns the chip and clears the frozen queue', () => {
     const w = makeWorld();
     const e = addEnemy(w, 1, 1);
-    give(w, 'cannon');
+    give(w, 'cannon', 'cannon');
+    const [fired, waiting] = w.chips.attackChips();
+    const firedSlot = w.chips.hand.indexOf(fired!);
+    const waitingSlot = w.chips.hand.indexOf(waiting!);
     w.spawnAttack(new Shockwave(77, 1, 4, w.tick + 1));
     use(w);
     run(w, T(1));
     expect(e.hp).toBe(200);
     expect(w.chips.attackChips()).toHaveLength(0);
+    expect(w.chips.hand[firedSlot]).toBe(fired);
+    expect(w.chips.hand[waitingSlot]).toBe(waiting);
+    expect(fired?.state).toBe('hand');
+    expect(w.chips.coolingCount).toBe(0);
+    const cancelled = events.find((ev) => ev.type === 'chipChainCancelled');
+    expect(cancelled?.type === 'chipChainCancelled' ? cancelled.chips.map((chip) => chip.slot) : []).toEqual([firedSlot, waitingSlot]);
     expect(events.some((ev) => ev.type === 'chipInterrupted')).toBe(true);
+  });
+
+  it('reserves the active slot for a possible return even with a zero cooldown', () => {
+    withChip({ ...CHIPS.cannon, cooldown: 0 } as ChipDef & { cooldown: number }, () => {
+      const w = makeWorld();
+      give(w, 'cannon');
+      const fired = w.chips.attackChips()[0]!;
+      const slot = w.chips.hand.indexOf(fired);
+      use(w);
+      // Give the zero cooldown a refill opportunity before interrupting the
+      // still-unresolved cannon.
+      run(w, 1);
+      const hit = { id: -76, kind: 'instant', hitIds: new Set<number>(), done: true, update: () => undefined };
+      expect(w.hitPlayerAt(hit, w.player.x, w.player.y, 1)).toBe(true);
+      expect(w.chips.hand[slot]).toBe(fired);
+      expect(fired.state).toBe('hand');
+      expect(w.chips.coolingCount).toBe(0);
+    });
+  });
+
+  it('a hit after the hit frame spends the active chip and cancels only chips that have not started', () => {
+    const w = makeWorld();
+    const e = addEnemy(w, 1, 1);
+    give(w, 'cannon', 'cannon');
+    const fired = w.chips.attackChips()[0]!;
+    const firedSlot = w.chips.hand.indexOf(fired);
+    const second = w.chips.attackChips()[1]!;
+    const secondSlot = w.chips.hand.indexOf(second);
+    use(w);
+    run(w, hitFrame());
+    expect(e.hp).toBe(160);
+    w.spawnAttack(new Shockwave(78, 1, 4, w.tick + 1));
+    run(w, 1);
+    expect(w.activeChip).toBeNull();
+    expect(w.chips.attack).toEqual([]);
+    expect(w.chips.hand[firedSlot]).toBeNull();
+    expect(w.chips.hand[secondSlot]).toBe(second);
+    expect(w.chips.slotState(secondSlot)).toBe('ready');
+    expect(w.chips.hand.includes(fired)).toBe(false);
+    expect(fired.state).toBe('used');
+    const cancelled = events.find((ev) => ev.type === 'chipChainCancelled');
+    expect(cancelled?.type === 'chipChainCancelled' ? cancelled.chips.map((chip) => chip.slot) : []).toEqual([secondSlot]);
+  });
+
+  it('cancels and signals every remaining chip when hit during the chain delay', () => {
+    tuning.chips.CHIP_CHAIN_DELAY = 0.2;
+    const w = makeWorld();
+    give(w, 'cannon', 'cannon');
+    const waiting = w.chips.attackChips()[1]!;
+    const waitingSlot = w.chips.hand.indexOf(waiting);
+    use(w);
+    run(w, useTicks(CHIPS.cannon));
+    expect(w.activeChip).toBeNull();
+    w.spawnAttack(new Shockwave(79, 1, 4, w.tick + 1));
+    run(w, 1);
+    expect(w.chips.attack).toEqual([]);
+    expect(w.chips.hand[waitingSlot]).toBe(waiting);
+    const cancelled = events.find((ev) => ev.type === 'chipChainCancelled');
+    expect(cancelled?.type === 'chipChainCancelled' ? cancelled.chips.map((chip) => chip.slot) : []).toEqual([waitingSlot]);
+  });
+
+  it('refills each spent slot two seconds after that chip starts', () => {
+    const w = makeWorld();
+    give(w, 'cannon');
+    const fired = w.chips.attackChips()[0]!;
+    const slot = w.chips.hand.indexOf(fired);
+    use(w);
+    expect(w.chips.hand[slot]).toBeNull();
+    run(w, T(2) - 1);
+    expect(w.chips.hand[slot]).toBeNull();
+    run(w, 1);
+    expect(w.chips.hand[slot]).not.toBeNull();
+  });
+
+  it('allows a chip definition to override the common refill cooldown', () => {
+    withChip({ ...CHIPS.cannon, cooldown: 0.5 } as ChipDef & { cooldown: number }, () => {
+      const w = makeWorld();
+      give(w, 'cannon');
+      const fired = w.chips.attackChips()[0]!;
+      const slot = w.chips.hand.indexOf(fired);
+      use(w);
+      run(w, T(0.5) - 1);
+      expect(w.chips.hand[slot]).toBeNull();
+      run(w, 1);
+      expect(w.chips.hand[slot]).not.toBeNull();
+    });
   });
 
   it('cannot use chips while flinched or with an empty queue', () => {
@@ -424,10 +556,8 @@ describe('new attack chips', () => {
     use(w);
     expect(w.player.hp).toBe(15);
     run(w, useTicks(CHIPS.recov10));
-    use(w);
     expect(w.player.hp).toBe(95);
     run(w, useTicks(CHIPS.recov80));
-    use(w);
     expect(w.player.invisTicks).toBe(T(tuning.chips.INVIS_TIME));
   });
 });
