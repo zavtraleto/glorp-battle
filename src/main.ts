@@ -195,8 +195,7 @@ const loop = new GameLoop(
         extra:
           (benchReport ? `${benchReport}\n` : '') +
           `player ${p.x},${p.y} hp ${p.hp} hits ${p.hitsTaken} ${p.flinched ? 'FLINCH ' : ''}${p.invulnerable ? 'IFR' : ''}\n` +
-          `refresh ${world.chips.usedSinceRefresh}/${tuning.chips.REFRESH_AT} (${world.chips.refreshes})
-` +
+          `cooling ${world.chips.coolingCount}\n` +
           `draw ${world.chips.drawRemaining} hand ${world.chips.hand.filter(Boolean).length}/${world.chips.hand.length}` +
           ` attack ${world.chips.attack.length} used ${world.chips.count('used')}` +
           ` chip ${world.activeChip ? world.activeChip.def.id : '-'}\n` +
@@ -226,7 +225,6 @@ const panel = new DebugPanel(loop.clock, {
     const p = session.world.player;
     p.hp = Math.max(0, Math.min(p.maxHp, Math.round(hp)));
   },
-  advanceRefresh: () => session.world.advanceRefresh(),
   giveChip: (defId) => {
     // Debug chips get uids outside the folder range and a wildcard code.
     session.world.giveChip({ uid: debugChipUid++, defId, code: '*', state: 'queued', deal: 0 });

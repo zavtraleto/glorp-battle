@@ -6,7 +6,7 @@ import { rectToWorld, type TerminalLayout } from '../layout';
 import type { ChipCode, ChipId } from '../../data/chips';
 
 // Draw queue strip (spec §11.3): the next chips of the folder, small, at the
-// left end of the row under the rail. It also counts down to the Refresh: one
+// left end of the row under the rail.
 // tile lights up in its code colour for every chip spent since the last one,
 // so when all are lit they are about to drop into the hand (GDD §5).
 
@@ -138,7 +138,7 @@ export class DrawStrip {
 
   /**
    * Shows the next chips of the draw queue; `lit` of them glow, one per chip
-   * spent since the last Refresh. Fewer chips than the strip holds is fine.
+   * highlighted by the caller. Fewer chips than the strip holds is fine.
    */
   set(chips: readonly DrawChip[], lit: number): void {
     this.lit = lit;

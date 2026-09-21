@@ -114,7 +114,7 @@ const step4: TutorialStep = {
     enemies: [{ kind: 'canodron', x: 1, y: 0, level: 1 }, { kind: 'mettik', x: 0, y: 2, level: 1 }],
   },
   // Cannon (40) does not drop Canodron (60) in one shot, so the hand runs out
-  // and Refresh happens on its own — no lesson needed for it.
+  // and spent slots refill on their own — no lesson needed for it.
   folder: [
     chip('cannon', 'A'), chip('cannon', 'A'), chip('sword', 'E'), chip('panlgrab', 'A'), chip('shotgun', 'B'),
     chip('cannon', 'A'), chip('shotgun', 'B'),

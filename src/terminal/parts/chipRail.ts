@@ -5,7 +5,7 @@ import { Spring } from '../anim/spring';
 import { Cartridge } from '../chips/cartridge';
 import type { SlotState } from '../../sim/chips/chipSystem';
 import { ejectPose, type EjectAim } from '../chips/ejectArc';
-import { activeSlot, railChanges } from '../chips/railPlan';
+import { activeSlot, cancelFlashLevel, railChanges, returningCartIndex } from '../chips/railPlan';
 import { attractLevel } from '../chips/railAttract';
 import { CHIP_TEXELS_H, CHIP_TEXELS_W, RAIL_LEFT, RAIL_SLOTS, RAIL_SPAN } from '../chips/railLayout';
 import { rectToWorld, type TerminalLayout } from '../layout';
@@ -38,6 +38,8 @@ type Phase = 'load' | 'idle' | 'eject';
 
 interface Cart {
   cart: Cartridge;
+  /** Draw serial identifies this physical cartridge while it moves. */
+  deal: number;
   slot: number;
   phase: Phase;
   t: number;
@@ -48,6 +50,7 @@ interface Cart {
   origin: THREE.Vector3;
   drift: number;
   spin: number;
+  cancelFlashLeft: number;
 }
 
 const COLOR = {
@@ -56,6 +59,8 @@ const COLOR = {
   contactOn: new THREE.Color(0xffe9a8),
   /** Queued: warm yellow, the colour of action across the cabinet. */
   glowSelected: new THREE.Color(0xffd45e),
+  /** A selected chip was cancelled before its effect resolved. */
+  glowCancelled: new THREE.Color(0xff2a3a),
   /** Could join the series being built: cool neutral light, never yellow. */
   glowPossible: new THREE.Color(0xc6d2dc),
   /** The faint "pick me" breathing of an idle rail. */
@@ -261,7 +266,10 @@ export class ChipRail {
       this.slots[slot] = next[slot] ?? null;
       const chip = slots[slot]?.chip;
       if (change.load && chip) {
-        this.carts.push(this.makeCart(chip, slot, loaded++ * tuning.terminal.LOAD_STAGGER));
+        const delay = loaded++ * tuning.terminal.LOAD_STAGGER;
+        const returningAt = returningCartIndex(this.carts, chip.deal);
+        if (returningAt >= 0) this.returnCart(this.carts[returningAt]!, slot, delay);
+        else this.carts.push(this.makeCart(chip, slot, delay));
         this.flashContacts(slot);
       }
     }
@@ -272,6 +280,14 @@ export class ChipRail {
     for (const c of this.carts) this.detach(c);
     this.carts = [];
     this.slots = new Array<number | null>(RAIL_SLOTS).fill(null);
+  }
+
+  /** Blinks the bodies of chips that were returned from a cancelled chain. */
+  flashCancelled(chips: readonly { deal: number }[]): void {
+    for (const chip of chips) {
+      const cart = this.carts.find((candidate) => candidate.deal === chip.deal);
+      if (cart) cart.cancelFlashLeft = tuning.terminal.CHIP_CANCEL_FLASH_TIME;
+    }
   }
 
   /** Battle only: with nothing queued for a while, the faces flash to call for a pick. */
@@ -298,8 +314,12 @@ export class ChipRail {
 
     for (const c of [...this.carts]) {
       c.t += dt;
+      c.cancelFlashLeft = Math.max(0, c.cancelFlashLeft - dt);
       const o = c.cart.object;
       const rest = this.slotPos[c.slot];
+      const cancelLeft = c.cancelFlashLeft;
+      const cancelled = cancelLeft > 0;
+      const cancelGlow = cancelFlashLevel(cancelLeft, t.CHIP_CANCEL_FLASH_TIME);
       switch (c.phase) {
         case 'load': {
           if (!rest) break;
@@ -308,6 +328,7 @@ export class ChipRail {
           c.pos.set(rest.x, rest.y, rest.z + (1 - k) * (1 - k) * LOAD_HEIGHT);
           o.position.copy(c.pos);
           o.scale.setScalar(0.7 + 0.3 * k);
+          if (cancelled) c.cart.setGlow(COLOR.glowCancelled, cancelGlow);
           if (k >= 1) this.land(c);
           break;
         }
@@ -337,7 +358,10 @@ export class ChipRail {
             this.activeAt.copy(o.position);
             this.hasActive = true;
           }
-          if (blocked) {
+          if (cancelled) {
+            c.cart.setTint(COLOR.tintPlain, COLOR.faceNormal);
+            c.cart.setGlow(COLOR.glowCancelled, cancelGlow);
+          } else if (blocked) {
             c.cart.setTint(COLOR.tintBlocked, COLOR.faceBlocked);
             c.cart.setGlow(COLOR.glowPossible, 0);
           } else if (isActive) {
@@ -357,6 +381,7 @@ export class ChipRail {
           break;
         }
         case 'eject': {
+          if (cancelled) c.cart.setGlow(COLOR.glowCancelled, cancelGlow);
           const lt = t.EJECT_LIFT_TIME;
           if (c.t < lt) {
             o.position.z = c.pos.z + EJECT_POP * (c.t / lt);
@@ -424,6 +449,17 @@ export class ChipRail {
     this.onEject?.(slot);
   }
 
+  /** Reverses a cancelled ejection without creating a duplicate cartridge. */
+  private returnCart(c: Cart, slot: number, delay: number): void {
+    c.slot = slot;
+    c.phase = 'load';
+    c.t = 0;
+    c.delay = delay;
+    c.lift.snap(0);
+    c.cart.object.rotation.set(0, 0, 0);
+    c.cart.setFlying(false);
+  }
+
   private land(c: Cart): void {
     c.phase = 'idle';
     c.lift.snap(0);
@@ -446,6 +482,7 @@ export class ChipRail {
     this.group.add(o);
     return {
       cart,
+      deal: chip.deal,
       slot,
       phase: 'load',
       t: 0,
@@ -455,6 +492,7 @@ export class ChipRail {
       origin: new THREE.Vector3(),
       drift: 0,
       spin: 0,
+      cancelFlashLeft: 0,
     };
   }
 

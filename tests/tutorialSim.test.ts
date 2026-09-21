@@ -51,7 +51,7 @@ describe('exact hand', () => {
     expect(w.dealChip(0, { defId: 'cannon', code: 'A' })).toBe(false);
   });
 
-  it('keeps dealing the rest of the folder on Refresh', () => {
+  it('keeps dealing the rest of the folder as spent slots refill', () => {
     const w = world([{ defId: 'cannon', code: 'A' }, null, null, null, null]);
     expect(w.chips.drawRemaining).toBe(FOLDER.length - 1);
   });

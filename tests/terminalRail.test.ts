@@ -3,7 +3,9 @@ import { CHIPS, type ChipId } from '../src/data/chips';
 import { CHIP_ICONS, ICON_PALETTE } from '../src/terminal/chips/chipIcons';
 import { Rng } from '../src/core/rng';
 import { ChipSystem } from '../src/sim/chips/chipSystem';
-import { activeSlot, railChanges } from '../src/terminal/chips/railPlan';
+import * as railPlan from '../src/terminal/chips/railPlan';
+
+const { activeSlot, railChanges } = railPlan;
 
 describe('activeSlot', () => {
   it('finds the first occupied slot', () => {
@@ -35,16 +37,37 @@ describe('railChanges', () => {
   });
 
   it('treats a chip re-dealt into the same slot as eject + load', () => {
-    // One chip: fired, then reshuffled straight back into slot 0 by the Refresh.
+    // One chip: fired, then reshuffled straight back when its slot cooldown ends.
     const cs = new ChipSystem([{ defId: 'cannon', code: 'A' }], new Rng(1));
     cs.dealHand();
     const keys = () => cs.hand.map((c) => (c ? c.deal : null));
     const uid = cs.hand[0]?.uid;
     const before = keys();
     cs.toggleSelect(0);
-    cs.takeNext();
-    cs.refresh();
+    cs.startAttack();
+    cs.takeNext(0);
+    cs.finishAttack();
+    cs.refillReady(120);
     expect(cs.hand[0]?.uid).toBe(uid);
     expect(railChanges(before, keys())).toEqual([{ slot: 0, eject: true, load: true }]);
+  });
+});
+
+describe('cancel flash', () => {
+  it('blinks the cartridge body three times over the configured duration', () => {
+    const level = (railPlan as unknown as { cancelFlashLevel?: (remaining: number, total: number) => number }).cancelFlashLevel;
+    expect(level).toBeTypeOf('function');
+    if (!level) return;
+    expect([0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0].map((left) => level(left, 0.6))).toEqual([1, 0, 1, 0, 1, 0, 0]);
+  });
+
+  it('reuses the same physical cartridge when a cancelled deal returns during eject', () => {
+    const returning = (railPlan as unknown as {
+      returningCartIndex?: (carts: readonly { deal: number; phase: string }[], deal: number) => number;
+    }).returningCartIndex;
+    expect(returning).toBeTypeOf('function');
+    if (!returning) return;
+    expect(returning([{ deal: 8, phase: 'idle' }, { deal: 4, phase: 'eject' }], 4)).toBe(1);
+    expect(returning([{ deal: 4, phase: 'idle' }], 4)).toBe(-1);
   });
 });

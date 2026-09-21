@@ -29,8 +29,6 @@ export const DEFAULT_TUNING = {
   chips: {
     /** Hand slots visible in the rail for the whole battle (GDD §5). */
     HAND_SIZE: 5,
-    /** Chips spent before the hand refills; the pacing knob of the whole battle. */
-    REFRESH_AT: 3,
     /** Chips of the draw queue shown under the rail. */
     DRAW_PREVIEW: 3,
     CHIP_USE_TIME_CANNON: 0.5,
@@ -38,6 +36,10 @@ export const DEFAULT_TUNING = {
     CHIP_USE_TIME_BOMB: 0.5,
     CHIP_USE_TIME_RECOVER: 0.5,
     CHIP_USE_TIME_FIELD: 0.4,
+    /** Pause between automatically chained chips. */
+    CHIP_CHAIN_DELAY: 0,
+    /** Default delay before a spent hand slot draws its replacement. */
+    CHIP_REFILL_COOLDOWN: 2.0,
     CHIP_HIT_FRAME: 0.1,
     BOMB_FLIGHT_TIME: 0.5,
     /** ZapRing paralysis (roguelite spec §4.3). */
@@ -271,6 +273,8 @@ export const DEFAULT_TUNING = {
     LOAD_TIME: 0.18,
     LOAD_STAGGER: 0.05,
     CONTACT_FLASH_TIME: 0.2,
+    /** Three red body pulses when a chip chain is cancelled before use. */
+    CHIP_CANCEL_FLASH_TIME: 1.2,
     /** Nothing queued this long in battle: the cassette faces start flashing to call for a pick (s). */
     RAIL_ATTRACT_DELAY: 1.5,
     /** One beat of those flashing patterns (s). */
@@ -280,7 +284,7 @@ export const DEFAULT_TUNING = {
 
 export type Tuning = typeof DEFAULT_TUNING;
 
-const STORAGE_KEY = 'glorp.tuning.v1';
+const STORAGE_KEY = "glorp.tuning.v1";
 
 function clone<T>(v: T): T {
   return JSON.parse(JSON.stringify(v)) as T;
@@ -290,13 +294,18 @@ export const tuning: Tuning = clone(DEFAULT_TUNING);
 
 /** Copies known keys from `src` into `dst`, ignoring unknown keys and type mismatches. */
 export function mergeTuning(dst: Tuning, src: unknown): void {
-  if (!src || typeof src !== 'object') return;
+  if (!src || typeof src !== "object") return;
   const d = dst as unknown as Record<string, Record<string, unknown>>;
-  for (const [group, values] of Object.entries(src as Record<string, unknown>)) {
+  for (const [group, values] of Object.entries(
+    src as Record<string, unknown>,
+  )) {
     const target = d[group];
-    if (!target || !values || typeof values !== 'object') continue;
-    for (const [key, value] of Object.entries(values as Record<string, unknown>)) {
-      if (key in target && typeof target[key] === typeof value) target[key] = value;
+    if (!target || !values || typeof values !== "object") continue;
+    for (const [key, value] of Object.entries(
+      values as Record<string, unknown>,
+    )) {
+      if (key in target && typeof target[key] === typeof value)
+        target[key] = value;
     }
   }
 }

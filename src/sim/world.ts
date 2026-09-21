@@ -102,6 +102,8 @@ export class World implements EnemyContext, AttackContext {
   bombs: PlayerBomb[] = [];
   /** Chip currently being used by the player (GDD §6.5). */
   activeChip: ActiveChip | null = null;
+  /** Earliest tick when the next chip in the frozen chain may start. */
+  private nextChipTick: number | null = null;
   chipsUsed = 0;
   /** Events emitted since the last drain. */
   events: SimEvent[] = [];
@@ -167,7 +169,7 @@ export class World implements EnemyContext, AttackContext {
 
   /** One tap on a hand slot: build or unbuild the Attack Queue (GDD §7.2). */
   selectChip(slot: number): boolean {
-    if (this.state !== 'ACTION') return false;
+    if (this.state !== 'ACTION' || this.chips.locked) return false;
     return this.chips.toggleSelect(slot);
   }
 
@@ -188,12 +190,6 @@ export class World implements EnemyContext, AttackContext {
     // BATTLE_START restarts its (short) timer; ACTION simply continues.
     this.setState(this.pausedFrom);
     this.pausedFrom = null;
-  }
-
-  /** Debug: fill the gauge instantly. */
-  /** Debug: brings the next Refresh one chip closer. */
-  advanceRefresh(): void {
-    this.chips.usedSinceRefresh = Math.min(tuning.chips.REFRESH_AT, this.chips.usedSinceRefresh + 1);
   }
 
   enemyAt(x: number, y: number): Enemy | null {
@@ -286,11 +282,26 @@ export class World implements EnemyContext, AttackContext {
     if (this.cheats.noKo) amount = Math.min(amount, Math.max(0, p.hp - 1));
     p.takeHit(amount, this.tick);
     this.events.push({ type: 'damaged', targetId: p.id, amount, x, y, hpLeft: p.hp });
-    // A hit interrupts the chip; if it had not resolved yet, it is lost (GDD §6.5).
+    // A hit interrupts the chain. An unresolved active chip returns to its slot (GDD §6.5).
+    const cancelledChips: { slot: number; deal: number }[] = [];
     if (this.activeChip) {
-      if (!this.activeChip.resolved) this.events.push({ type: 'chipInterrupted', defId: this.activeChip.def.id });
+      if (!this.activeChip.resolved) {
+        this.events.push({ type: 'chipInterrupted', defId: this.activeChip.def.id });
+        if (this.chips.restoreInterrupted(this.activeChip.chip, this.activeChip.slot)) {
+          cancelledChips.push({ slot: this.activeChip.slot, deal: this.activeChip.chip.deal });
+        }
+      }
       this.activeChip = null;
     }
+    if (this.chips.locked) {
+      this.nextChipTick = null;
+      const cancelledSlots = this.chips.cancelAttack();
+      for (const slot of cancelledSlots) {
+        const chip = this.chips.hand[slot];
+        if (chip) cancelledChips.push({ slot, deal: chip.deal });
+      }
+    }
+    if (cancelledChips.length > 0) this.events.push({ type: 'chipChainCancelled', chips: cancelledChips });
     return true;
   }
 
@@ -421,29 +432,47 @@ export class World implements EnemyContext, AttackContext {
   /** Starts the next queued chip if the player is free (no buffering, GDD §6.5). */
   private tryUseChip(): void {
     const p = this.player;
-    if (p.flinched || p.actionTicks > 0 || p.paralyzeTicks > 0 || this.activeChip) return;
-    const chip = this.chips.takeNext();
+    if (p.flinched || p.actionTicks > 0 || p.paralyzeTicks > 0 || this.activeChip || !this.chips.startAttack()) return;
+    const slot = this.chips.attack[0];
+    const chip = this.chips.takeNext(this.tick);
     if (!chip) return;
-    this.beginChip(chip);
+    this.beginChip(chip, slot ?? -1);
   }
 
-  private beginChip(chip: ChipInstance): void {
+  private beginChip(chip: ChipInstance, slot: number): void {
     const p = this.player;
-    const active = startChip(chip, this.tick);
+    const active = startChip(chip, slot, this.tick);
     this.activeChip = active;
     p.actionTicks = active.endTick - active.startTick;
     this.chipsUsed++;
     this.events.push({ type: 'chipUsed', defId: chip.defId, x: p.x, y: p.y });
+    if (active.hitTick <= this.tick) {
+      active.resolved = true;
+      this.resolveChip(active);
+    }
   }
 
   private updateActiveChip(): void {
     const a = this.activeChip;
-    if (!a) return;
-    if (!a.resolved && this.tick >= a.hitTick) {
-      a.resolved = true;
-      this.resolveChip(a);
+    if (a) {
+      if (!a.resolved && this.tick >= a.hitTick) {
+        a.resolved = true;
+        this.resolveChip(a);
+      }
+      if (this.tick < a.endTick) return;
+      this.activeChip = null;
+      if (this.chips.attack.length === 0) {
+        this.chips.finishAttack();
+        return;
+      }
+      this.nextChipTick = this.tick + secondsToTicks(tuning.chips.CHIP_CHAIN_DELAY);
     }
-    if (this.tick >= a.endTick) this.activeChip = null;
+    if (!this.chips.locked || this.nextChipTick === null || this.tick < this.nextChipTick) return;
+    const slot = this.chips.attack[0];
+    const chip = this.chips.takeNext(this.tick);
+    this.nextChipTick = null;
+    if (chip) this.beginChip(chip, slot ?? -1);
+    else this.chips.finishAttack();
   }
 
   private resolveChip(a: ActiveChip): void {
@@ -625,6 +654,16 @@ export class World implements EnemyContext, AttackContext {
 
     this.tick++;
     this.time += dt;
+    const reshufflesBeforeRefill = this.chips.reshuffles;
+    // Until its hit frame, the active chip may still be interrupted and must
+    // be able to return to the exact slot it came from.
+    const reservedChip = this.activeChip && !this.activeChip.resolved
+      ? { slot: this.activeChip.slot, uid: this.activeChip.chip.uid }
+      : null;
+    this.chips.refillReady(this.tick, reservedChip);
+    if (this.chips.reshuffles > reshufflesBeforeRefill) {
+      this.events.push({ type: 'drawReshuffled', count: this.chips.reshuffles });
+    }
     this.removeDeletedEnemies();
     this.field.update(this.tick, (x, y) => this.occupancy.isFree(x, y));
 
@@ -637,7 +676,7 @@ export class World implements EnemyContext, AttackContext {
       else if (c.type === 'useChip') this.tryUseChip();
       else if (c.type === 'selectChip') this.selectChip(c.slot);
     }
-    p.updateMovement(this.tick, moves, input.held);
+    p.updateMovement(this.tick, this.chips.locked ? [] : moves, this.chips.locked ? null : input.held);
     this.updateActiveChip();
     this.updateBombs();
 
@@ -662,15 +701,9 @@ export class World implements EnemyContext, AttackContext {
       this.attacks = [];
       this.bombs = [];
       this.activeChip = null;
+      this.nextChipTick = null;
+      this.chips.cancelAttack();
       this.setState('BATTLE_WON');
-    } else if (this.chips.refreshDue) {
-      // Refresh is an event, not a pause: the battle does not stop for it (GDD §5).
-      const reshufflesBefore = this.chips.reshuffles;
-      this.chips.refresh();
-      this.events.push({ type: 'handRefreshed', refreshes: this.chips.refreshes });
-      if (this.chips.reshuffles > reshufflesBefore) {
-        this.events.push({ type: 'drawReshuffled', count: this.chips.reshuffles });
-      }
     }
   }
 

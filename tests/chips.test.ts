@@ -119,25 +119,20 @@ describe('battle flow', () => {
     expect(w.chips.hand[slot]).toBeNull();
   });
 
-  it('refreshes the hand after REFRESH_AT chips, without leaving ACTION', () => {
+  it('refills a spent slot after its cooldown without leaving ACTION', () => {
     const w = new World({ seed: 1, battleIndex: 1, skipIntro: true, cheats: { god: true, aiEnabled: false } });
-    let fired = 0;
-    for (let i = 0; i < 400 && fired < tuning.chips.REFRESH_AT; i++) {
-      const slot = w.chips.hand.findIndex((c, j) => c !== null && w.chips.canSelect(j));
-      if (slot >= 0 && w.chips.attack.length === 0) step(w, [{ type: 'selectChip', slot }]);
-      const before = w.chips.count('used');
-      step(w, [{ type: 'useChip' }]);
-      if (w.chips.count('used') > before) fired++;
-    }
-    expect(fired).toBe(tuning.chips.REFRESH_AT);
+    const slot = w.chips.hand.findIndex((c) => c !== null);
+    step(w, [{ type: 'selectChip', slot }, { type: 'useChip' }]);
+    expect(w.chips.hand[slot]).toBeNull();
+    run(w, T(tuning.chips.CHIP_REFILL_COOLDOWN) - 1);
+    expect(w.chips.hand[slot]).toBeNull();
     run(w, 1);
     expect(w.state).toBe('ACTION');
-    expect(w.chips.usedSinceRefresh).toBe(0);
-    expect(w.chips.hand.every((c) => c !== null)).toBe(true);
+    expect(w.chips.hand[slot]).not.toBeNull();
   });
 
   it('reshuffles spent chips and emits drawReshuffled once the draw pile runs dry', () => {
-    // Small folder so a couple of Refreshes exhaust the draw pile.
+    // Small folder so several slot refills exhaust the draw pile.
     const smallFolder = Array.from({ length: 8 }, () => ({ defId: 'cannon' as const, code: 'A' as const }));
     const w = new World({
       seed: 1,
@@ -156,6 +151,7 @@ describe('battle flow', () => {
     }
     expect(w.chips.reshuffles).toBe(1);
     expect(seenReshuffled).toBe(true);
+    run(w, T(tuning.chips.CHIP_REFILL_COOLDOWN));
     expect(w.chips.hand.every((c) => c !== null)).toBe(true);
   });
 

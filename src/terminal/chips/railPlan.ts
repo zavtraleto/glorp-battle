@@ -26,3 +26,15 @@ export function railChanges(prev: readonly (number | null)[], next: readonly (nu
   });
   return out;
 }
+
+/** Three hard red pulses across a cancellation signal's remaining duration. */
+export function cancelFlashLevel(remaining: number, total: number): number {
+  if (remaining <= 0 || total <= 0) return 0;
+  const phase = Math.floor(((total - remaining) / total) * 6 + Number.EPSILON * 8);
+  return phase % 2 === 0 ? 1 : 0;
+}
+
+/** Finds the physical cartridge to reuse when the same deal returns mid-eject. */
+export function returningCartIndex(carts: readonly { deal: number; phase: string }[], deal: number): number {
+  return carts.findIndex((cart) => cart.deal === deal && cart.phase === 'eject');
+}
