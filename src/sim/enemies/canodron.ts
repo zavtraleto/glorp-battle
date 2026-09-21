@@ -29,6 +29,20 @@ export class Canodron extends Enemy {
     return this.state === 'TELEGRAPH' && this.locked ? laneCellsBelow(this.x, this.y + 1) : [];
   }
 
+  override counterWindowOpen(tick: number): boolean {
+    if (this.state !== 'TELEGRAPH' || !this.locked) return false;
+    const total = this.ticks(tuning.canodron.CANO_FIRE_DELAY);
+    const window = this.counterTicks(tuning.counter.COUNTER_WINDOW_CANODRON);
+    if (window === 0) return false;
+    const elapsed = tick - this.lockTick;
+    return elapsed >= Math.max(0, total - window) && elapsed < total;
+  }
+
+  protected override onCountered(): void {
+    this.cursorY = -1;
+    this.locked = false;
+  }
+
   override forceAttack(tick: number): void {
     if (!this.alive || this.state !== 'IDLE') return;
     this.startCursor(tick);
@@ -92,6 +106,7 @@ export class Canodron extends Enemy {
       case 'RECOVERY':
         if (this.elapsed(t) >= this.ticks(c.CANO_COOLDOWN)) this.setState('IDLE', t);
         return;
+      case 'STAGGER':
       case 'DEAD':
         return;
     }

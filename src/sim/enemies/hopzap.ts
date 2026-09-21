@@ -19,6 +19,15 @@ export class Hopzap extends Enemy {
     return this.state === 'TELEGRAPH' ? laneCellsBelow(this.x, this.y + 1) : [];
   }
 
+  override counterWindowOpen(tick: number): boolean {
+    if (this.state !== 'TELEGRAPH') return false;
+    const total = this.ticks(tuning.hopzap.HOP_TELEGRAPH);
+    const window = this.counterTicks(tuning.counter.COUNTER_WINDOW_BUNNY);
+    if (window === 0) return false;
+    const elapsed = this.elapsed(tick);
+    return elapsed >= Math.max(0, total - window) && elapsed < total;
+  }
+
   override forceAttack(tick: number): void {
     if (this.alive && this.state === 'IDLE') this.setState('TELEGRAPH', tick);
   }
@@ -66,6 +75,7 @@ export class Hopzap extends Enemy {
       case 'RECOVERY':
         if (this.elapsed(t) >= this.ticks(h.HOP_RECOVERY)) this.setState('IDLE', t);
         return;
+      case 'STAGGER':
       case 'DEAD':
         return;
     }

@@ -48,7 +48,7 @@ function cw(over: Partial<ControlWorld> = {}): ControlWorld {
     state: 'ACTION',
     activeChip: null,
     player: { flinched: false, actionTicks: 0 },
-    chips: { attack: [0] },
+    chips: { attack: [0], locked: false },
     ...over,
   };
 }
@@ -56,7 +56,8 @@ function cw(over: Partial<ControlWorld> = {}): ControlWorld {
 describe('control rules', () => {
   it('lets the shot fire only for a free player with a queued chip', () => {
     expect(shotAvailability(cw())).toBe('ok');
-    expect(shotAvailability(cw({ chips: { attack: [] } }))).toBe('dull');
+    expect(shotAvailability(cw({ chips: { attack: [], locked: false } }))).toBe('dull');
+    expect(shotAvailability(cw({ chips: { attack: [0], locked: true } }))).toBe('dull');
     expect(shotAvailability(cw({ activeChip: {} }))).toBe('dull');
     expect(shotAvailability(cw({ player: { flinched: true, actionTicks: 0 } }))).toBe('dull');
     expect(shotAvailability(cw({ player: { flinched: false, actionTicks: 3 } }))).toBe('dull');

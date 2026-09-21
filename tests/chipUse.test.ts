@@ -110,6 +110,138 @@ describe('shape geometry', () => {
 });
 
 describe('chip use', () => {
+  it('lets the player move during a frozen chip series and aims each link from its start cell', () => {
+    const w = makeWorld();
+    const firstLane = addEnemy(w, 1, 2, 200);
+    const secondLane = addEnemy(w, 0, 2, 200);
+    give(w, 'cannon', 'cannon');
+
+    use(w);
+    step(w, [{ type: 'move', dir: 'left' }]);
+    expect([w.player.x, w.player.y]).toEqual([0, 4]);
+
+    run(w, hitFrame() - 1);
+    expect([firstLane.hp, secondLane.hp]).toEqual([160, 200]);
+
+    const chainDelay = T(tuning.chips.CHIP_CHAIN_DELAY);
+    run(w, useTicks(CHIPS.cannon) - hitFrame() + chainDelay + hitFrame());
+    expect([firstLane.hp, secondLane.hp]).toEqual([160, 160]);
+  });
+
+  it('keeps every Vulcan hit on the lane captured when Vulcan starts', () => {
+    const w = makeWorld();
+    const target = addEnemy(w, 1, 2, 200);
+    give(w, 'vulcan');
+
+    use(w);
+    step(w, [{ type: 'move', dir: 'left' }]);
+    run(w, hitFrame() + 2 * T(tuning.chips.VULCAN_HIT_STEP) - 1);
+
+    expect([w.player.x, target.hp]).toEqual([0, 170]);
+  });
+
+  it('counters a telegraph hit in its final window, staggers the enemy, and continues the series', () => {
+    const w = makeWorld();
+    const met = addEnemy(w, 1, 2, 200);
+    const counter = tuning as unknown as {
+      counter: { COUNTER_WINDOW_METTIK: number; COUNTER_STAGGER_TIME: number };
+    };
+    met.setState('TELEGRAPH', w.tick);
+    met.stateTick -= T(tuning.mettik.MET_TELEGRAPH - counter.counter.COUNTER_WINDOW_METTIK);
+    give(w, 'cannon', 'cannon');
+
+    use(w);
+    run(w, hitFrame());
+    expect(met.state).toBe('STAGGER');
+    expect(events.some((event) => event.type === 'enemyCountered')).toBe(true);
+
+    run(w, useTicks(CHIPS.cannon) - hitFrame() + T(tuning.chips.CHIP_CHAIN_DELAY) + hitFrame());
+    expect(met.hp).toBe(120);
+
+    run(w, T(counter.counter.COUNTER_STAGGER_TIME));
+    expect(met.state).toBe('IDLE');
+  });
+
+  it('does not counter a hit before the counter window opens', () => {
+    const w = makeWorld();
+    const met = addEnemy(w, 1, 2, 200);
+    met.setState('TELEGRAPH', w.tick);
+    give(w, 'cannon');
+
+    use(w);
+    run(w, hitFrame());
+
+    expect(met.state).toBe('TELEGRAPH');
+    expect(events.some((event) => event.type === 'enemyCountered')).toBe(false);
+  });
+
+  it('Vulcan resolves three separate hits and retargets after a kill', () => {
+    const w = makeWorld();
+    const front = addEnemy(w, 1, 2, 20);
+    const back = addEnemy(w, 1, 0, 200);
+    give(w, 'vulcan');
+    use(w);
+
+    run(w, hitFrame());
+    expect([front.hp, back.hp]).toEqual([10, 200]);
+    run(w, T(tuning.chips.VULCAN_HIT_STEP));
+    expect([front.hp, back.hp]).toEqual([0, 200]);
+    run(w, T(tuning.chips.VULCAN_HIT_STEP));
+    expect([front.hp, back.hp]).toEqual([0, 190]);
+  });
+
+  it('Vulcan misses the rest of its burst when the target leaves the lane', () => {
+    const w = makeWorld();
+    const target = addEnemy(w, 1, 2, 200);
+    give(w, 'vulcan');
+    use(w);
+
+    run(w, hitFrame());
+    expect(target.hp).toBe(190);
+    moveEnemyTo(w, target, 0, 2);
+    run(w, T(tuning.chips.VULCAN_HIT_STEP) * 2);
+    expect(target.hp).toBe(190);
+  });
+
+  it('Barrier absorbs the next hit without flinch, i-frames, or interrupting a chip', () => {
+    const w = makeWorld();
+    give(w, 'barrier');
+    use(w);
+    run(w, useTicks(CHIPS.barrier));
+    expect(w.player.barrier).toBe(true);
+
+    give(w, 'cannon');
+    use(w);
+    const cannon = w.activeChip;
+    const hit = { id: -80, kind: 'instant', hitIds: new Set<number>(), done: true, update: () => undefined };
+    expect(w.hitPlayerAt(hit, w.player.x, w.player.y, 80)).toBe(true);
+
+    expect(w.player.barrier).toBe(false);
+    expect(w.player.hp).toBe(w.player.maxHp);
+    expect(w.player.hitsTaken).toBe(0);
+    expect(w.player.flinchTicks).toBe(0);
+    expect(w.player.iframeTicks).toBe(0);
+    expect(w.activeChip).toBe(cannon);
+    expect(events.some((e) => e.type === 'chipInterrupted')).toBe(false);
+  });
+
+  it('using Barrier twice still absorbs only one hit', () => {
+    const w = makeWorld();
+    give(w, 'barrier');
+    use(w);
+    run(w, useTicks(CHIPS.barrier));
+    give(w, 'barrier');
+    use(w);
+    run(w, useTicks(CHIPS.barrier));
+
+    const first = { id: -81, kind: 'instant', hitIds: new Set<number>(), done: true, update: () => undefined };
+    const second = { id: -82, kind: 'instant', hitIds: new Set<number>(), done: true, update: () => undefined };
+    expect(w.hitPlayerAt(first, w.player.x, w.player.y, 10)).toBe(true);
+    expect(w.player.hp).toBe(100);
+    expect(w.hitPlayerAt(second, w.player.x, w.player.y, 10)).toBe(true);
+    expect(w.player.hp).toBe(90);
+  });
+
   it('Cannon hits the first enemy in the lane at the hit frame', () => {
     const w = makeWorld();
     const front = addEnemy(w, 1, 2);
@@ -141,8 +273,7 @@ describe('chip use', () => {
     run(w, useTicks(CHIPS.sword));
     expect(e.hp).toBe(200);
     movePlayer(w, 1, 3);
-    use(w);
-    run(w, hitFrame());
+    run(w, T(tuning.chips.CHIP_CHAIN_DELAY) + hitFrame());
     expect(e.hp).toBe(120);
   });
 
@@ -202,8 +333,7 @@ describe('chip use', () => {
     give(w, 'recover50', 'recover50');
     use(w);
     expect(w.player.hp).toBe(80);
-    run(w, useTicks(CHIPS.recover50));
-    use(w);
+    run(w, useTicks(CHIPS.recover50) + T(tuning.chips.CHIP_CHAIN_DELAY));
     expect(w.player.hp).toBe(100);
     expect(events.filter((e) => e.type === 'healed').map((e) => (e as { amount: number }).amount)).toEqual([50, 20]);
   });
@@ -213,7 +343,7 @@ describe('chip use', () => {
     give(w, 'recover50', 'cannon');
     use(w);
     expect(w.activeChip?.def.id).toBe('recover50');
-    run(w, useTicks(CHIPS.recover50));
+    run(w, useTicks(CHIPS.recover50) + T(tuning.chips.CHIP_CHAIN_DELAY));
     expect(w.activeChip?.def.id).toBe('cannon');
     expect(w.chips.attackChips()).toHaveLength(0);
   });
@@ -228,33 +358,33 @@ describe('chip use', () => {
     expect(w.selectChip(readySlot)).toBe(false);
   });
 
-  it('locks movement for the whole automatic chain and ignores extra attack presses', () => {
+  it('allows movement for the whole automatic chain and ignores extra attack presses', () => {
     const w = makeWorld();
     give(w, 'cannon', 'cannon');
     use(w);
     step(w, [{ type: 'move', dir: 'left' }, { type: 'useChip' }]);
-    expect(w.player.x).toBe(1);
+    expect(w.player.x).toBe(0);
     expect(w.chips.attackChips()).toHaveLength(1);
-    run(w, useTicks(CHIPS.cannon));
+    run(w, useTicks(CHIPS.cannon) + T(tuning.chips.CHIP_CHAIN_DELAY));
     expect(w.activeChip?.def.id).toBe('cannon');
-    step(w, [{ type: 'move', dir: 'left' }, { type: 'useChip' }]);
+    step(w, [{ type: 'move', dir: 'right' }, { type: 'useChip' }]);
     expect(w.player.x).toBe(1);
     run(w, useTicks(CHIPS.cannon));
     step(w, [{ type: 'move', dir: 'left' }]);
     expect(w.player.x).toBe(0);
   });
 
-  it('does not allow movement on the exact tick between chained chips', () => {
+  it('allows movement on the exact tick between chained chips', () => {
     const w = makeWorld();
     give(w, 'cannon', 'cannon');
     use(w);
     run(w, useTicks(CHIPS.cannon) - 1);
     step(w, [{ type: 'move', dir: 'left' }]);
-    expect(w.player.x).toBe(1);
-    expect(w.activeChip?.def.id).toBe('cannon');
+    expect(w.player.x).toBe(0);
+    expect(w.activeChip).toBeNull();
   });
 
-  it('honors a positive chain delay while keeping the player locked', () => {
+  it('honors a positive chain delay while keeping movement available', () => {
     tuning.chips.CHIP_CHAIN_DELAY = 0.2;
     const w = makeWorld();
     give(w, 'cannon', 'cannon');
@@ -262,7 +392,7 @@ describe('chip use', () => {
     run(w, useTicks(CHIPS.cannon));
     expect(w.activeChip).toBeNull();
     step(w, [{ type: 'move', dir: 'left' }]);
-    expect(w.player.x).toBe(1);
+    expect(w.player.x).toBe(0);
     run(w, T(0.2) - 2);
     expect(w.activeChip).toBeNull();
     run(w, 1);
@@ -555,9 +685,9 @@ describe('new attack chips', () => {
     give(w, 'recov10', 'recov80', 'invis');
     use(w);
     expect(w.player.hp).toBe(15);
-    run(w, useTicks(CHIPS.recov10));
+    run(w, useTicks(CHIPS.recov10) + T(tuning.chips.CHIP_CHAIN_DELAY));
     expect(w.player.hp).toBe(95);
-    run(w, useTicks(CHIPS.recov80));
+    run(w, useTicks(CHIPS.recov80) + T(tuning.chips.CHIP_CHAIN_DELAY));
     expect(w.player.invisTicks).toBe(T(tuning.chips.INVIS_TIME));
   });
 });

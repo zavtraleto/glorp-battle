@@ -31,22 +31,32 @@ export const DEFAULT_TUNING = {
     HAND_SIZE: 5,
     /** Chips of the draw queue shown under the rail. */
     DRAW_PREVIEW: 3,
+    CHIP_USE_TIME_VULCAN: 0.3,
     CHIP_USE_TIME_CANNON: 0.5,
     CHIP_USE_TIME_SWORD: 0.4,
     CHIP_USE_TIME_BOMB: 0.5,
     CHIP_USE_TIME_RECOVER: 0.5,
     CHIP_USE_TIME_FIELD: 0.4,
     /** Pause between automatically chained chips. */
-    CHIP_CHAIN_DELAY: 0,
+    CHIP_CHAIN_DELAY: 0.05,
     /** Default delay before a spent hand slot draws its replacement. */
     CHIP_REFILL_COOLDOWN: 2.0,
     CHIP_HIT_FRAME: 0.1,
+    VULCAN_HIT_STEP: 0.05,
     BOMB_FLIGHT_TIME: 0.5,
     /** ZapRing paralysis (roguelite spec §4.3). */
     PARALYZE_TIME: 1.5,
     INVIS_TIME: 3.0,
     /** Player ShockWave: seconds per panel. */
     PLAYER_WAVE_STEP: 0.15,
+  },
+  /** Counter timing for the four enemies available in Play. */
+  counter: {
+    COUNTER_STAGGER_TIME: 0.5,
+    COUNTER_WINDOW_METTIK: 0.18,
+    COUNTER_WINDOW_CANODRON: 0.15,
+    COUNTER_WINDOW_BLADDY: 0.15,
+    COUNTER_WINDOW_BUNNY: 0.15,
   },
   /** Tutorial hint ladder (tutorial spec §5), seconds of inaction. */
   tutorial: {

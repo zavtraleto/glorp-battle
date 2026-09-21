@@ -19,6 +19,19 @@ export class Mettik extends Enemy {
     return laneCellsBelow(this.x, this.y + 1);
   }
 
+  override counterWindowOpen(tick: number): boolean {
+    if (this.state !== 'TELEGRAPH') return false;
+    const total = this.ticks(tuning.mettik.MET_TELEGRAPH);
+    const window = this.counterTicks(tuning.counter.COUNTER_WINDOW_METTIK);
+    if (window === 0) return false;
+    const elapsed = this.elapsed(tick);
+    return elapsed >= Math.max(0, total - window) && elapsed < total;
+  }
+
+  protected override finishCounterStagger(ctx: EnemyContext): void {
+    ctx.passTurn(this);
+  }
+
   /** Starts the attack now if possible (debug "force attack"). */
   override forceAttack(tick: number): void {
     if (this.alive && (this.state === 'IDLE' || this.state === 'MOVE')) this.setState('TELEGRAPH', tick);
@@ -61,6 +74,7 @@ export class Mettik extends Enemy {
         ctx.passTurn(this);
         this.setState('IDLE', t);
         return;
+      case 'STAGGER':
       case 'DEAD':
         return;
     }

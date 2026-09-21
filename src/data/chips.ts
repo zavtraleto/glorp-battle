@@ -9,14 +9,15 @@ export type ChipCode =
   | 'N' | 'O' | 'P' | 'Q' | 'R' | 'S' | 'T' | 'U' | 'V' | 'W' | 'X' | 'Y' | 'Z' | '*';
 
 export type ChipId =
-  | 'cannon' | 'hicannon' | 'mcannon' | 'airshot' | 'shotgun' | 'vgun' | 'sidegun' | 'spreader'
+  | 'cannon' | 'vulcan' | 'hicannon' | 'mcannon' | 'airshot' | 'shotgun' | 'vgun' | 'sidegun' | 'spreader'
   | 'sword' | 'widesword' | 'longsword'
   | 'minibomb' | 'shockwave' | 'zapring'
-  | 'recov10' | 'recov30' | 'recover50' | 'recov80' | 'invis'
+  | 'recov10' | 'recov30' | 'recover50' | 'recov80' | 'invis' | 'barrier'
   | 'geddon1' | 'geddon2' | 'areagrab' | 'panlgrab' | 'panlout1' | 'panlout3' | 'repair' | 'rockcube';
 
 /** Which tunable holds the use (animation) time: `CHIP_USE_TIME_<group>`. */
-export type UseTimeGroup = 'CANNON' | 'SWORD' | 'BOMB' | 'RECOVER' | 'FIELD';
+export type UseTimeGroup = 'VULCAN' | 'CANNON' | 'SWORD' | 'BOMB' | 'RECOVER' | 'FIELD';
+export type HitStepKey = 'VULCAN_HIT_STEP';
 export type Rarity = 'common' | 'uncommon' | 'rare';
 
 /** Offset from the player or the target; forward (toward the enemy) is −y. */
@@ -59,11 +60,17 @@ export interface ChipDef {
   codes: readonly ChipCode[];
   rarity: Rarity;
   shape: Shape;
+  /** Number of separately resolved hits; one when omitted. */
+  hits?: number;
+  /** Tunable interval between separately resolved hits. */
+  hitStep?: HitStepKey;
   onHit?: OnHit;
   field?: FieldAction;
   heal?: number;
   /** Enemy attacks pass through the player for INVIS_TIME. */
   invis?: true;
+  /** Fully absorb the next damaging hit. Charges do not stack. */
+  barrier?: true;
 }
 
 const RING: readonly Offset[] = [
@@ -78,6 +85,10 @@ const LANE: Shape = { t: 'lane' };
 
 export const CHIPS: Record<ChipId, ChipDef> = {
   cannon: { id: 'cannon', power: 40, kind: 'attack', useTime: 'CANNON', codes: ['A', 'B', 'C', 'D', 'E', '*'], rarity: 'common', shape: LANE },
+  vulcan: {
+    id: 'vulcan', power: 10, kind: 'attack', useTime: 'VULCAN', codes: ['A', 'B', 'C', 'D', 'E', '*'], rarity: 'common',
+    shape: LANE, hits: 3, hitStep: 'VULCAN_HIT_STEP',
+  },
   hicannon: { id: 'hicannon', power: 60, kind: 'attack', useTime: 'CANNON', codes: ['H', 'I', 'J', 'K', 'L', '*'], rarity: 'uncommon', shape: LANE },
   mcannon: { id: 'mcannon', power: 80, kind: 'attack', useTime: 'CANNON', codes: ['O', 'P', 'Q', 'R', 'S'], rarity: 'rare', shape: LANE },
   airshot: { id: 'airshot', power: 20, kind: 'attack', useTime: 'CANNON', codes: ['*'], rarity: 'common', shape: LANE, onHit: { push: true } },
@@ -143,6 +154,10 @@ export const CHIPS: Record<ChipId, ChipDef> = {
   },
   recov80: { id: 'recov80', power: null, kind: 'support', useTime: 'RECOVER', codes: ['D', 'F', 'H', 'J', 'O', '*'], rarity: 'rare', shape: { t: 'self' }, heal: 80 },
   invis: { id: 'invis', power: null, kind: 'support', useTime: 'RECOVER', codes: ['B', 'E', 'F', 'R', 'S', '*'], rarity: 'uncommon', shape: { t: 'self' }, invis: true },
+  barrier: {
+    id: 'barrier', power: null, kind: 'support', useTime: 'RECOVER', codes: ['A', 'B', 'C', 'D', 'E', '*'], rarity: 'common',
+    shape: { t: 'self' }, barrier: true,
+  },
   geddon1: { id: 'geddon1', ...FIELD_CHIP, codes: ['D', 'J', 'M', 'O', 'S', '*'], rarity: 'uncommon', field: 'crackAll' },
   geddon2: { id: 'geddon2', ...FIELD_CHIP, codes: ['F', 'H', 'N', 'O', 'W'], rarity: 'rare', field: 'breakEnemy' },
   areagrab: { id: 'areagrab', ...FIELD_CHIP, codes: ['E', 'L', 'R', 'S', 'Y', '*'], rarity: 'uncommon', field: 'areaGrab' },

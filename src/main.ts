@@ -1,6 +1,5 @@
 import './styles.css';
 import * as THREE from 'three';
-import type { StartFolder } from './app/run';
 import { Session } from './app/session';
 import { loadTuningOverrides, tuning } from './config/tuning';
 import { events } from './core/events';
@@ -97,16 +96,18 @@ const terminal = new Terminal({
       if (session.screen === 'BATTLE' || session.screen === 'PAUSED') togglePause();
     },
     menu: (action) => {
+      if (action === 'start:play') {
+        session.start('basic');
+        void keepAwake();
+        return;
+      }
       if (action === 'start:tutorial') {
         session.startTutorial();
         void keepAwake();
         return;
       }
-      const [kind, arg] = action.split(':');
-      if (kind === 'start') {
-        session.start(arg as StartFolder);
-        void keepAwake();
-      } else if (kind === 'resume') session.resume();
+      const [kind] = action.split(':');
+      if (kind === 'resume') session.resume();
       else if (kind === 'abandon') session.abandon();
       else if (kind === 'title') session.toTitle();
       else if (kind === 'fight') session.fight();

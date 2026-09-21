@@ -24,6 +24,7 @@ const FACE_GEN = 5;
  * without an outline, and clear of the red (damage) and yellow (action) roles.
  */
 const GROUP_COLOR: Record<UseTimeGroup, string> = {
+  VULCAN: '#315b75',
   CANNON: '#2f4e93',
   SWORD: '#8f4a1c',
   BOMB: '#4c3178',

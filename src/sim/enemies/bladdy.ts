@@ -26,6 +26,15 @@ export class Bladdy extends Enemy {
     return this.state === 'TELEGRAPH' ? this.reach() : [];
   }
 
+  override counterWindowOpen(tick: number): boolean {
+    if (this.state !== 'TELEGRAPH') return false;
+    const total = this.ticks(tuning.bladdy.BLD_TELEGRAPH);
+    const window = this.counterTicks(tuning.counter.COUNTER_WINDOW_BLADDY);
+    if (window === 0) return false;
+    const elapsed = this.elapsed(tick);
+    return elapsed >= Math.max(0, total - window) && elapsed < total;
+  }
+
   override forceAttack(tick: number): void {
     if (this.alive && (this.state === 'IDLE' || this.state === 'MOVE')) this.setState('TELEGRAPH', tick);
   }
@@ -70,6 +79,7 @@ export class Bladdy extends Enemy {
       case 'RECOVERY':
         if (this.elapsed(t) >= this.ticks(b.BLD_RECOVERY)) this.setState('IDLE', t);
         return;
+      case 'STAGGER':
       case 'DEAD':
         return;
     }
