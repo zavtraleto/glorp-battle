@@ -80,6 +80,11 @@ const RANGES: Record<string, [number, number, number]> = {
   HAND_SIZE: [3, 8, 1],
 };
 
+/** Stable display order for debug names, independent of object declaration order. */
+export function alphabeticalKeys(values: Record<string, unknown>): string[] {
+  return Object.keys(values).sort((a, b) => a.localeCompare(b));
+}
+
 /** lil-gui debug panel (GDD §15.5). Every tunable is editable live and persisted. */
 export class DebugPanel {
   readonly gui: GUI;
@@ -187,10 +192,10 @@ export class DebugPanel {
     root.add({ exp: () => this.exportJson() }, 'exp').name('export JSON');
     const groups = tuning as unknown as Record<string, Record<string, number | boolean>>;
     const defaults = DEFAULT_TUNING as unknown as Record<string, Record<string, number | boolean>>;
-    for (const group of Object.keys(groups) as (keyof Tuning)[]) {
+    for (const group of alphabeticalKeys(groups) as (keyof Tuning)[]) {
       const values = groups[group] as Record<string, number | boolean>;
       const f = root.addFolder(group);
-      for (const key of Object.keys(values)) {
+      for (const key of alphabeticalKeys(values)) {
         const def = defaults[group]?.[key];
         let c;
         if (typeof values[key] === 'number') {
