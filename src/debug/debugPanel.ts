@@ -78,11 +78,43 @@ const RANGES: Record<string, [number, number, number]> = {
   CHIP_REFILL_COOLDOWN: [0, 10, 0.1],
   DRAW_PREVIEW: [0, 6, 1],
   HAND_SIZE: [3, 8, 1],
+  ORIGINAL_COLOR_RETENTION: [0, 1, 0.01],
+  BASE_BRIGHTNESS: [0, 1, 0.01],
+  SCANLINE_SPACING: [1, 12, 0.1],
+  SCANLINE_WIDTH: [0.05, 0.95, 0.01],
+  SCANLINE_CURVATURE: [0, 2.4, 0.01],
+  SCANLINE_STRENGTH: [0, 1, 0.01],
+  EMISSION_STRENGTH: [0, 2, 0.01],
+  HALO_STRENGTH: [0, 1.5, 0.01],
+  BLOOM_STRENGTH: [0, 0.5, 0.01],
+  GLITCH_AMOUNT: [0, 0.5, 0.01],
+  EDGE_PARTICLE_AMOUNT: [0, 1, 0.01],
+  BRIGHT_SWEEP_STRENGTH: [0, 2, 0.01],
+  BRIGHT_SWEEP_SPEED: [0, 0.5, 0.01],
+  BRIGHT_SWEEP_WIDTH: [0.01, 0.5, 0.01],
+  THIN_SWEEP_STRENGTH: [0, 2, 0.01],
+  THIN_SWEEP_WIDTH: [0.002, 0.1, 0.001],
+  THIN_SWEEP_SPEED_MIN: [0, 0.5, 0.01],
+  THIN_SWEEP_SPEED_MAX: [0, 0.5, 0.01],
+  DROPOUT_AMOUNT: [0, 0.3, 0.005],
+  DROPOUT_SIZE: [1, 4, 0.1],
+  DROPOUT_SPEED: [0, 0.5, 0.01],
+  DROPOUT_ANGLE: [-180, 180, 1],
 };
 
 /** Stable display order for debug names, independent of object declaration order. */
 export function alphabeticalKeys(values: Record<string, unknown>): string[] {
   return Object.keys(values).sort((a, b) => a.localeCompare(b));
+}
+
+export function tuningControlKind(
+  _key: string,
+  value: unknown,
+): 'number' | 'boolean' | 'color' | 'string' {
+  if (typeof value === 'number') return 'number';
+  if (typeof value === 'boolean') return 'boolean';
+  if (typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)) return 'color';
+  return 'string';
 }
 
 /** lil-gui debug panel (GDD §15.5). Every tunable is editable live and persisted. */
@@ -190,15 +222,16 @@ export class DebugPanel {
     const root = this.gui.addFolder('Tuning');
     root.add({ reset: () => this.resetAll() }, 'reset').name('reset to defaults');
     root.add({ exp: () => this.exportJson() }, 'exp').name('export JSON');
-    const groups = tuning as unknown as Record<string, Record<string, number | boolean>>;
-    const defaults = DEFAULT_TUNING as unknown as Record<string, Record<string, number | boolean>>;
+    const groups = tuning as unknown as Record<string, Record<string, number | boolean | string>>;
+    const defaults = DEFAULT_TUNING as unknown as Record<string, Record<string, number | boolean | string>>;
     for (const group of alphabeticalKeys(groups) as (keyof Tuning)[]) {
-      const values = groups[group] as Record<string, number | boolean>;
+      const values = groups[group] as Record<string, number | boolean | string>;
       const f = root.addFolder(group);
       for (const key of alphabeticalKeys(values)) {
         const def = defaults[group]?.[key];
         let c;
-        if (typeof values[key] === 'number') {
+        const kind = tuningControlKind(key, values[key]);
+        if (kind === 'number') {
           const range = RANGES[key];
           if (range) {
             c = f.add(values, key, range[0], range[1], range[2]);
@@ -208,6 +241,8 @@ export class DebugPanel {
             const step = Number.isInteger(def) && d >= 1 ? 1 : 0.01;
             c = f.add(values, key, 0, max, step);
           }
+        } else if (kind === 'color') {
+          c = f.addColor(values, key);
         } else {
           c = f.add(values, key);
         }

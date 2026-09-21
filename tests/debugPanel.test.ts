@@ -16,4 +16,10 @@ describe('debug tuning order', () => {
     ]);
     expect(alphabeticalKeys({ terminal: {}, chips: {}, battle: {} })).toEqual(['battle', 'chips', 'terminal']);
   });
+
+  it('classifies hexadecimal tuning strings as colour controls', () => {
+    expect(debugPanel.tuningControlKind('GLOW_COLOR', '#77C8DF')).toBe('color');
+    expect(debugPanel.tuningControlKind('LABEL', 'hologram')).toBe('string');
+    expect(debugPanel.tuningControlKind('HALO_STRENGTH', 0.46)).toBe('number');
+  });
 });

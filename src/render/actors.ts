@@ -74,12 +74,13 @@ export class PlayerView {
 
   constructor() {
     const art = spriteArt('player');
-    this.pixels = new PixelSprite(art ?? playerBitmap(), 'phosphor');
+    this.pixels = new PixelSprite(art ?? playerBitmap(), 'phosphor', art ? { character: 'player', instanceId: 1 } : undefined);
     this.sprite = this.pixels.sprite;
     this.widthShare = art ? PLAYER_ART_WIDTH : tuning.battleVisual.SPRITE_CELL_FRAC * 0.8;
   }
 
   update(player: Player, tick: number, alpha: number, dt: number, usingChip: boolean, frame: SpriteFrame): void {
+    this.pixels.setTime((tick + alpha) / tuning.sim.SIM_HZ);
     const a = slideAnchor(player.prevX, player.prevY, player.x, player.y, player.lastMoveTick, tick, alpha, dt);
     this.pixels.place(a, CELL_WIDTH * this.widthShare, frame.camera, frame.width, frame.height, usingChip ? 1 : 0);
     this.sprite.renderOrder = rowRenderOrder(player.y);
@@ -118,7 +119,11 @@ export class EnemyView {
     const boss = enemy.kind === 'monolith';
     const artId = ENEMY_ART[enemy.kind];
     const art = artId ? spriteArt(artId) : null;
-    this.pixels = new PixelSprite(art ?? creature(ENEMY_SEEDS[enemy.kind], boss ? BOSS_SIZE : CREATURE_SIZE), 'red');
+    this.pixels = new PixelSprite(
+      art ?? creature(ENEMY_SEEDS[enemy.kind], boss ? BOSS_SIZE : CREATURE_SIZE),
+      'red',
+      artId && art ? { character: artId, instanceId: enemy.id } : undefined,
+    );
     this.sprite = this.pixels.sprite;
     this.widthShare = (art ? ENEMY_ART_WIDTH : tuning.battleVisual.SPRITE_CELL_FRAC) * (boss ? BOSS_WIDTH : 1);
     this.phase = enemy.id * 1.7;
@@ -127,6 +132,7 @@ export class EnemyView {
   update(enemy: Enemy, tick: number, alpha: number, dt: number, frame: SpriteFrame): void {
     const a = slideAnchor(enemy.prevX, enemy.prevY, enemy.x, enemy.y, enemy.lastMoveTick, tick, alpha, dt);
     const time = (tick + alpha) / tuning.sim.SIM_HZ;
+    this.pixels.setTime(time);
     let lift = Math.sin(time * Math.PI * 2 * IDLE_BOB_HZ + this.phase) > 0.3 ? 1 : 0;
     let flash = flashing(enemy.lastHitTick, tick);
 
