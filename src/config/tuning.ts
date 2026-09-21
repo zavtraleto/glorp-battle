@@ -31,22 +31,32 @@ export const DEFAULT_TUNING = {
     HAND_SIZE: 5,
     /** Chips of the draw queue shown under the rail. */
     DRAW_PREVIEW: 3,
+    CHIP_USE_TIME_VULCAN: 0.3,
     CHIP_USE_TIME_CANNON: 0.5,
     CHIP_USE_TIME_SWORD: 0.4,
     CHIP_USE_TIME_BOMB: 0.5,
     CHIP_USE_TIME_RECOVER: 0.5,
     CHIP_USE_TIME_FIELD: 0.4,
     /** Pause between automatically chained chips. */
-    CHIP_CHAIN_DELAY: 0,
+    CHIP_CHAIN_DELAY: 0.05,
     /** Default delay before a spent hand slot draws its replacement. */
     CHIP_REFILL_COOLDOWN: 2.0,
     CHIP_HIT_FRAME: 0.1,
+    VULCAN_HIT_STEP: 0.05,
     BOMB_FLIGHT_TIME: 0.5,
     /** ZapRing paralysis (roguelite spec §4.3). */
     PARALYZE_TIME: 1.5,
     INVIS_TIME: 3.0,
     /** Player ShockWave: seconds per panel. */
     PLAYER_WAVE_STEP: 0.15,
+  },
+  /** Counter timing for the four enemies available in Play. */
+  counter: {
+    COUNTER_STAGGER_TIME: 0.5,
+    COUNTER_WINDOW_METTIK: 0.18,
+    COUNTER_WINDOW_CANODRON: 0.15,
+    COUNTER_WINDOW_BLADDY: 0.15,
+    COUNTER_WINDOW_BUNNY: 0.15,
   },
   /** Tutorial hint ladder (tutorial spec §5), seconds of inaction. */
   tutorial: {
@@ -178,7 +188,7 @@ export const DEFAULT_TUNING = {
     /** Brightness of idle grid lines. */
     GRID_DIM: 0.75,
     /** Fill brightness of the player's cell. */
-    ACTIVE_FILL: 0.25,
+    ACTIVE_FILL: 0.0,
     /** Creature sprite width as a share of a cell; texels are then rounded to whole CRT pixels. */
     SPRITE_CELL_FRAC: 0.95,
     DANGER_PULSE_HZ: 6,
@@ -190,6 +200,32 @@ export const DEFAULT_TUNING = {
     DAMAGE_SCALE: 4,
     /** Height of the CRT status band, share of the picture (spec §8). */
     HUD_BAND: 0.11,
+  },
+  /** Object-space projection effect for hand-drawn PNG actors. */
+  hologram: {
+    ORIGINAL_COLOR_RETENTION: 0.75,
+    BASE_BRIGHTNESS: 0.85,
+    SCANLINE_SPACING: 1.5,
+    SCANLINE_WIDTH: 0.12,
+    SCANLINE_CURVATURE: 0,
+    SCANLINE_STRENGTH: 0.75,
+    EMISSION_STRENGTH: 0.07,
+    HALO_STRENGTH: 0.2,
+    BLOOM_STRENGTH: 0.1,
+    GLITCH_AMOUNT: 0.05,
+    EDGE_PARTICLE_AMOUNT: 1,
+    BRIGHT_SWEEP_STRENGTH: 0.15,
+    BRIGHT_SWEEP_SPEED: 0.07,
+    BRIGHT_SWEEP_WIDTH: 0.03,
+    THIN_SWEEP_STRENGTH: 0.21,
+    THIN_SWEEP_WIDTH: 0.012,
+    THIN_SWEEP_SPEED_MIN: 0.14,
+    THIN_SWEEP_SPEED_MAX: 0.21,
+    DROPOUT_AMOUNT: 0.065,
+    DROPOUT_SIZE: 1.7,
+    DROPOUT_SPEED: 0.15,
+    DROPOUT_ANGLE: -34,
+    GLOW_COLOR: "#8ACE00",
   },
   /** Physical terminal NET-01 (docs/TERMINAL.md §17). */
   terminal: {
@@ -245,7 +281,7 @@ export const DEFAULT_TUNING = {
     /** Button travel when pressed, world units. */
     BUTTON_PRESS_DEPTH: 0.12,
     /** Ball diameter and red ring outer diameter, shares of the body width (spec §10.1). */
-    BALL_W: 0.19,
+    BALL_W: 0.2,
     RING_W: 0.235,
     /** Trackball rotation per CSS px of drag, radians. */
     TRACKBALL_ROLL_GAIN: 0.0067,

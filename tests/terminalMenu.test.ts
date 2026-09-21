@@ -36,8 +36,9 @@ describe('menuFor', () => {
 
   it('builds each screen with its actions', () => {
     expect(menuFor(session('TITLE'))!.items.map((i) => i.action)).toEqual([
-      'start:basic', 'start:field', 'start:random', 'start:tutorial',
+      'start:play', 'start:tutorial',
     ]);
+    expect(menuFor(session('TITLE'))!.items.map((i) => i.label)).toEqual(['Play', 'TUTORIAL']);
     expect(menuFor(session('PATH'))!.items.map((i) => i.action)).toEqual(['fight']);
     expect(menuFor(session('PAUSED'))!.items.map((i) => i.action)).toEqual(['resume', 'abandon']);
     expect(menuFor(session('GAME_OVER'))!.items.map((i) => i.action)).toEqual(['title']);
@@ -74,11 +75,7 @@ describe('menuFor', () => {
     ]);
     expect(path.items.map((i) => i.label)).toEqual(['Fight']);
     expect(menuFor(session('PATH', { next: { kind: 'boss', enemies: 2 } }))!.subtitle).toBe('Boss');
-    expect(path.hint).toEqual(['HP restores every 3 battles.']);
-    // After a heal the next battle stays in the subtitle; the note joins the hint.
-    const healed = menuFor(session('PATH', { healed: true, depth: 10, next: { kind: 'boss', enemies: 1 } }))!;
-    expect(healed.subtitle).toBe('Boss');
-    expect(healed.hint).toEqual(['HP restored', 'HP restores every 3 battles.']);
+    expect(path.hint).toEqual([]);
     expect(menuFor(session('COMPLETE'))!.rows).toEqual([
       ['Battles', '2'],
       ['Total time', '0:42.50'],

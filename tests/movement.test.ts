@@ -123,12 +123,12 @@ describe('player movement', () => {
     expect(pos(w)).toEqual([0, 4]);
   });
 
-  it('drops presses while locked', () => {
+  it('allows movement during a chip action animation', () => {
     const w = freshWorld();
     w.player.actionTicks = 10;
     tick(w, ['up']);
     idle(w, 20);
-    expect(pos(w)).toEqual([1, 4]);
+    expect(pos(w)).toEqual([1, 3]);
   });
 
   it('ignores input outside ACTION', () => {

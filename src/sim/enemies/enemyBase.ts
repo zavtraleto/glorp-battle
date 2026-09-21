@@ -15,7 +15,7 @@ import type { SimEvent } from '../events';
 // Hits never interrupt an enemy's action; they only flash.
 
 export type EnemyKind = 'mettik' | 'canodron' | 'spiker' | 'hopzap' | 'bladdy' | 'rattik' | 'helmhead' | 'finnik' | 'monolith';
-export type EnemyState = 'IDLE' | 'MOVE' | 'TELEGRAPH' | 'ATTACK' | 'RECOVERY' | 'DEAD';
+export type EnemyState = 'IDLE' | 'MOVE' | 'TELEGRAPH' | 'ATTACK' | 'RECOVERY' | 'STAGGER' | 'DEAD';
 
 /** What an enemy may read or do during its update. */
 export interface EnemyContext {
@@ -80,6 +80,11 @@ export abstract class Enemy {
     return Math.max(1, secondsToTicks(seconds / ENEMY_LEVELS[this.level].speed));
   }
 
+  /** Counter windows may be set to zero in the debug panel to disable them. */
+  protected counterTicks(seconds: number): number {
+    return secondsToTicks(seconds / ENEMY_LEVELS[this.level].speed);
+  }
+
   /** A damage tunable scaled by the level. */
   protected dmg(base: number): number {
     return Math.round(base * ENEMY_LEVELS[this.level].damage);
@@ -111,6 +116,32 @@ export abstract class Enemy {
   dangerCells(): Cell[] {
     return [];
   }
+
+  /** True only during the final, vulnerable part of an attack telegraph. */
+  counterWindowOpen(_tick: number): boolean {
+    return false;
+  }
+
+  /** Cancels the pending attack and starts the common Counter stagger. */
+  counter(tick: number): boolean {
+    if (!this.counterWindowOpen(tick)) return false;
+    this.onCountered();
+    this.setState('STAGGER', tick);
+    return true;
+  }
+
+  /** Enemy-specific pending attack state can be cleared here. */
+  protected onCountered(): void {}
+
+  /** Runs in World even when enemy AI is disabled. */
+  updateStagger(ctx: EnemyContext): void {
+    if (this.state !== 'STAGGER') return;
+    if (this.elapsed(ctx.tick) < secondsToTicks(tuning.counter.COUNTER_STAGGER_TIME)) return;
+    this.finishCounterStagger(ctx);
+    this.setState('IDLE', ctx.tick);
+  }
+
+  protected finishCounterStagger(_ctx: EnemyContext): void {}
 
   /** Returns true if the enemy died from this hit. */
   applyDamage(amount: number, tick: number): boolean {

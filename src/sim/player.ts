@@ -28,9 +28,11 @@ export class Player {
   iframeTicks = 0;
   /** Remaining ticks of Invis: enemy attacks pass through. */
   invisTicks = 0;
+  /** One charge that fully absorbs the next damaging hit. */
+  barrier = false;
   /** Remaining ticks of paralysis: no movement or chips, no i-frames. */
   paralyzeTicks = 0;
-  /** Remaining ticks of a chip animation: no movement. */
+  /** Remaining ticks of a chip animation; movement remains available. */
   actionTicks = 0;
   lastHitTick = -Infinity;
   moves = 0;
@@ -116,7 +118,7 @@ export class Player {
   updateMovement(tick: number, pressed: readonly Dir[], held: Dir | null): void {
     if (pressed.length > 0) this.bufferedDir = pressed[pressed.length - 1] as Dir;
 
-    if (this.flinchTicks > 0 || this.actionTicks > 0 || this.paralyzeTicks > 0) {
+    if (this.flinchTicks > 0 || this.paralyzeTicks > 0) {
       // Presses during a lock are dropped, not replayed afterwards.
       this.bufferedDir = null;
       return;

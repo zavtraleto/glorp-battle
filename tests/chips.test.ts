@@ -46,6 +46,31 @@ describe('chip catalogue (MMBN3)', () => {
       expect(CHIP_ICONS[id]).toBeDefined();
     }
   });
+
+  it('defines Vulcan as a three-hit lane attack', () => {
+    const vulcan = (CHIPS as Record<string, unknown>).vulcan;
+    expect(vulcan).toMatchObject({
+      id: 'vulcan',
+      power: 10,
+      kind: 'attack',
+      useTime: 'VULCAN',
+      hits: 3,
+      hitStep: 'VULCAN_HIT_STEP',
+      shape: { t: 'lane' },
+    });
+  });
+
+  it('defines Barrier as a one-charge support chip', () => {
+    const barrier = (CHIPS as Record<string, unknown>).barrier;
+    expect(barrier).toMatchObject({
+      id: 'barrier',
+      power: null,
+      kind: 'support',
+      useTime: 'RECOVER',
+      barrier: true,
+      shape: { t: 'self' },
+    });
+  });
 });
 
 describe('selection rule', () => {

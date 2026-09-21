@@ -7,9 +7,9 @@ import type { EnemyKind } from '../sim/enemies/enemyBase';
 
 // Hand-drawn sprites (BATTLE_VISUAL.md §5): full-colour art drawn on its own
 // render layer after the palette pass, toned down to sit on the dark CRT.
-// Sources live in /assets at full size; src/assets/sprites holds the cut-downs
-// (area-averaged into a 128×160 box, keeping the drawing's own aspect) that
-// ship with the game. Kinds without art keep their procedural creature.
+// Sources live in /assets at full size; src/assets/sprites holds area-averaged,
+// hard-alpha cut-downs (player: 128×128; enemies: within 128×160) that ship
+// with the game. Kinds without art keep their procedural creature.
 
 export type ArtId = 'player' | 'mettik' | 'canodron' | 'monolith';
 

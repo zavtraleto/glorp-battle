@@ -9,7 +9,7 @@ export interface ControlWorld {
   state: GameState;
   activeChip: unknown;
   player: { flinched: boolean; actionTicks: number };
-  chips: { attack: readonly number[] };
+  chips: { attack: readonly number[]; locked: boolean };
 }
 
 /** `dull`: the control moves less and sends nothing. */
@@ -17,7 +17,7 @@ export type Availability = 'ok' | 'dull';
 
 /** Whether a tap on the trackball may use the active chip. */
 export function shotAvailability(w: ControlWorld): Availability {
-  if (w.state !== 'ACTION' || w.chips.attack.length === 0) return 'dull';
+  if (w.state !== 'ACTION' || w.chips.attack.length === 0 || w.chips.locked) return 'dull';
   const busy = w.activeChip !== null || w.player.flinched || w.player.actionTicks > 0;
   return busy ? 'dull' : 'ok';
 }

@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { Session } from '../src/app/session';
 import { DEFAULT_TUNING, mergeTuning, secondsToTicks, tuning } from '../src/config/tuning';
 import type { Command } from '../src/core/input/commands';
-import { FOLDER_SIZE } from '../src/data/folders';
 import { Shockwave } from '../src/sim/attacks/shockwave';
 import { folderChips } from '../src/sim/chips/chipSystem';
 
@@ -61,14 +60,14 @@ describe('Session', () => {
     const s = make();
     s.start('basic');
     expect(s.screen).toBe('PATH');
-    expect(s.folderSize).toBe(FOLDER_SIZE);
+    expect(s.folderSize).toBe(20);
     const encounter = s.run!.encounter;
     expect(s.next).toEqual({ kind: encounter.tier, enemies: encounter.enemies.length });
     s.fight();
     expect(s.screen).toBe('BATTLE');
     expect(s.world.encounter.id).toBe(encounter.id);
     expect(s.world.enemies.map((e) => e.kind)).toEqual(encounter.enemies.map((e) => e.kind));
-    expect(s.world.chips.chips).toHaveLength(FOLDER_SIZE);
+    expect(s.world.chips.chips).toHaveLength(20);
     expect(s.world.player.hp).toBe(100);
   });
 
@@ -82,7 +81,7 @@ describe('Session', () => {
     expect(s.screen).toBe('PATH');
     expect(s.run!.depth).toBe(2);
     expect(s.hp).toBe(64);
-    expect(s.folderSize).toBe(FOLDER_SIZE);
+    expect(s.folderSize).toBe(20);
     s.fight();
     expect(s.world.player.hp).toBe(64);
     expect(s.lastResult).toMatchObject({ battle: 1, hpLeft: 64 });
@@ -99,17 +98,17 @@ describe('Session', () => {
     expect(s.screen).toBe('TITLE');
   });
 
-  it('clearing the boss completes the run', () => {
+  it('clearing eight Play stages completes the run', () => {
     const s = make();
     s.start('basic');
-    for (let step = 1; step <= 10; step++) {
+    for (let step = 1; step <= 8; step++) {
       expect(s.screen).toBe('PATH');
       s.fight();
       enterAction(s);
       win(s);
     }
     expect(s.screen).toBe('COMPLETE');
-    expect(s.results).toHaveLength(10);
+    expect(s.results).toHaveLength(8);
     expect(s.totalTime).toBeGreaterThanOrEqual(0);
     s.toTitle();
     expect(s.screen).toBe('TITLE');

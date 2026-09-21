@@ -1,4 +1,3 @@
-import { HEAL_EVERY, type StartFolder } from '../../app/run';
 import type { NextBattle, Screen } from '../../app/session';
 import { t } from '../../i18n';
 import type { Rect } from '../layout';
@@ -7,7 +6,7 @@ import { GLYPH_H, measureText, wrapText } from './pixelFont';
 // Session menus drawn inside the CRT (TERMINAL.md §8). Pure: what each screen
 // shows, where it goes on the CRT canvas, and cursor movement.
 
-export type MenuAction = `start:${StartFolder}` | 'start:tutorial' | 'resume' | 'abandon' | 'title' | 'fight';
+export type MenuAction = 'start:play' | 'start:tutorial' | 'resume' | 'abandon' | 'title' | 'fight';
 export type MenuTone = 'title' | 'info' | 'win' | 'lose';
 
 export interface MenuItem {
@@ -77,9 +76,7 @@ export function menuFor(s: MenuSession): MenuSpec | null {
         subtitle: t('title.subtitle'),
         rows: [],
         items: [
-          { label: t('title.basic'), action: 'start:basic' },
-          { label: t('title.field'), action: 'start:field' },
-          { label: t('title.random'), action: 'start:random' },
+          { label: t('title.play'), action: 'start:play' },
           { label: t('tutorial.title'), action: 'start:tutorial' },
         ],
         hint: [t('title.hintTerminal'), t('title.hintKeys')],
@@ -95,8 +92,7 @@ export function menuFor(s: MenuSession): MenuSpec | null {
           [t('result.folder'), String(s.folderSize)],
         ],
         items: [{ label: t('path.fight'), action: 'fight' }],
-        // The heal note goes above the hint so the next battle stays visible.
-        hint: [...(s.healed ? [t('path.healed')] : []), t('path.hint', { n: HEAL_EVERY })],
+        hint: [],
       };
     case 'PAUSED':
       return {

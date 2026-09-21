@@ -2,6 +2,11 @@ import * as THREE from 'three';
 import type { CreatureBitmap } from './creatureGen';
 import { signal, type Role } from './palette';
 import type { SpriteArt } from './spriteArt';
+import {
+  HologramSpriteMaterial,
+  paddedSpriteMetrics,
+} from './hologramMaterial';
+import type { HologramCharacter } from './hologramConfig';
 
 // Camera-facing sprite (BATTLE_VISUAL.md §2, §5), snapped to the CRT pixel
 // grid, with a hit flash and a pixel dissolve. Procedural creatures are palette
@@ -9,6 +14,11 @@ import type { SpriteArt } from './spriteArt';
 
 /** Render layer of full-colour art, drawn after the palette pass. */
 export const ART_LAYER = 1;
+
+export interface HologramSpriteIdentity {
+  character: HologramCharacter;
+  instanceId: number;
+}
 
 /**
  * Hit ripple (decision 2026-09-19): the texture is sampled with a wavy
@@ -88,6 +98,7 @@ export class PixelSprite {
   private readonly normal: THREE.DataTexture;
   private readonly flashed: THREE.DataTexture;
   private readonly material: THREE.SpriteMaterial;
+  private readonly hologram: HologramSpriteMaterial | null;
   private readonly texW: number;
   private readonly texH: number;
   private readonly ripple = { value: 0 };
@@ -96,8 +107,9 @@ export class PixelSprite {
   private readonly ownsTextures: boolean;
 
   /** A procedural creature in `role`'s signal colour, or hand-drawn full-colour art. */
-  constructor(source: CreatureBitmap | SpriteArt, role: Role) {
+  constructor(source: CreatureBitmap | SpriteArt, role: Role, identity?: HologramSpriteIdentity) {
     if ('normal' in source) {
+      if (!identity) throw new Error('PNG sprite art requires a hologram identity');
       this.normal = source.normal;
       this.flashed = source.flashed;
       this.ownsTextures = false;
@@ -109,18 +121,22 @@ export class PixelSprite {
     }
     this.texW = source.w;
     this.texH = source.h;
-    // Opaque: alpha only drives the dissolve (alphaTest), never blending.
-    this.material = new THREE.SpriteMaterial({
-      map: this.normal,
-      alphaTest: 0.5,
-      transparent: false,
-      depthTest: false,
-      depthWrite: false,
-    });
-    addRipple(this.material, this.ripple, this.rippleClock);
+    this.hologram = identity
+      ? new HologramSpriteMaterial(this.normal, identity.character, identity.instanceId, this.texW, this.texH)
+      : null;
+    // Procedural palette signals stay opaque. PNG art needs blending only for its local halo/fragments.
+    this.material = this.hologram ??
+      new THREE.SpriteMaterial({
+        map: this.normal,
+        alphaTest: 0.5,
+        transparent: false,
+        depthTest: false,
+        depthWrite: false,
+      });
+    if (!this.hologram) addRipple(this.material, this.ripple, this.rippleClock);
     this.sprite = new THREE.Sprite(this.material);
     // Feet on the anchor point.
-    this.sprite.center.set(0.5, 0);
+    this.sprite.center.set(0.5, this.hologram ? paddedSpriteMetrics(1, 1).centerY : 0);
     if (!this.ownsTextures) this.sprite.layers.set(ART_LAYER);
   }
 
@@ -131,13 +147,22 @@ export class PixelSprite {
 
   /** Hit ripple strength 0..1; `seconds` drives the wave. */
   setRipple(k: number, seconds: number): void {
-    this.ripple.value = Math.max(0, Math.min(1, k));
-    this.rippleClock.value = seconds;
+    const strength = Math.max(0, Math.min(1, k));
+    if (this.hologram) this.hologram.setRipple(strength, seconds);
+    else {
+      this.ripple.value = strength;
+      this.rippleClock.value = seconds;
+    }
+  }
+
+  setTime(seconds: number): void {
+    this.hologram?.setTime(seconds);
   }
 
   /** 0 = whole, 1 = gone. */
   setDissolve(k: number): void {
-    this.material.alphaTest = 0.5 + 0.5 * Math.max(0, Math.min(1, k));
+    if (this.hologram) this.hologram.setDissolve(k);
+    else this.material.alphaTest = 0.5 + 0.5 * Math.max(0, Math.min(1, k));
   }
 
   /**
@@ -154,7 +179,14 @@ export class PixelSprite {
     const pxPerUnit = h / (2 * depth * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
     const size = spritePixels(worldWidth, pxPerUnit, this.texW, this.texH);
     const widthPx = size.w;
-    this.sprite.scale.set(widthPx / pxPerUnit, size.h / pxPerUnit, 1);
+    if (this.hologram) {
+      const padded = paddedSpriteMetrics(widthPx / pxPerUnit, size.h / pxPerUnit);
+      this.sprite.scale.set(padded.width, padded.height, 1);
+      this.hologram.setVisualSize(size.w, size.h);
+      this.hologram.syncConfig();
+    } else {
+      this.sprite.scale.set(widthPx / pxPerUnit, size.h / pxPerUnit, 1);
+    }
     const liftStep = Math.max(1, Math.round(size.h / LIFT_STEP_HEIGHT));
 
     tmp.copy(anchor).project(camera);

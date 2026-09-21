@@ -2,6 +2,7 @@
 
 export const en = {
   'game.title': 'GLORP BATTLE',
+  'title.play': 'Play',
   'title.basic': 'Basic folder',
   'title.field': 'Field folder',
   'title.random': 'Random folder',
@@ -55,6 +56,8 @@ export const en = {
   'chip.cannon.desc': 'Hits the first enemy in your lane.',
   'chip.hicannon.name': 'HiCannon',
   'chip.hicannon.desc': 'A bigger cannon. Hits the first enemy in your lane.',
+  'chip.vulcan.name': 'Vulcan',
+  'chip.vulcan.desc': 'Fires 3 rapid shots down your lane.',
   'chip.sword.name': 'Sword',
   'chip.sword.desc': 'Slashes the panel in front of you.',
   'chip.widesword.name': 'WideSwrd',
@@ -89,6 +92,8 @@ export const en = {
   'chip.recov80.desc': 'Restores 80 HP.',
   'chip.invis.name': 'Invis',
   'chip.invis.desc': 'Enemy attacks pass through you for a while.',
+  'chip.barrier.name': 'Barrier',
+  'chip.barrier.desc': 'Blocks the next hit.',
   'chip.geddon1.name': 'Geddon1',
   'chip.geddon1.desc': 'Cracks every empty panel. Yours too.',
   'chip.geddon2.name': 'Geddon2',

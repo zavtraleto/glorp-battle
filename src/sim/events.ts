@@ -10,6 +10,7 @@ import type { EntityId } from './occupancy';
 export type SimEvent =
   | { type: 'damaged'; targetId: EntityId; amount: number; x: number; y: number; hpLeft: number }
   | { type: 'enemyKilled'; id: EntityId; x: number; y: number }
+  | { type: 'enemyCountered'; id: EntityId; x: number; y: number }
   | { type: 'enemyRemoved'; id: EntityId }
   | { type: 'attackSpawned'; id: number; kind: string; x: number; y: number }
   | { type: 'stateChanged'; from: string; to: string }
@@ -20,6 +21,8 @@ export type SimEvent =
   /** Visual footprint of a resolved chip; `cells` are the panels it swept or hit. */
   | { type: 'chipEffect'; defId: ChipId; shape: ShapeKind; x: number; fromY: number; cells: Cell[]; toY: number }
   | { type: 'healed'; amount: number; x: number; y: number }
+  | { type: 'barrierSet'; x: number; y: number }
+  | { type: 'barrierBroken'; x: number; y: number }
   | { type: 'bombThrown'; id: number }
   | { type: 'bombLanded'; id: number; x: number; y: number; cells: Cell[] }
   /** Instant enemy shot along a lane (Canodron); toY = row where it stopped, or ROWS if it left the field. */

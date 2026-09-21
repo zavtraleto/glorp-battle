@@ -166,6 +166,42 @@ const BASE_ICONS = {
 } satisfies Record<string, readonly string[]>;
 
 const NEW_ICONS = {
+  vulcan: [
+    '................',
+    '....kkkkkkkk....',
+    '...kcccccccck...',
+    '..kbbbbbbbbbbk..',
+    '..kbbkkkkkbbbk..',
+    '..kbbk...kbbbk..',
+    '..kbbkkkkkbbbk..',
+    '..kbbbbbbbbbbk..',
+    '...kkkkbbbbkk...',
+    '......kbbbbk....',
+    '......kbbbbk....',
+    '.....kkggggkk...',
+    '....kggggggggk..',
+    '....kgddggddgk..',
+    '.....kkkkkkkk...',
+    '................',
+  ],
+  barrier: [
+    '................',
+    '......kkkk......',
+    '....kkcccckk....',
+    '...kccbbbbcck...',
+    '..kccbbbbbbcck..',
+    '..kcbbbbbbbbck..',
+    '..kcbbbbbbbbck..',
+    '..kcbbbbbbbbck..',
+    '..kcbbbbbbbbck..',
+    '...kcbbbbbbck...',
+    '...kccbbbbcck...',
+    '....kccbbcck....',
+    '.....kcccck.....',
+    '......kcck......',
+    '.......kk.......',
+    '................',
+  ],
   wave: [
     '................',
     '................',
@@ -300,6 +336,7 @@ const N = NEW_ICONS;
 /** Every chip's icon; new chips reuse the closest family icon where one fits. */
 export const CHIP_ICONS: Record<ChipId, readonly string[]> = {
   ...B,
+  vulcan: N.vulcan,
   mcannon: B.hicannon,
   airshot: B.cannon,
   vgun: B.shotgun,
@@ -311,6 +348,7 @@ export const CHIP_ICONS: Record<ChipId, readonly string[]> = {
   recov30: B.recover50,
   recov80: B.recover50,
   invis: N.invis,
+  barrier: N.barrier,
   geddon1: N.crack,
   geddon2: N.crack,
   areagrab: N.steal,
