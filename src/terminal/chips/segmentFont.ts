@@ -57,8 +57,8 @@ const GLYPHS: Record<string, readonly Segment[]> = {
   '+': ['g1', 'g2', 'i', 'l'],
 };
 
-/** Character cells on the display. */
-export const DISPLAY_CHARS = 12;
+/** Character cells on the wider display in the CRT's lower frame. */
+export const DISPLAY_CHARS = 14;
 
 export function hasGlyph(ch: string): boolean {
   return ch.toUpperCase() in GLYPHS;
@@ -69,17 +69,28 @@ export function glyph(ch: string): readonly Segment[] {
   return GLYPHS[ch.toUpperCase()] ?? [];
 }
 
-/**
- * What the display shows for the Attack Queue: the first chip's name, plus how
- * many more are loaded behind it; `noChip` when the queue is empty.
- */
-export function chipDisplayText(queued: readonly string[], noChip: string, width = DISPLAY_CHARS): string {
+export interface ChipDisplayEntry {
+  name: string;
+  power?: number | null;
+  heal?: number;
+  hits?: number;
+}
+
+function centre(text: string, width: number): string {
+  const clipped = text.toUpperCase().slice(0, width);
+  const left = Math.floor((width - clipped.length) / 2);
+  return `${' '.repeat(left)}${clipped}`.padEnd(width, ' ');
+}
+
+/** The first Attack Queue chip, with damage/healing, centred without a queue count. */
+export function chipDisplayText(queued: readonly ChipDisplayEntry[], noChip: string, width = DISPLAY_CHARS): string {
   const first = queued[0];
-  if (first === undefined) return noChip.toUpperCase().slice(0, width);
-  const name = first.toUpperCase();
-  if (queued.length === 1) return name.slice(0, width);
-  const more = `+${queued.length - 1}`;
-  const spaced = `${name} ${more}`;
-  if (spaced.length <= width) return spaced;
-  return `${name.slice(0, Math.max(0, width - more.length))}${more}`;
+  if (first === undefined) return centre(noChip, width);
+  let value = '';
+  if (first.power !== null && first.power !== undefined) {
+    value = `${first.power}${(first.hits ?? 1) > 1 ? `X${first.hits}` : ''}`;
+  } else if (first.heal !== undefined) {
+    value = String(first.heal);
+  }
+  return centre(value ? `${first.name} ${value}` : first.name, width);
 }

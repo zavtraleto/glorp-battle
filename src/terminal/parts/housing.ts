@@ -54,6 +54,10 @@ export class Housing {
     this.glass.scale.set(glass.w, glass.h, 1);
     this.glass.position.set(glass.cx, glass.cy, 0.21);
     this.crtGroup.add(this.glass);
+    // The 14-segment module is part of a frontal extension of the lower CRT
+    // frame, so it faces the player instead of inheriting the control tilt.
+    const display = W(layout.display);
+    this.addBox(display.cx, display.cy, 0.05, glass.w + BEZEL * 2, display.h, 0.3, this.bezelMat);
     void texel;
   }
 

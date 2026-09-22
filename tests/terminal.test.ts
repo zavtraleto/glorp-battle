@@ -24,7 +24,7 @@ beforeEach(() => {
 describe('terminal tuning', () => {
   it('has layout shares that sum to 1', () => {
     const t = tuning.terminal;
-    expect(t.LAYOUT_CRT + t.LAYOUT_RAIL + t.LAYOUT_DRAW + t.LAYOUT_DECK).toBeCloseTo(1, 5);
+    expect(t.LAYOUT_CRT + t.LAYOUT_DISPLAY + t.LAYOUT_RAIL + t.LAYOUT_DECK).toBeCloseTo(1, 5);
   });
 
   it('keeps the CRT render target portrait', () => {
@@ -64,7 +64,7 @@ describe('terminal layout', () => {
     // No top bar: the CRT starts at the top edge.
     expect(l.crt.y).toBe(0);
     expect(l.deck.y + l.deck.h).toBeCloseTo(844, 5);
-    expect(l.crt.h + l.rail.h + l.draw.h + l.deck.h).toBeCloseTo(844, 5);
+    expect(l.crt.h + l.display.h + l.rail.h + l.deck.h).toBeCloseTo(844, 5);
   });
 
   it('gives the CRT almost the whole width of a phone', () => {
@@ -99,7 +99,7 @@ describe('terminal layout', () => {
   it('normalises layout shares that do not sum to 1', () => {
     tuning.terminal.LAYOUT_DECK = 0.6; // sum > 1
     const l = computeLayout(390, 844);
-    expect(l.crt.h + l.rail.h + l.draw.h + l.deck.h).toBeCloseTo(844, 5);
+    expect(l.crt.h + l.display.h + l.rail.h + l.deck.h).toBeCloseTo(844, 5);
   });
 
   // The trackball is the only battle organ, so it owns the whole deck (spec §11.2).
@@ -117,18 +117,18 @@ describe('terminal layout', () => {
     expect(Object.keys(l.zones).sort()).toEqual(['pause', 'rail', 'trackball']);
   });
 
-  // The draw queue strip sits between the rail and the deck (spec §11.3).
-  it('gives the draw queue its own row under the rail', () => {
+  it('puts the segment display between the unchanged CRT and the chip rail', () => {
     const l = computeLayout(390, 844);
-    expect(l.draw.y).toBeCloseTo(l.rail.y + l.rail.h, 5);
-    expect(l.deck.y).toBeCloseTo(l.draw.y + l.draw.h, 5);
-    expect(l.draw.h).toBeGreaterThan(0);
-    expect(l.draw.h).toBeLessThan(l.rail.h);
+    expect(l.display.y).toBeCloseTo(l.crt.y + l.crt.h, 5);
+    expect(l.rail.y).toBeCloseTo(l.display.y + l.display.h, 5);
+    expect(l.deck.y).toBeCloseTo(l.rail.y + l.rail.h, 5);
+    expect(l.display.h).toBeGreaterThan(0);
+    expect(l.display.h).toBeLessThan(l.rail.h * 0.26);
   });
 
-  it('never lets the draw strip take a tap', () => {
+  it('never lets the framed segment display take a tap', () => {
     const l = computeLayout(390, 844);
-    expect(zoneAt(l, l.draw.x + l.draw.w / 2, l.draw.y + l.draw.h / 2)).not.toBe('trackball');
+    expect(zoneAt(l, l.display.x + l.display.w / 2, l.display.y + l.display.h / 2)).toBeNull();
   });
 
   // The rail is tapped mid-dodge, so its zone reaches past the cartridges.

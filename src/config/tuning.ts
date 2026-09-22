@@ -178,8 +178,8 @@ export const DEFAULT_TUNING = {
   /** Battle field look, "CRT Occult Vector" (docs/BATTLE_VISUAL.md §9). */
   battleVisual: {
     /** Camera pitch below the horizon and vertical field of view, degrees. */
-    VIEW_PITCH: 41,
-    VIEW_FOV: 56,
+    VIEW_PITCH: 30,
+    VIEW_FOV: 25,
     /** Share of the CRT frame the field may fill. */
     /** Leaves the top band of the picture to the HUD (spec §8). */
     VIEW_FILL: 1,
@@ -239,10 +239,10 @@ export const DEFAULT_TUNING = {
     TERMINAL_ASPECT_MAX: 0.62,
     /** Vertical shares of the terminal, top to bottom (spec §3; sum = 1). */
     LAYOUT_CRT: 0.64,
+    /** Lower CRT frame holding the 14-segment display. */
+    LAYOUT_DISPLAY: 0.037,
     LAYOUT_RAIL: 0.15,
-    /** Draw queue strip under the rail; it takes its height from the deck. */
-    LAYOUT_DRAW: 0.045,
-    LAYOUT_DECK: 0.165,
+    LAYOUT_DECK: 0.173,
     /** Horizontal bezel around the CRT glass, as a share of terminal width on each side. */
     CRT_MARGIN_X: 0.015,
     /** The control panel (rail, draw strip, trackball, pause) is one plane; its top edge leans away from the player, degrees. */
@@ -302,6 +302,10 @@ export const DEFAULT_TUNING = {
     /** How far the active cartridge slides out of its slot toward the player. */
     CHIP_ACTIVE_PUSH: 0.1,
     CHIP_BLOCKED_SINK: 0.04,
+    /** A reserved chip sits visibly below the ready position while its slot cools. */
+    CHIP_COOLDOWN_SINK: 0.12,
+    /** Extra depth below the cooling rest position where a reserved chip first appears. */
+    CHIP_PENDING_LOAD_DEPTH: 0.3,
     /** Brightness of the light the active cartridge throws on its own slot. */
     CHIP_ACTIVE_GLOW: 0.7,
     EJECT_LIFT_TIME: 0.06,

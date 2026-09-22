@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_TUNING, mergeTuning, secondsToTicks, tuning } from '../src/config/tuning';
 import { Rng } from '../src/core/rng';
-import type { ChipCode, ChipId } from '../src/data/chips';
+import { CHIPS, type ChipCode, type ChipId } from '../src/data/chips';
 import { ChipSystem, type FolderChip } from '../src/sim/chips/chipSystem';
 
 // Real-time hand, Attack Queue and per-slot refills (GDD §5, §7). No Custom Screen: the
@@ -137,6 +137,44 @@ describe('code rule', () => {
 });
 
 describe('slot refill cooldowns', () => {
+  it('reserves the next chip while keeping it unavailable until the slot cooldown ends', () => {
+    const s = sys(TEN);
+    const next = s.drawPreview(1)[0]!;
+    s.toggleSelect(0);
+    s.startAttack();
+    s.takeNext(0);
+
+    expect(s.reserveRefill(0)).toBe(next);
+    expect(s.pendingChip(0)).toBe(next);
+    expect(s.hand[0]).toBeNull();
+    expect(s.slotState(0)).toBe('cooling');
+    expect(s.drawPreview(5)).not.toContain(next);
+    expect(s.refillProgress(0, 0)).toBe(0);
+    expect(s.refillProgress(0, T(1))).toBeCloseTo(0.5, 5);
+    expect(s.refillReady(T(2) - 1)).toBe(0);
+    expect(s.hand[0]).toBeNull();
+    expect(s.refillReady(T(2))).toBe(1);
+    expect(s.hand[0]).toBe(next);
+    expect(s.pendingChip(0)).toBeNull();
+  });
+
+  it('measures refill progress from the outgoing chip cooldown', () => {
+    const original = CHIPS.cannon;
+    CHIPS.cannon = { ...original, cooldown: 4 };
+    try {
+      const s = new ChipSystem([chip('cannon', 'A'), chip('sword', 'B')], new Rng(1));
+      s.dealHandExact([chip('cannon', 'A')]);
+      s.toggleSelect(0);
+      s.startAttack();
+      s.takeNext(0);
+      s.reserveRefill(0);
+      expect(s.pendingChip(0)?.defId).toBe('sword');
+      expect(s.refillProgress(0, T(2))).toBeCloseTo(0.5, 5);
+    } finally {
+      CHIPS.cannon = original;
+    }
+  });
+
   it('empties a fired slot until its own cooldown elapses', () => {
     const s = sys(TEN);
     s.toggleSelect(0);

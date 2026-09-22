@@ -1,6 +1,12 @@
 import * as THREE from 'three';
 import type { ChipCode, ChipId } from '../../data/chips';
-import { cartridgeBackTexture, chipFaceTexture, FACE_H, FACE_W } from './chipFace';
+import {
+  cartridgeBackTexture,
+  chipFaceTexture,
+  cooldownFaceRows,
+  FACE_H,
+  FACE_W,
+} from './chipFace';
 import { CHIP_TEXELS_H, CHIP_TEXELS_W } from './railLayout';
 
 // A chip cartridge (TERMINAL.md §6.1, simplified 2026-09-20): one extruded
@@ -67,12 +73,21 @@ export class Cartridge {
   readonly bodyMat: THREE.MeshLambertMaterial;
   private readonly body: THREE.Mesh;
   private readonly face: THREE.Mesh;
+  /** Normally lit portion of the face, cropped bottom-to-top by cooldown progress. */
+  private readonly cooldownFace: THREE.Mesh;
+  private readonly cooldownMap: THREE.Texture;
+  private readonly cooldownMat: THREE.MeshBasicMaterial;
   private readonly back: THREE.Mesh;
   private readonly contacts: THREE.InstancedMesh;
   private readonly baseBody = new THREE.Color(COLOR.body);
   private readonly c = new THREE.Color();
   private readonly m = new THREE.Matrix4();
   private shownLit = -1;
+  private shownCooldownRows = -1;
+  private faceTexel = 0;
+  private faceScale = 1;
+  private faceY = 0;
+  private faceZ = 0;
 
   constructor(
     readonly defId: ChipId,
@@ -81,14 +96,22 @@ export class Cartridge {
     this.bodyMat = new THREE.MeshLambertMaterial({ color: COLOR.body, flatShading: true });
     // Unlit on purpose: the label's brightness is decided by the rail's tint
     // alone, never by the cabinet's lights (spec §6.1, decision 2026-09-20).
-    this.faceMat = new THREE.MeshBasicMaterial({ map: chipFaceTexture(defId, code) });
+    const faceMap = chipFaceTexture(defId, code);
+    this.faceMat = new THREE.MeshBasicMaterial({ map: faceMap });
+    this.cooldownMap = faceMap.clone();
+    this.cooldownMap.needsUpdate = true;
+    this.cooldownMap.repeat.set(1, 0);
+    this.cooldownMap.offset.set(0, 0);
+    this.cooldownMat = new THREE.MeshBasicMaterial({ map: this.cooldownMap, color: 0xaaa69e });
     this.body = new THREE.Mesh(shared.body, this.bodyMat);
     this.face = new THREE.Mesh(shared.plane, this.faceMat);
+    this.cooldownFace = new THREE.Mesh(shared.plane, this.cooldownMat);
+    this.cooldownFace.visible = false;
     this.back = new THREE.Mesh(shared.plane, new THREE.MeshBasicMaterial({ map: cartridgeBackTexture() }));
     this.back.rotation.y = Math.PI;
     this.back.visible = false;
     this.contacts = new THREE.InstancedMesh(shared.contact, shared.contactMat, CONTACTS);
-    this.object.add(this.body, this.face, this.back, this.contacts);
+    this.object.add(this.body, this.face, this.cooldownFace, this.back, this.contacts);
   }
 
   /** Sizes the parts: `texel` = world size of one render pixel; `maxH` caps the height. */
@@ -101,8 +124,13 @@ export class Cartridge {
     // of texels of plastic as a frame (spec §6.1: no wide grey field).
     const faceScale = Math.min(1, (h * (1 - STRIP_H) - 4 * texel) / (FACE_H * texel));
     const faceY = h * (STRIP_H / 2);
+    const faceZ = depth / 2 + 0.002;
+    this.faceTexel = texel;
+    this.faceScale = faceScale;
+    this.faceY = faceY;
+    this.faceZ = faceZ;
     this.face.scale.set(FACE_W * texel * faceScale, FACE_H * texel * faceScale, 1);
-    this.face.position.set(0, faceY, depth / 2 + 0.002);
+    this.face.position.set(0, faceY, faceZ);
     this.back.scale.copy(this.face.scale);
     this.back.position.set(0, faceY, -depth / 2 - 0.002);
     // Contacts across the bottom strip, clear of the cut corner.
@@ -120,6 +148,8 @@ export class Cartridge {
     this.contacts.instanceMatrix.needsUpdate = true;
     this.shownLit = -1;
     this.setLitContacts(0);
+    this.shownCooldownRows = -1;
+    this.setCooldown(null);
   }
 
   /**
@@ -144,6 +174,26 @@ export class Cartridge {
     this.faceMat.color.copy(face);
   }
 
+  /** Reveals the normally lit face in whole texel rows from bottom to top. */
+  setCooldown(progress: number | null): void {
+    const rows = progress === null ? 0 : cooldownFaceRows(progress);
+    if (rows === this.shownCooldownRows && this.cooldownFace.visible === (progress !== null && rows > 0)) return;
+    this.shownCooldownRows = rows;
+    this.cooldownFace.visible = progress !== null && rows > 0;
+    if (!this.cooldownFace.visible) return;
+    const fraction = rows / FACE_H;
+    const fullW = FACE_W * this.faceTexel * this.faceScale;
+    const fullH = FACE_H * this.faceTexel * this.faceScale;
+    const h = fullH * fraction;
+    this.cooldownFace.scale.set(fullW, h, 1);
+    this.cooldownFace.position.set(
+      0,
+      this.faceY - fullH / 2 + h / 2,
+      this.faceZ + 0.003,
+    );
+    this.cooldownMap.repeat.y = fraction;
+  }
+
   /** Place in the Attack Queue, shown as that many lit contacts (0 = none). */
   setLitContacts(n: number): void {
     if (n === this.shownLit) return;
@@ -162,6 +212,8 @@ export class Cartridge {
 
   dispose(): void {
     this.faceMat.dispose();
+    this.cooldownMat.dispose();
+    this.cooldownMap.dispose();
     this.bodyMat.dispose();
     (this.back.material as THREE.Material).dispose();
     this.contacts.dispose();
