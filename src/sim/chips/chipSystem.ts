@@ -10,10 +10,10 @@ import { canAddToSelection, type ChipKey } from './selection';
 // battle and the player builds a series of chips while dodging. A fired chip
 // leaves its slot empty until that chip's refill cooldown elapses.
 
-export type ChipState = 'folder' | 'hand' | 'queued' | 'used';
+export type ChipState = 'folder' | 'hand' | 'pending' | 'queued' | 'used';
 
 /** What a hand slot shows right now; derived, never stored. */
-export type SlotState = 'empty' | 'ready' | 'queued' | 'blocked';
+export type SlotState = 'empty' | 'cooling' | 'ready' | 'queued' | 'blocked';
 
 export interface ChipInstance {
   readonly uid: number;
@@ -28,6 +28,12 @@ export interface ChipInstance {
 export interface FolderChip {
   defId: ChipId;
   code: ChipCode;
+}
+
+interface PendingRefill {
+  chip: ChipInstance;
+  startedAt: number;
+  readyAt: number;
 }
 
 /** A debug folder as a flat chip list. */
@@ -58,6 +64,10 @@ export class ChipSystem {
   private attackLocked = false;
   /** Tick when each spent slot may draw its replacement; null means no refill is pending. */
   private refillTicks: (number | null)[] = [];
+  /** Tick when each slot cooldown began. */
+  private refillStartedTicks: (number | null)[] = [];
+  /** The real next draw assigned to each cooling slot. */
+  private pendingRefills: (PendingRefill | null)[] = [];
   /** Times the spent chips went back into the draw pile (GDD §7.5). */
   reshuffles = 0;
   /** Draws so far; each draw stamps its chip with the next serial. */
@@ -75,6 +85,8 @@ export class ChipSystem {
     this.drawPile = rng.shuffle([...this.chips]);
     this.hand = new Array<ChipInstance | null>(tuning.chips.HAND_SIZE).fill(null);
     this.refillTicks = new Array<number | null>(tuning.chips.HAND_SIZE).fill(null);
+    this.refillStartedTicks = new Array<number | null>(tuning.chips.HAND_SIZE).fill(null);
+    this.pendingRefills = new Array<PendingRefill | null>(tuning.chips.HAND_SIZE).fill(null);
   }
 
   get drawRemaining(): number {
@@ -94,12 +106,12 @@ export class ChipSystem {
     return this.chips.filter((c) => c.state === state).length;
   }
 
-  private draw(reservedUid: number | null = null): ChipInstance | null {
+  private draw(reservedUid: number | null = null, state: 'hand' | 'pending' = 'hand'): ChipInstance | null {
     if (this.drawIndex >= this.drawPile.length) this.reshuffleSpent(reservedUid);
     const chip = this.drawPile[this.drawIndex];
     if (!chip) return null;
     this.drawIndex++;
-    chip.state = 'hand';
+    chip.state = state;
     chip.deal = ++this.deals;
     return chip;
   }
@@ -119,12 +131,16 @@ export class ChipSystem {
   dealHand(): void {
     this.hand = Array.from({ length: tuning.chips.HAND_SIZE }, () => this.draw());
     this.refillTicks = new Array<number | null>(tuning.chips.HAND_SIZE).fill(null);
+    this.refillStartedTicks = new Array<number | null>(tuning.chips.HAND_SIZE).fill(null);
+    this.pendingRefills = new Array<PendingRefill | null>(tuning.chips.HAND_SIZE).fill(null);
   }
 
   /** Tutorial (spec §4.4): the exact hand by slot; null leaves the slot empty. */
   dealHandExact(spec: readonly (FolderChip | null)[]): void {
     this.hand = new Array<ChipInstance | null>(tuning.chips.HAND_SIZE).fill(null);
     this.refillTicks = new Array<number | null>(tuning.chips.HAND_SIZE).fill(null);
+    this.refillStartedTicks = new Array<number | null>(tuning.chips.HAND_SIZE).fill(null);
+    this.pendingRefills = new Array<PendingRefill | null>(tuning.chips.HAND_SIZE).fill(null);
     for (let i = 0; i < Math.min(spec.length, this.hand.length); i++) {
       const want = spec[i];
       if (want) this.dealSlot(i, want);
@@ -147,6 +163,8 @@ export class ChipSystem {
     chip.deal = ++this.deals;
     this.hand[slot] = chip;
     this.refillTicks[slot] = null;
+    this.refillStartedTicks[slot] = null;
+    this.pendingRefills[slot] = null;
     return chip;
   }
 
@@ -170,7 +188,7 @@ export class ChipSystem {
 
   slotState(slot: number): SlotState {
     const chip = this.hand[slot];
-    if (!chip) return 'empty';
+    if (!chip) return this.pendingRefills[slot] ? 'cooling' : 'empty';
     if (this.queueIndexOf(slot) >= 0) return 'queued';
     return this.fitsSeries(chip) ? 'ready' : 'blocked';
   }
@@ -226,6 +244,8 @@ export class ChipSystem {
     chip.state = 'hand';
     this.hand[slot] = chip;
     this.refillTicks[slot] = null;
+    this.refillStartedTicks[slot] = null;
+    this.pendingRefills[slot] = null;
     return true;
   }
 
@@ -250,8 +270,37 @@ export class ChipSystem {
     chip.state = 'used';
     this.hand[slot] = null;
     const cooldown = chipDef(chip).cooldown ?? tuning.chips.CHIP_REFILL_COOLDOWN;
+    this.refillStartedTicks[slot] = tick;
     this.refillTicks[slot] = tick + secondsToTicks(cooldown);
+    this.pendingRefills[slot] = null;
     return chip;
+  }
+
+  /** Reserves the real next draw once the outgoing chip can no longer return. */
+  reserveRefill(slot: number, reservedUid: number | null = null): ChipInstance | null {
+    if (slot < 0 || slot >= this.hand.length || this.hand[slot] !== null) return null;
+    const readyAt = this.refillTicks[slot];
+    if (readyAt === null || readyAt === undefined) return null;
+    const existing = this.pendingRefills[slot];
+    if (existing) return existing.chip;
+    const chip = this.draw(reservedUid, 'pending');
+    if (!chip) return null;
+    const startedAt = this.refillStartedTicks[slot] ?? readyAt;
+    this.pendingRefills[slot] = { chip, startedAt, readyAt };
+    return chip;
+  }
+
+  pendingChip(slot: number): ChipInstance | null {
+    return this.pendingRefills[slot]?.chip ?? null;
+  }
+
+  /** Cooling progress for the reserved chip, or null when no chip is assigned. */
+  refillProgress(slot: number, tick: number): number | null {
+    const pending = this.pendingRefills[slot];
+    if (!pending) return null;
+    const span = pending.readyAt - pending.startedAt;
+    if (span <= 0) return 1;
+    return Math.max(0, Math.min(1, (tick - pending.startedAt) / span));
   }
 
   /** Refills only slots whose own spent-chip cooldown has elapsed. */
@@ -261,10 +310,13 @@ export class ChipSystem {
       if (slot === reserved?.slot) continue;
       const readyAt = this.refillTicks[slot];
       if (readyAt === null || readyAt === undefined || tick < readyAt || this.hand[slot] !== null) continue;
-      const chip = this.draw(reserved?.uid ?? null);
+      const chip = this.pendingRefills[slot]?.chip ?? this.reserveRefill(slot, reserved?.uid ?? null);
       if (!chip) continue;
+      chip.state = 'hand';
       this.hand[slot] = chip;
       this.refillTicks[slot] = null;
+      this.refillStartedTicks[slot] = null;
+      this.pendingRefills[slot] = null;
       refilled++;
     }
     return refilled;

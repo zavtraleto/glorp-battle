@@ -89,7 +89,7 @@ export class SegmentDisplay {
     this.screen.scale.set(w, h, 1);
     // In front of the bezel's face (z 0.06), or the bezel wins the depth test.
     this.screen.position.set(right - w / 2, cy, 0.09);
-    const rim = h * 0.12;
+    const rim = h * 0.06;
     this.bezel.scale.set(w + rim * 2, h + rim * 2, 0.08);
     this.bezel.position.set(right - w / 2, cy, 0.02);
   }

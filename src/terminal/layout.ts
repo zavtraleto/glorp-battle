@@ -17,9 +17,9 @@ export interface TerminalLayout {
   viewport: { w: number; h: number };
   body: Rect;
   crt: Rect;
+  /** Lower CRT frame occupied by the centred 14-segment display. */
+  display: Rect;
   rail: Rect;
-  /** Draw queue strip: a display, never a tap target (spec §11.3). */
-  draw: Rect;
   deck: Rect;
   zones: Record<ZoneId, Rect>;
   worldWidth: number;
@@ -36,7 +36,7 @@ const MIN_ZONE_PX = 56;
  * rail height. It grows mostly upward, into the gap under the CRT: growing
  * downward would take the top of the trackball and steal its gestures.
  */
-const RAIL_ZONE_PAD_UP = 0.35;
+const RAIL_ZONE_PAD_UP = 0.12;
 const RAIL_ZONE_PAD_DOWN = 0.12;
 
 /** Slots the chip rail is divided into. */
@@ -62,13 +62,13 @@ export function computeLayout(viewportW: number, viewportH: number): TerminalLay
     body = { x: 0, y: 0, w: vw, h: vh };
   }
 
-  const sum = t.LAYOUT_CRT + t.LAYOUT_RAIL + t.LAYOUT_DRAW + t.LAYOUT_DECK;
+  const sum = t.LAYOUT_CRT + t.LAYOUT_DISPLAY + t.LAYOUT_RAIL + t.LAYOUT_DECK;
   const share = (v: number) => (sum > 0 ? v / sum : 0.25) * body.h;
   const row = (y: number, h: number): Rect => ({ x: body.x, y, w: body.w, h });
   const crtRow = row(body.y, share(t.LAYOUT_CRT));
-  const rail = row(crtRow.y + crtRow.h, share(t.LAYOUT_RAIL));
-  const draw = row(rail.y + rail.h, share(t.LAYOUT_DRAW));
-  const deck = row(draw.y + draw.h, body.y + body.h - (draw.y + draw.h));
+  const display = row(crtRow.y + crtRow.h, share(t.LAYOUT_DISPLAY));
+  const rail = row(display.y + display.h, share(t.LAYOUT_RAIL));
+  const deck = row(rail.y + rail.h, body.y + body.h - (rail.y + rail.h));
 
   const margin = body.w * t.CRT_MARGIN_X;
   const crt: Rect = { x: body.x + margin, y: crtRow.y, w: body.w - 2 * margin, h: crtRow.h };
@@ -95,8 +95,8 @@ export function computeLayout(viewportW: number, viewportH: number): TerminalLay
     viewport: { w: vw, h: vh },
     body,
     crt,
+    display,
     rail,
-    draw,
     deck,
     zones,
     worldWidth: TERMINAL_WORLD_WIDTH,

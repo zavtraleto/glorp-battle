@@ -8,7 +8,6 @@ import type { SceneRenderer } from '../render/scene';
 import type { SimEvent } from '../sim/events';
 import type { World } from '../sim/world';
 import { acceptsPress, cursorKind, shotAvailability, organForKey, trackballArmed } from './controlRules';
-import { RAIL_LEFT, RAIL_SPAN } from './chips/railLayout';
 import { BattleTarget } from './crt/battleTarget';
 import { CrtCanvas } from './crt/crtCanvas';
 import { CrtMaterial } from './crt/crtMaterial';
@@ -34,7 +33,6 @@ import { ChipRail } from './parts/chipRail';
 import { HitZones } from './parts/hitZones';
 import { Housing } from './parts/housing';
 import { DarkLighting } from './parts/lighting';
-import { DrawStrip } from './parts/drawStrip';
 import { Pcb, PCB_PULSE_HZ } from './parts/pcb';
 import { SegmentDisplay } from './parts/segmentDisplay';
 import { chipDisplayText } from './chips/segmentFont';
@@ -76,6 +74,8 @@ const EDGE_HURT = 0xff2020;
 const EDGE = { hit: 0.18, kill: 0.6, hurt: 0.5 };
 /** HP segments sit this many CRT pixels above an enemy's head. */
 const HP_BAR_GAP = 3;
+/** User-tuned size of the framed 14-segment module under the CRT. */
+const CHIP_DISPLAY_SCALE = 0.6;
 
 export interface TerminalHandlers {
   move(dir: Dir): void;
@@ -112,11 +112,10 @@ export class Terminal {
   private readonly deck = new DeckControls();
   private readonly trackball = new Trackball();
   private readonly lighting = new DarkLighting();
-  private readonly drawStrip = new DrawStrip();
   private readonly chipDisplay = new SegmentDisplay();
   private readonly pcb = new Pcb();
   private readonly crtMount = new Mount();
-  /** The control panel: rail, draw strip, trackball and pause key on one tilted plane. */
+  /** The control panel: rail, trackball and pause key on one tilted plane. */
   private readonly controlMount = new Mount();
   /** Pivot line of each tilted mount, world y (spec §3.1). */
   private readonly pivots = { crt: 0, control: 0 };
@@ -152,12 +151,10 @@ export class Terminal {
     this.controlMount.inner.add(
       this.pcb.group,
       this.rail.group,
-      this.drawStrip.group,
-      this.chipDisplay.group,
       this.trackball.group,
       this.deck.group,
     );
-    this.scene.add(this.lighting.group, this.housing.group, this.crtMount, this.controlMount, this.hitZones.group);
+    this.scene.add(this.lighting.group, this.housing.group, this.chipDisplay.group, this.crtMount, this.controlMount, this.hitZones.group);
 
     this.layout = computeLayout(container.clientWidth, container.clientHeight);
     // A shot runs through the PCB and flares the ring.
@@ -202,8 +199,7 @@ export class Terminal {
     const key = [
       vw, vh, t.RENDER_SCALE_SHORT, t.CAMERA_FOV, t.LAYOUT_CRT, t.LAYOUT_RAIL, t.LAYOUT_DECK,
       t.CRT_MARGIN_X, t.PAUSE_ZONE_W, t.CRT_RES_W, t.CRT_RES_H,
-      t.CONTROL_TILT, t.CRT_TILT, t.BALL_W, t.RING_W, t.LAYOUT_DRAW,
-      tuning.chips.DRAW_PREVIEW,
+      t.CONTROL_TILT, t.CRT_TILT, t.BALL_W, t.RING_W, t.LAYOUT_DISPLAY,
       t.TERMINAL_ASPECT_MIN, t.TERMINAL_ASPECT_MAX, t.BUTTON_PRESS_DEPTH,
     ].join('|');
     if (key === this.layoutKey) return;
@@ -245,7 +241,6 @@ export class Terminal {
     const texel = k / scale; // world size of one render pixel
     this.housing.build(this.layout, texel, this.crtPx.w / this.crtPx.h);
     this.rail.build(this.layout, texel);
-    this.drawStrip.build(this.layout, tuning.chips.DRAW_PREVIEW);
     this.placeChipDisplay();
     this.hitZones.build(this.layout);
     this.deck.build(this.layout);
@@ -374,7 +369,6 @@ export class Terminal {
     this.rail.update(dt);
     this.syncIndicators(dt);
     this.deck.update(dt);
-    this.drawStrip.update(dt);
     this.pcb.update(dt, world.chips.hand.map((_, i) => this.opts.session.screen === 'BATTLE' && world.state === 'ACTION' && world.chips.slotState(i) === 'queued'));
     this.trackball.update(dt, this.trackballArmed(world));
     this.updateCabinetShake(dt);
@@ -489,13 +483,16 @@ export class Terminal {
     this.rail.setAttract(this.mode() === 'BATTLE');
     this.rail.syncHand(
       chips.hand.map((chip, i) => ({
-        chip: inBattle ? chip : null,
+        chip: inBattle ? (chip ?? chips.pendingChip(i)) : null,
         state: inBattle ? chips.slotState(i) : 'empty',
+        cooldown: inBattle ? chips.refillProgress(i, world.tick) : null,
         order: inBattle ? chips.queuePosition(i) : 0,
       })),
     );
-    this.drawStrip.set(inBattle ? chips.drawPreview(tuning.chips.DRAW_PREVIEW) : [], 0);
-    const queued = !inBattle || this.mode() === 'MENU' ? [] : chips.attackChips().map((c) => chipName(c.defId));
+    const queued = !inBattle || this.mode() === 'MENU' ? [] : chips.attackChips().map((c) => {
+      const def = CHIPS[c.defId];
+      return { name: chipName(c.defId), power: def.power, heal: def.heal, hits: def.hits };
+    });
     // The segment display prefers a tutorial hint over the usual "select a chip" fallback.
     const hintSeg = hint?.seg ?? null;
     const fallback = hintSeg ?? (inBattle ? t('hud.selectChip') : '');
@@ -625,14 +622,12 @@ export class Terminal {
     return trackballArmed(this.mode(), shotAvailability(world));
   }
 
-  /** The segment display sits at the right end of the row under the rail. */
+  /** The segment display is centred in the frontal lower frame of the CRT. */
   private placeChipDisplay(): void {
-    const row = rectToWorld(this.layout, this.layout.draw);
-    const rail = rectToWorld(this.layout, this.layout.rail);
-    const right = rail.cx - rail.w * RAIL_LEFT + rail.w * RAIL_SPAN;
-    const room = right - this.drawStrip.right - row.h * 0.5;
-    const h = Math.min(row.h * 0.8, room / this.chipDisplay.aspect);
-    this.chipDisplay.place(right, row.cy, h);
+    const row = rectToWorld(this.layout, this.layout.display);
+    const h = Math.min(row.h * 0.92, (row.w * 0.72) / this.chipDisplay.aspect) * CHIP_DISPLAY_SCALE;
+    this.chipDisplay.place(row.cx + (h * this.chipDisplay.aspect) / 2, row.cy + row.h * 0.025, h);
+    this.chipDisplay.group.position.z = 0.23;
   }
 
   /** Drives the lights that stand in for the cabinet's old indicators (spec §4). */

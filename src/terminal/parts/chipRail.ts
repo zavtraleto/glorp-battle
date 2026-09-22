@@ -3,8 +3,16 @@ import { tuning } from '../../config/tuning';
 import type { ChipCode, ChipId } from '../../data/chips';
 import { Spring } from '../anim/spring';
 import { Cartridge } from '../chips/cartridge';
+import { cooldownBodyLevel } from '../chips/chipFace';
 import type { SlotState } from '../../sim/chips/chipSystem';
-import { ejectPose, type EjectAim } from '../chips/ejectArc';
+import {
+  chooseEjectProfile,
+  ejectAim,
+  ejectPose,
+  safeEjectDepth,
+  type EjectAim,
+  type EjectProfile,
+} from '../chips/ejectArc';
 import { activeSlot, cancelFlashLevel, railChanges, returningCartIndex } from '../chips/railPlan';
 import { attractLevel } from '../chips/railAttract';
 import { CHIP_TEXELS_H, CHIP_TEXELS_W, RAIL_LEFT, RAIL_SLOTS, RAIL_SPAN } from '../chips/railLayout';
@@ -30,6 +38,8 @@ export interface RailChip {
 export interface RailSlotView {
   chip: RailChip | null;
   state: SlotState;
+  /** 0..1 while the reserved chip is cooling; null otherwise. */
+  cooldown?: number | null;
   /** 1-based place in the Attack Queue, 0 when not queued. */
   order: number;
 }
@@ -48,8 +58,9 @@ interface Cart {
   pos: THREE.Vector3;
   /** Where the eject started, in world space: the flight ignores the panel tilt. */
   origin: THREE.Vector3;
-  drift: number;
-  spin: number;
+  profile: EjectProfile | null;
+  aim: EjectAim;
+  wasCooling: boolean;
   cancelFlashLeft: number;
 }
 
@@ -80,11 +91,15 @@ const COLOR = {
   facePossible: new THREE.Color(0xdcd8d0),
   faceNormal: new THREE.Color(0xaaa69e),
   faceBlocked: new THREE.Color(0x6b727b),
+  /** Unlit part of a cooling face; the normal texture rises over it bottom-to-top. */
+  faceCooling: new THREE.Color(0x292b2e),
 };
 
 const REST_Z = 0.14;
 /** Eject: height of the pop, flight toward the camera and drop (world units), tilt (radians). */
 const EJECT_POP = 0.25;
+/** World-space plane in front of the CRT glass and its 0.3-unit bezel. */
+const EJECT_FRONT_Z = 0.42;
 /** How lit the active slot's contacts sit between flashes. */
 const ACTIVE_CONTACT = 0.55;
 const LOAD_HEIGHT = 1.2;
@@ -108,13 +123,6 @@ const GLOW_FLIGHT = 0.45;
 const SLIDE_RATE = 22;
 /** Cartridge width as a share of its slot pitch. */
 const CART_FILL = 0.92;
-/**
- * Where an ejected cartridge ends, as shares of the camera's distance: short of
- * the lens and well under its axis, so it leaves through the bottom of the
- * frame while still growing instead of filling the screen.
- */
-const EJECT_REACH = 0.7;
-const EJECT_UNDER_LENS = 0.18;
 /** Tutorial hint level 1: the "pick me" attract amplitude is multiplied by this (tutorial spec §5). */
 const HINT_PULSE_GAIN = 2.2;
 
@@ -152,11 +160,11 @@ export class ChipRail {
   /** One instanced bar per slot: the light that ties a queued chip to the PCB. */
   private bars: THREE.InstancedMesh | null = null;
   private readonly barColor = new THREE.Color();
+  private readonly coolingBody = new THREE.Color();
   /** Called when a cartridge leaves its slot (a shot): the slot index. */
   onEject: ((slot: number) => void) | null = null;
-  /** World point the ejected cartridges fly at: just under the camera (set from it). */
-  private readonly aimAt = new THREE.Vector3(0, 0, 30);
-  private readonly aim: EjectAim = { x: 0, y: 0, z: 0 };
+  /** Camera position used to derive left, right and bottom exit corridors. */
+  private readonly cameraAt = new THREE.Vector3(0, 0, 30);
   private readonly flight = new THREE.Vector3();
   private time = 0;
   /** How long the Attack Queue has been empty while the rail may call for a pick. */
@@ -236,9 +244,9 @@ export class ChipRail {
     return this.slotPos.map((p) => ({ x: p.x, top: p.y + half, bottom: p.y - half }));
   }
 
-  /** Ejected cartridges fly at the camera: `camera` is its world position. */
+  /** Ejected cartridges leave through corridors around `camera`. */
   setCamera(camera: THREE.Vector3): void {
-    this.aimAt.set(camera.x, camera.y - camera.z * EJECT_UNDER_LENS, camera.z * EJECT_REACH);
+    this.cameraAt.copy(camera);
   }
 
   /** Position of the active cartridge in the rail's space, for the light that follows it. */
@@ -325,9 +333,20 @@ export class ChipRail {
           if (!rest) break;
           o.visible = c.t >= c.delay;
           const k = t.LOAD_TIME > 0 ? Math.min(1, Math.max(0, (c.t - c.delay) / t.LOAD_TIME)) : 1;
-          c.pos.set(rest.x, rest.y, rest.z + (1 - k) * (1 - k) * LOAD_HEIGHT);
+          const cooling = this.slotViews?.[c.slot]?.state === 'cooling';
+          const loadOffset = cooling
+            ? -t.CHIP_COOLDOWN_SINK - (1 - k) * (1 - k) * t.CHIP_PENDING_LOAD_DEPTH
+            : (1 - k) * (1 - k) * LOAD_HEIGHT;
+          c.pos.set(rest.x, rest.y, rest.z + loadOffset);
           o.position.copy(c.pos);
-          o.scale.setScalar(0.7 + 0.3 * k);
+          o.scale.setScalar((cooling ? 0.88 : 0.7) + (cooling ? 0.12 : 0.3) * k);
+          if (cooling) {
+            const progress = this.slotViews?.[c.slot]?.cooldown ?? 0;
+            c.cart.setTint(this.coolingBody.setScalar(cooldownBodyLevel(progress)), COLOR.faceCooling);
+            c.cart.setGlow(COLOR.glowPossible, 0);
+            c.cart.setCooldown(progress);
+            c.wasCooling = true;
+          }
           if (cancelled) c.cart.setGlow(COLOR.glowCancelled, cancelGlow);
           if (k >= 1) this.land(c);
           break;
@@ -337,6 +356,9 @@ export class ChipRail {
           const view = this.slotViews?.[c.slot];
           const isActive = view?.state === 'queued';
           const blocked = view?.state === 'blocked';
+          const cooling = view?.state === 'cooling';
+          if (c.wasCooling && !cooling) this.flashContacts(c.slot);
+          c.wasCooling = cooling;
           // While a series is built, chips that could join it tilt level with it.
           const candidate = building && view?.state === 'ready';
           c.cart.setLitContacts(isActive ? (view?.order ?? 0) : 0);
@@ -348,7 +370,7 @@ export class ChipRail {
           const tilt = THREE.MathUtils.degToRad(t.CHIP_TILT_DEG) * k;
           const half = this.cartH / 2;
           // A refused chip sits a little deeper in its socket than the rest.
-          const sink = blocked ? t.CHIP_BLOCKED_SINK : 0;
+          const sink = cooling ? t.CHIP_COOLDOWN_SINK : blocked ? t.CHIP_BLOCKED_SINK : 0;
           c.pos.set(rest.x, rest.y - half + half * Math.cos(tilt), rest.z + half * Math.sin(tilt) + k * t.CHIP_ACTIVE_PUSH - sink);
           o.position.lerp(c.pos, slide);
           o.rotation.set(tilt, 0, 0);
@@ -358,9 +380,13 @@ export class ChipRail {
             this.activeAt.copy(o.position);
             this.hasActive = true;
           }
+          c.cart.setCooldown(cooling ? (view?.cooldown ?? 0) : null);
           if (cancelled) {
             c.cart.setTint(COLOR.tintPlain, COLOR.faceNormal);
             c.cart.setGlow(COLOR.glowCancelled, cancelGlow);
+          } else if (cooling) {
+            c.cart.setTint(this.coolingBody.setScalar(cooldownBodyLevel(view?.cooldown ?? 0)), COLOR.faceCooling);
+            c.cart.setGlow(COLOR.glowPossible, 0);
           } else if (blocked) {
             c.cart.setTint(COLOR.tintBlocked, COLOR.faceBlocked);
             c.cart.setGlow(COLOR.glowPossible, 0);
@@ -382,20 +408,18 @@ export class ChipRail {
         }
         case 'eject': {
           if (cancelled) c.cart.setGlow(COLOR.glowCancelled, cancelGlow);
-          const lt = t.EJECT_LIFT_TIME;
-          if (c.t < lt) {
-            o.position.z = c.pos.z + EJECT_POP * (c.t / lt);
+          const profile = c.profile;
+          if (!profile) {
+            this.drop(c);
             break;
           }
-          const p = t.EJECT_TIME > 0 ? (c.t - lt) / t.EJECT_TIME : 1;
+          const duration = t.EJECT_LIFT_TIME + t.EJECT_TIME * profile.durationScale;
+          const p = duration > 0 ? c.t / duration : 1;
           if (p >= 1) {
             this.drop(c);
             break;
           }
-          this.aim.x = this.aimAt.x - c.origin.x;
-          this.aim.y = this.aimAt.y - c.origin.y;
-          this.aim.z = this.aimAt.z - c.origin.z;
-          const pose = ejectPose(p, this.aim, c.drift, c.spin);
+          const pose = ejectPose(p, c.aim, profile);
           this.flight.set(c.origin.x + pose.x, c.origin.y + pose.y, c.origin.z + pose.z);
           o.position.copy(this.group.worldToLocal(this.flight));
           o.rotation.set(pose.rotX, pose.rotY, pose.rotZ);
@@ -429,22 +453,31 @@ export class ChipRail {
   }
 
   private startLeave(c: Cart): void {
-    // Start from the popped-out position; the flight runs in world space.
-    c.cart.object.position.z += EJECT_POP;
+    // The control panel leans back 45 degrees, so a chip can be locally above
+    // its socket and still sit behind the CRT in world depth. Snap the launch
+    // point in front of the bezel before the free flight begins.
     c.origin.copy(c.cart.object.position);
     this.group.localToWorld(c.origin);
-    c.cart.object.position.z -= EJECT_POP;
     const slot = c.slot;
+    // Clear the plane with the whole rotating cartridge, not only its centre.
+    c.origin.z = safeEjectDepth(c.origin.z + EJECT_POP, EJECT_FRONT_Z + this.cartH * 0.6);
+    const occupied = this.carts
+      .filter((candidate) => candidate.phase === 'eject' && candidate.profile)
+      .map((candidate) => candidate.profile!.corridor);
+    c.profile = chooseEjectProfile(c.deal, slot, occupied);
+    c.aim = ejectAim(c.profile, c.origin, this.cameraAt);
+    this.flight.copy(c.origin);
+    c.cart.object.position.copy(this.group.worldToLocal(this.flight));
+    c.cart.object.rotation.set(0, 0, 0);
     c.slot = -1;
     c.t = 0;
     c.phase = 'eject';
-    c.drift = (slot - 2) * 0.15;
-    c.spin = 0.4;
     c.delay = 0;
     c.cart.setTint(COLOR.tintPlain, COLOR.faceSelected);
     c.cart.setGlow(COLOR.glowSelected, GLOW_FLIGHT);
     c.cart.setLitContacts(0);
     c.cart.setFlying(true);
+    c.cart.setCooldown(null);
     this.flashContacts(slot);
     this.onEject?.(slot);
   }
@@ -458,6 +491,8 @@ export class ChipRail {
     c.lift.snap(0);
     c.cart.object.rotation.set(0, 0, 0);
     c.cart.setFlying(false);
+    c.wasCooling = false;
+    c.cart.setCooldown(null);
   }
 
   private land(c: Cart): void {
@@ -490,8 +525,9 @@ export class ChipRail {
       lift: new Spring(0),
       pos: o.position.clone(),
       origin: new THREE.Vector3(),
-      drift: 0,
-      spin: 0,
+      profile: null,
+      aim: { x: 0, y: 0, z: 0 },
+      wasCooling: this.slotViews?.[slot]?.state === 'cooling',
       cancelFlashLeft: 0,
     };
   }

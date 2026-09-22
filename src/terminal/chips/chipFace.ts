@@ -51,6 +51,17 @@ const ICON_SCALE = 3;
 
 const cache = new Map<string, THREE.CanvasTexture>();
 
+/** Lit cooldown height in whole face texels, clamped to the full cartridge face. */
+export function cooldownFaceRows(progress: number): number {
+  return Math.floor(Math.max(0, Math.min(1, progress)) * FACE_H);
+}
+
+/** Cooling plastic brightness: much darker on arrival, normal at readiness. */
+export function cooldownBodyLevel(progress: number): number {
+  const p = Math.max(0, Math.min(1, progress));
+  return 0.18 + p * 0.82;
+}
+
 /** The number on the top panel: damage, healing with a `+`, or nothing. */
 export function faceNumber(defId: ChipId): string {
   const def = CHIPS[defId];

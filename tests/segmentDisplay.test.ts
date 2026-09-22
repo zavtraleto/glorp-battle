@@ -23,19 +23,31 @@ describe('14-segment display', () => {
   });
 
   it('shows NO CHIP for an empty queue', () => {
-    expect(chipDisplayText([], t('hud.selectChip'))).toBe('SELECT CHIP');
+    expect(chipDisplayText([], t('hud.selectChip'))).toBe(' SELECT CHIP  ');
   });
 
-  it('shows the first loaded chip and how many more follow it', () => {
-    expect(chipDisplayText(['Cannon'], 'NO CHIP')).toBe('CANNON');
-    expect(chipDisplayText(['Cannon', 'Sword', 'Sword'], 'NO CHIP')).toBe('CANNON +2');
+  it('centres the first loaded chip with its damage and never shows the queue count', () => {
+    expect(chipDisplayText([{ name: 'Cannon', power: 40 }], 'NO CHIP')).toBe('  CANNON 40   ');
+    expect(chipDisplayText([
+      { name: 'Cannon', power: 40 },
+      { name: 'Sword', power: 80 },
+      { name: 'Sword', power: 80 },
+    ], 'NO CHIP')).toBe('  CANNON 40   ');
   });
 
-  it('always fits the display', () => {
+  it('shows multi-hit damage and healing values', () => {
+    expect(chipDisplayText([{ name: 'Vulcan', power: 10, hits: 3 }], 'NO CHIP')).toBe(' VULCAN 10X3  ');
+    expect(chipDisplayText([{ name: 'Recov30', power: null, heal: 30 }], 'NO CHIP')).toBe('  RECOV30 30  ');
+    expect(chipDisplayText([{ name: 'Barrier', power: null }], 'NO CHIP')).toBe('   BARRIER    ');
+  });
+
+  it('always fits the wider display', () => {
+    expect(DISPLAY_CHARS).toBe(14);
     for (const id of Object.keys(CHIPS) as ChipId[]) {
-      const text = chipDisplayText([chipName(id), 'x', 'x', 'x', 'x'], 'NO CHIP');
-      expect(text.length).toBeLessThanOrEqual(DISPLAY_CHARS);
-      expect(text.endsWith('+4')).toBe(true);
+      const def = CHIPS[id];
+      const text = chipDisplayText([{ name: chipName(id), power: def.power, heal: def.heal, hits: def.hits }], 'NO CHIP');
+      expect(text).toHaveLength(DISPLAY_CHARS);
+      expect(text).not.toContain('+');
     }
   });
 });

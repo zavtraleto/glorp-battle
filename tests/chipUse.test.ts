@@ -420,6 +420,22 @@ describe('chip use', () => {
     expect(events.some((ev) => ev.type === 'chipInterrupted')).toBe(true);
   });
 
+  it('reserves the visible replacement only after the outgoing chip resolves', () => {
+    const w = makeWorld();
+    give(w, 'cannon');
+    const fired = w.chips.attackChips()[0]!;
+    const slot = w.chips.hand.indexOf(fired);
+    const next = w.chips.drawPreview(1)[0]!;
+
+    use(w);
+    expect(w.chips.pendingChip(slot)).toBeNull();
+    run(w, hitFrame() - 1);
+    expect(w.chips.pendingChip(slot)).toBeNull();
+    run(w, 1);
+    expect(w.chips.pendingChip(slot)).toBe(next);
+    expect(w.chips.drawPreview(5)).not.toContain(next);
+  });
+
   it('reserves the active slot for a possible return even with a zero cooldown', () => {
     withChip({ ...CHIPS.cannon, cooldown: 0 } as ChipDef & { cooldown: number }, () => {
       const w = makeWorld();

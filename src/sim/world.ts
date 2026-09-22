@@ -461,7 +461,15 @@ export class World implements EnemyContext, AttackContext {
   private resolveDueChipHits(active: ActiveChip): void {
     while (active.nextHit < active.hitTicks.length && this.tick >= active.hitTicks[active.nextHit]!) {
       active.nextHit++;
+      const firstResolution = !active.resolved;
       active.resolved = true;
+      if (firstResolution) {
+        const reshuffles = this.chips.reshuffles;
+        this.chips.reserveRefill(active.slot);
+        if (this.chips.reshuffles > reshuffles) {
+          this.events.push({ type: 'drawReshuffled', count: this.chips.reshuffles });
+        }
+      }
       this.resolveChip(active);
     }
   }
