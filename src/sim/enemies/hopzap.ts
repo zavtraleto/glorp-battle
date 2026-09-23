@@ -16,20 +16,13 @@ export class Hopzap extends Enemy {
   }
 
   override dangerCells(): Cell[] {
-    return this.state === 'TELEGRAPH' ? laneCellsBelow(this.x, this.y + 1) : [];
-  }
-
-  override counterWindowOpen(tick: number): boolean {
-    if (this.state !== 'TELEGRAPH') return false;
-    const total = this.ticks(tuning.hopzap.HOP_TELEGRAPH);
-    const window = this.counterTicks(tuning.counter.COUNTER_WINDOW_BUNNY);
-    if (window === 0) return false;
-    const elapsed = this.elapsed(tick);
-    return elapsed >= Math.max(0, total - window) && elapsed < total;
+    return this.state === 'LOCK' || this.state === 'COUNTER' ? laneCellsBelow(this.x, this.y + 1) : [];
   }
 
   override forceAttack(tick: number): void {
-    if (this.alive && this.state === 'IDLE') this.setState('TELEGRAPH', tick);
+    if (this.alive && (this.state === 'IDLE' || this.state === 'MOVE')) {
+      this.setTimedState('INTENTION', tick, this.ticks(tuning.hopzap.INTENTION_TIME));
+    }
   }
 
   private hop(ctx: EnemyContext): void {
@@ -55,25 +48,33 @@ export class Hopzap extends Enemy {
     switch (this.state) {
       case 'IDLE':
       case 'MOVE':
-        if (this.elapsed(t) < this.ticks(h.HOP_MOVE_INTERVAL)) return;
+        if (this.elapsed(t) < this.ticks(h.MOVE_TIME)) return;
         this.stateTick = t;
-        if (this.x === ctx.player.x) this.setState('TELEGRAPH', t);
+        if (this.x === ctx.player.x) this.setTimedState('INTENTION', t, this.ticks(h.INTENTION_TIME));
         else this.hop(ctx);
         return;
-      case 'TELEGRAPH':
-        if (this.elapsed(t) < this.ticks(h.HOP_TELEGRAPH)) return;
+      case 'INTENTION':
+        if (this.phaseDone(t)) this.setTimedState('LOCK', t, this.ticks(h.LOCK_TIME));
+        return;
+      case 'LOCK':
+        if (this.phaseDone(t)) this.setTimedState('COUNTER', t, this.ticks(h.COUNTER_TIME));
+        return;
+      case 'COUNTER':
+        if (!this.phaseDone(t)) return;
         ctx.spawnAttack(
           new LaneShot(ctx.nextAttackId(), 'zapring', this.x, this.y + 1, t, {
             damage: this.dmg(h.HOP_DMG),
-            stepTicks: this.ticks(h.HOP_RING_STEP),
+            stepTicks: this.ticks(tuning.projectile.CELL_TRAVEL_TIME),
             paralyze: this.ticks(h.HOP_PARALYZE),
           }),
         );
-        this.setState('RECOVERY', t);
+        this.setTimedState('STRIKE', t, this.ticks(h.STRIKE_TIME));
         return;
-      case 'ATTACK':
+      case 'STRIKE':
+        if (this.phaseDone(t)) this.setTimedState('RECOVERY', t, this.ticks(h.RECOVERY_TIME));
+        return;
       case 'RECOVERY':
-        if (this.elapsed(t) >= this.ticks(h.HOP_RECOVERY)) this.setState('IDLE', t);
+        if (this.phaseDone(t)) this.setState('IDLE', t);
         return;
       case 'STAGGER':
       case 'DEAD':

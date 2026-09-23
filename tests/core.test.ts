@@ -105,8 +105,8 @@ describe('EventBus', () => {
 describe('tuning', () => {
   it('merges only known keys with matching types', () => {
     const dst = JSON.parse(JSON.stringify(DEFAULT_TUNING)) as Tuning;
-    mergeTuning(dst, { player: { MOVE_COOLDOWN: 0.5, UNKNOWN: 1 }, gauge: { GAUGE_FILL_TIME: 'fast' }, nope: { A: 1 } });
-    expect(dst.player.MOVE_COOLDOWN).toBe(0.5);
+    mergeTuning(dst, { player: { CELL_MOVE_TIME: 0.5, UNKNOWN: 1 }, gauge: { GAUGE_FILL_TIME: 'fast' }, nope: { A: 1 } });
+    expect(dst.player.CELL_MOVE_TIME).toBe(0.5);
     expect(dst.gauge.GAUGE_FILL_TIME).toBe(8);
     expect('UNKNOWN' in dst.player).toBe(false);
   });

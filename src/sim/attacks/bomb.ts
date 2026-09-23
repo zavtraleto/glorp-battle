@@ -1,8 +1,7 @@
 import { secondsToTicks, tuning } from '../../config/tuning';
 import type { ChipDef } from '../../data/chips';
 
-// Player bomb in flight (GDD §6.4 lob): lands after BOMB_FLIGHT_TIME and hits
-// its chip's area around the landing cell.
+// Player bomb in flight (GDD §6.4 lob): travel time is derived from cells.
 
 export class PlayerBomb {
   readonly landTick: number;
@@ -18,7 +17,8 @@ export class PlayerBomb {
     readonly throwTick: number,
     readonly def: ChipDef,
   ) {
-    this.landTick = throwTick + Math.max(1, secondsToTicks(tuning.chips.BOMB_FLIGHT_TIME));
+    const cells = Math.abs(fromX - x) + Math.abs(fromY - y);
+    this.landTick = throwTick + Math.max(1, secondsToTicks(cells * tuning.projectile.CELL_TRAVEL_TIME));
   }
 
   /** Flight progress in [0, 1]. */

@@ -3,7 +3,7 @@ import { DEFAULT_TUNING, mergeTuning, secondsToTicks, tuning } from '../src/conf
 import type { Command, Dir } from '../src/core/input/commands';
 import type { ChipDef, ChipId } from '../src/data/chips';
 import { Shockwave } from '../src/sim/attacks/shockwave';
-import { useTicks } from '../src/sim/chips/executor';
+import { chipTiming, useTicks } from '../src/sim/chips/executor';
 import { lobArea, lobTarget, shapeCells } from '../src/sim/chips/patterns';
 import type { Enemy } from '../src/sim/enemies/enemyBase';
 import { Mettik } from '../src/sim/enemies/mettik';
@@ -54,7 +54,7 @@ const run = (w: World, n: number) => {
   for (let i = 0; i < n; i++) step(w);
 };
 const use = (w: World) => step(w, [{ type: 'useChip' }]);
-const hitFrame = () => T(tuning.chips.CHIP_HIT_FRAME);
+const hitFrame = (def: ChipDef = CHIPS.cannon) => chipTiming(def).startupTicks;
 
 function movePlayer(w: World, x: number, y: number): void {
   const p = w.player;
@@ -110,7 +110,58 @@ describe('shape geometry', () => {
 });
 
 describe('chip use', () => {
-  it('lets the player move during a frozen chip series and aims each link from its start cell', () => {
+  it('resolves a Cannon after startup and releases its action lock after recovery', () => {
+    const w = makeWorld();
+    const target = addEnemy(w, 1, 2, 200);
+    give(w, 'cannon');
+    use(w);
+
+    run(w, T(tuning.chips.CHIP_STARTUP_CANNON) - 1);
+    expect(target.hp).toBe(200);
+    run(w, 1);
+    expect(target.hp).toBe(160);
+    run(w, T(tuning.chips.CHIP_RECOVERY_CANNON));
+    expect(w.activeChip).toBeNull();
+  });
+
+  it('executes one early Attack as soon as the chip lock ends', () => {
+    const w = makeWorld();
+    give(w, 'cannon', 'cannon');
+    use(w);
+    run(w, useTicks(CHIPS.cannon) - T(tuning.input.ACTION_BUFFER_TIME));
+    use(w);
+    run(w, T(tuning.input.ACTION_BUFFER_TIME));
+
+    expect(w.activeChip?.def.id).toBe('cannon');
+    expect(w.chips.attackChips()).toHaveLength(0);
+  });
+
+  it('expires an Attack pressed before the buffer window', () => {
+    const w = makeWorld();
+    give(w, 'cannon', 'cannon');
+    use(w);
+    use(w);
+    run(w, useTicks(CHIPS.cannon) + 1);
+
+    expect(w.activeChip).toBeNull();
+    expect(w.chips.attackChips()).toHaveLength(1);
+  });
+
+  it('requires a separate Attack press for every chip in a committed charge', () => {
+    const w = makeWorld();
+    give(w, 'cannon', 'cannon');
+
+    use(w);
+    run(w, useTicks(CHIPS.cannon) + T(1));
+
+    expect(w.activeChip).toBeNull();
+    expect(w.chips.attackChips()).toHaveLength(1);
+
+    use(w);
+    expect(w.activeChip?.def.id).toBe('cannon');
+  });
+
+  it('lets the player move between committed shots and aims each from its start cell', () => {
     const w = makeWorld();
     const firstLane = addEnemy(w, 1, 2, 200);
     const secondLane = addEnemy(w, 0, 2, 200);
@@ -123,8 +174,9 @@ describe('chip use', () => {
     run(w, hitFrame() - 1);
     expect([firstLane.hp, secondLane.hp]).toEqual([160, 200]);
 
-    const chainDelay = T(tuning.chips.CHIP_CHAIN_DELAY);
-    run(w, useTicks(CHIPS.cannon) - hitFrame() + chainDelay + hitFrame());
+    run(w, useTicks(CHIPS.cannon) - hitFrame());
+    use(w);
+    run(w, hitFrame());
     expect([firstLane.hp, secondLane.hp]).toEqual([160, 160]);
   });
 
@@ -140,14 +192,10 @@ describe('chip use', () => {
     expect([w.player.x, target.hp]).toEqual([0, 170]);
   });
 
-  it('counters a telegraph hit in its final window, staggers the enemy, and continues the series', () => {
+  it('counters a hit during the enemy counter phase and keeps the committed tail', () => {
     const w = makeWorld();
     const met = addEnemy(w, 1, 2, 200);
-    const counter = tuning as unknown as {
-      counter: { COUNTER_WINDOW_METTIK: number; COUNTER_STAGGER_TIME: number };
-    };
-    met.setState('TELEGRAPH', w.tick);
-    met.stateTick -= T(tuning.mettik.MET_TELEGRAPH - counter.counter.COUNTER_WINDOW_METTIK);
+    met.setTimedState('COUNTER', w.tick, T(tuning.mettik.COUNTER_TIME));
     give(w, 'cannon', 'cannon');
 
     use(w);
@@ -155,23 +203,25 @@ describe('chip use', () => {
     expect(met.state).toBe('STAGGER');
     expect(events.some((event) => event.type === 'enemyCountered')).toBe(true);
 
-    run(w, useTicks(CHIPS.cannon) - hitFrame() + T(tuning.chips.CHIP_CHAIN_DELAY) + hitFrame());
+    run(w, useTicks(CHIPS.cannon) - hitFrame());
+    use(w);
+    run(w, hitFrame());
     expect(met.hp).toBe(120);
 
-    run(w, T(counter.counter.COUNTER_STAGGER_TIME));
+    run(w, T(tuning.counter.COUNTER_STAGGER_TIME));
     expect(met.state).toBe('IDLE');
   });
 
   it('does not counter a hit before the counter window opens', () => {
     const w = makeWorld();
     const met = addEnemy(w, 1, 2, 200);
-    met.setState('TELEGRAPH', w.tick);
+    met.setTimedState('LOCK', w.tick, T(tuning.mettik.LOCK_TIME));
     give(w, 'cannon');
 
     use(w);
     run(w, hitFrame());
 
-    expect(met.state).toBe('TELEGRAPH');
+    expect(met.state).toBe('LOCK');
     expect(events.some((event) => event.type === 'enemyCountered')).toBe(false);
   });
 
@@ -273,7 +323,8 @@ describe('chip use', () => {
     run(w, useTicks(CHIPS.sword));
     expect(e.hp).toBe(200);
     movePlayer(w, 1, 3);
-    run(w, T(tuning.chips.CHIP_CHAIN_DELAY) + hitFrame());
+    use(w);
+    run(w, hitFrame(CHIPS.sword));
     expect(e.hp).toBe(120);
   });
 
@@ -297,7 +348,7 @@ describe('chip use', () => {
     const b = addEnemy(w, 0, 1);
     give(w, 'longsword');
     use(w);
-    run(w, hitFrame());
+    run(w, hitFrame(CHIPS.longsword));
     expect([a.hp, b.hp]).toEqual([120, 120]);
   });
 
@@ -317,9 +368,9 @@ describe('chip use', () => {
     const inFront = addEnemy(w, 1, 2);
     give(w, 'minibomb');
     use(w);
-    run(w, hitFrame());
+    run(w, hitFrame(CHIPS.minibomb));
     expect(w.bombs).toHaveLength(1);
-    run(w, T(tuning.chips.BOMB_FLIGHT_TIME) - 1);
+    run(w, T(3 * tuning.projectile.CELL_TRAVEL_TIME) - 1);
     expect(target.hp).toBe(200);
     run(w, 1);
     expect(target.hp).toBe(150);
@@ -327,23 +378,29 @@ describe('chip use', () => {
     expect(w.bombs).toHaveLength(0);
   });
 
-  it('Recover50 heals instantly and caps at max HP', () => {
+  it('Recover50 heals at impact and caps at max HP', () => {
     const w = makeWorld();
     w.player.hp = 30;
     give(w, 'recover50', 'recover50');
     use(w);
+    run(w, hitFrame(CHIPS.recover50));
     expect(w.player.hp).toBe(80);
-    run(w, useTicks(CHIPS.recover50) + T(tuning.chips.CHIP_CHAIN_DELAY));
+    run(w, useTicks(CHIPS.recover50) - hitFrame(CHIPS.recover50));
+    use(w);
+    run(w, hitFrame(CHIPS.recover50));
     expect(w.player.hp).toBe(100);
     expect(events.filter((e) => e.type === 'healed').map((e) => (e as { amount: number }).amount)).toEqual([50, 20]);
   });
 
-  it('one attack command uses the frozen chip selection in order', () => {
+  it('manual Attack presses use the committed selection in order', () => {
     const w = makeWorld();
     give(w, 'recover50', 'cannon');
     use(w);
     expect(w.activeChip?.def.id).toBe('recover50');
-    run(w, useTicks(CHIPS.recover50) + T(tuning.chips.CHIP_CHAIN_DELAY));
+    run(w, useTicks(CHIPS.recover50));
+    expect(w.activeChip).toBeNull();
+    expect(w.chips.attackChips()).toHaveLength(1);
+    use(w);
     expect(w.activeChip?.def.id).toBe('cannon');
     expect(w.chips.attackChips()).toHaveLength(0);
   });
@@ -358,17 +415,19 @@ describe('chip use', () => {
     expect(w.selectChip(readySlot)).toBe(false);
   });
 
-  it('allows movement for the whole automatic chain and ignores extra attack presses', () => {
+  it('allows movement between manual shots and ignores presses while busy', () => {
     const w = makeWorld();
     give(w, 'cannon', 'cannon');
     use(w);
     step(w, [{ type: 'move', dir: 'left' }, { type: 'useChip' }]);
     expect(w.player.x).toBe(0);
     expect(w.chips.attackChips()).toHaveLength(1);
-    run(w, useTicks(CHIPS.cannon) + T(tuning.chips.CHIP_CHAIN_DELAY));
-    expect(w.activeChip?.def.id).toBe('cannon');
-    step(w, [{ type: 'move', dir: 'right' }, { type: 'useChip' }]);
+    run(w, useTicks(CHIPS.cannon));
+    expect(w.activeChip).toBeNull();
+    step(w, [{ type: 'move', dir: 'right' }]);
     expect(w.player.x).toBe(1);
+    use(w);
+    expect(w.activeChip?.def.id).toBe('cannon');
     run(w, useTicks(CHIPS.cannon));
     step(w, [{ type: 'move', dir: 'left' }]);
     expect(w.player.x).toBe(0);
@@ -382,21 +441,6 @@ describe('chip use', () => {
     step(w, [{ type: 'move', dir: 'left' }]);
     expect(w.player.x).toBe(0);
     expect(w.activeChip).toBeNull();
-  });
-
-  it('honors a positive chain delay while keeping movement available', () => {
-    tuning.chips.CHIP_CHAIN_DELAY = 0.2;
-    const w = makeWorld();
-    give(w, 'cannon', 'cannon');
-    use(w);
-    run(w, useTicks(CHIPS.cannon));
-    expect(w.activeChip).toBeNull();
-    step(w, [{ type: 'move', dir: 'left' }]);
-    expect(w.player.x).toBe(0);
-    run(w, T(0.2) - 2);
-    expect(w.activeChip).toBeNull();
-    run(w, 1);
-    expect(w.activeChip?.def.id).toBe('cannon');
   });
 
   it('a hit before the hit frame returns the chip and clears the frozen queue', () => {
@@ -436,22 +480,18 @@ describe('chip use', () => {
     expect(w.chips.drawPreview(5)).not.toContain(next);
   });
 
-  it('reserves the active slot for a possible return even with a zero cooldown', () => {
-    withChip({ ...CHIPS.cannon, cooldown: 0 } as ChipDef & { cooldown: number }, () => {
-      const w = makeWorld();
-      give(w, 'cannon');
-      const fired = w.chips.attackChips()[0]!;
-      const slot = w.chips.hand.indexOf(fired);
-      use(w);
-      // Give the zero cooldown a refill opportunity before interrupting the
-      // still-unresolved cannon.
-      run(w, 1);
-      const hit = { id: -76, kind: 'instant', hitIds: new Set<number>(), done: true, update: () => undefined };
-      expect(w.hitPlayerAt(hit, w.player.x, w.player.y, 1)).toBe(true);
-      expect(w.chips.hand[slot]).toBe(fired);
-      expect(fired.state).toBe('hand');
-      expect(w.chips.coolingCount).toBe(0);
-    });
+  it('keeps an unresolved active slot available for interruption', () => {
+    const w = makeWorld();
+    give(w, 'cannon');
+    const fired = w.chips.attackChips()[0]!;
+    const slot = w.chips.hand.indexOf(fired);
+    use(w);
+    run(w, 1);
+    const hit = { id: -76, kind: 'instant', hitIds: new Set<number>(), done: true, update: () => undefined };
+    expect(w.hitPlayerAt(hit, w.player.x, w.player.y, 1)).toBe(true);
+    expect(w.chips.hand[slot]).toBe(fired);
+    expect(fired.state).toBe('hand');
+    expect(w.chips.coolingCount).toBe(0);
   });
 
   it('a hit after the hit frame spends the active chip and cancels only chips that have not started', () => {
@@ -471,15 +511,14 @@ describe('chip use', () => {
     expect(w.chips.attack).toEqual([]);
     expect(w.chips.hand[firedSlot]).toBeNull();
     expect(w.chips.hand[secondSlot]).toBe(second);
-    expect(w.chips.slotState(secondSlot)).toBe('ready');
+    expect(w.chips.slotState(secondSlot)).toBe('locked');
     expect(w.chips.hand.includes(fired)).toBe(false);
     expect(fired.state).toBe('used');
     const cancelled = events.find((ev) => ev.type === 'chipChainCancelled');
     expect(cancelled?.type === 'chipChainCancelled' ? cancelled.chips.map((chip) => chip.slot) : []).toEqual([secondSlot]);
   });
 
-  it('cancels and signals every remaining chip when hit during the chain delay', () => {
-    tuning.chips.CHIP_CHAIN_DELAY = 0.2;
+  it('cancels and signals every remaining chip when hit between manual shots', () => {
     const w = makeWorld();
     give(w, 'cannon', 'cannon');
     const waiting = w.chips.attackChips()[1]!;
@@ -495,31 +534,17 @@ describe('chip use', () => {
     expect(cancelled?.type === 'chipChainCancelled' ? cancelled.chips.map((chip) => chip.slot) : []).toEqual([waitingSlot]);
   });
 
-  it('refills each spent slot two seconds after that chip starts', () => {
+  it('refills spent slots four seconds after the first chip starts', () => {
     const w = makeWorld();
     give(w, 'cannon');
     const fired = w.chips.attackChips()[0]!;
     const slot = w.chips.hand.indexOf(fired);
     use(w);
     expect(w.chips.hand[slot]).toBeNull();
-    run(w, T(2) - 1);
+    run(w, T(4) - 1);
     expect(w.chips.hand[slot]).toBeNull();
     run(w, 1);
     expect(w.chips.hand[slot]).not.toBeNull();
-  });
-
-  it('allows a chip definition to override the common refill cooldown', () => {
-    withChip({ ...CHIPS.cannon, cooldown: 0.5 } as ChipDef & { cooldown: number }, () => {
-      const w = makeWorld();
-      give(w, 'cannon');
-      const fired = w.chips.attackChips()[0]!;
-      const slot = w.chips.hand.indexOf(fired);
-      use(w);
-      run(w, T(0.5) - 1);
-      expect(w.chips.hand[slot]).toBeNull();
-      run(w, 1);
-      expect(w.chips.hand[slot]).not.toBeNull();
-    });
   });
 
   it('cannot use chips while flinched or with an empty queue', () => {
@@ -593,8 +618,8 @@ describe('hit effects', () => {
       run(w, T(tuning.chips.PARALYZE_TIME) - 2);
       expect(met.state).toBe('IDLE');
       expect(w.attacks).toHaveLength(0);
-      run(w, T(tuning.mettik.MET_MOVE_INTERVAL + tuning.mettik.MET_TELEGRAPH) + 2);
-      expect(w.attacks.length + (met.state === 'ATTACK' || met.state === 'RECOVERY' ? 1 : 0)).toBeGreaterThan(0);
+      run(w, T(tuning.mettik.MOVE_TIME + tuning.mettik.INTENTION_TIME + tuning.mettik.LOCK_TIME + tuning.mettik.COUNTER_TIME) + 2);
+      expect(w.attacks.length + (met.state === 'STRIKE' || met.state === 'RECOVERY' ? 1 : 0)).toBeGreaterThan(0);
     });
   });
 
@@ -609,10 +634,10 @@ describe('player wave and invis', () => {
     w.spawnAttack(new Shockwave(w.nextAttackId(), 1, 3, w.tick, {
       dir: -1,
       damage: 60,
-      stepTicks: T(tuning.chips.PLAYER_WAVE_STEP),
+      stepTicks: T(tuning.projectile.FAST_CELL_TRAVEL_TIME),
       owner: 'player',
     }));
-    run(w, T(tuning.chips.PLAYER_WAVE_STEP) * 6);
+    run(w, T(tuning.projectile.FAST_CELL_TRAVEL_TIME) * 6);
     expect(a.hp).toBe(140);
     expect(b.hp).toBe(200);
     expect(w.attacks).toHaveLength(0);
@@ -681,7 +706,7 @@ describe('new attack chips', () => {
     const b = addEnemy(w, 1, 0);
     give(w, 'shockwave');
     use(w);
-    run(w, hitFrame() + T(tuning.chips.PLAYER_WAVE_STEP) * 6);
+    run(w, hitFrame() + T(tuning.projectile.FAST_CELL_TRAVEL_TIME) * 6);
     expect([a.hp, b.hp]).toEqual([140, 140]);
   });
 
@@ -700,10 +725,15 @@ describe('new attack chips', () => {
     w.player.hp = 5;
     give(w, 'recov10', 'recov80', 'invis');
     use(w);
+    run(w, hitFrame(CHIPS.recov10));
     expect(w.player.hp).toBe(15);
-    run(w, useTicks(CHIPS.recov10) + T(tuning.chips.CHIP_CHAIN_DELAY));
+    run(w, useTicks(CHIPS.recov10) - hitFrame(CHIPS.recov10));
+    use(w);
+    run(w, hitFrame(CHIPS.recov80));
     expect(w.player.hp).toBe(95);
-    run(w, useTicks(CHIPS.recov80) + T(tuning.chips.CHIP_CHAIN_DELAY));
+    run(w, useTicks(CHIPS.recov80) - hitFrame(CHIPS.recov80));
+    use(w);
+    run(w, hitFrame(CHIPS.invis));
     expect(w.player.invisTicks).toBe(T(tuning.chips.INVIS_TIME));
   });
 });
@@ -782,10 +812,11 @@ describe('field chips', () => {
     expect(w.objects).toHaveLength(1); // (0,2) belongs to the enemy
   });
 
-  it('field and support chips resolve at once', () => {
+  it('field chips resolve after startup', () => {
     const w = makeWorld();
     give(w, 'panlout1');
     use(w);
+    run(w, hitFrame(CHIPS.panlout1));
     expect(w.field.panel(1, 3)).toBe('BROKEN');
   });
 });

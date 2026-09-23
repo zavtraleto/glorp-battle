@@ -112,14 +112,14 @@ describe('Monolith', () => {
     const count = (enraged: boolean) => {
       const { w, boss } = bossWorld();
       if (enraged) boss.hp = boss.maxHp * 0.4;
-      let telegraphs = 0;
+      let intentions = 0;
       let prev = boss.state;
       for (let i = 0; i < T(40); i++) {
         w.step(DT);
-        if (boss.state === 'TELEGRAPH' && prev !== 'TELEGRAPH') telegraphs++;
+        if (boss.state === 'INTENTION' && prev !== 'INTENTION') intentions++;
         prev = boss.state;
       }
-      return telegraphs;
+      return intentions;
     };
     expect(count(true)).toBeGreaterThan(count(false));
   });

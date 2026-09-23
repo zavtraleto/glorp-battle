@@ -22,7 +22,7 @@ function idle(w: World, ticks: number, held: Dir | null = null): void {
 }
 
 const pos = (w: World) => [w.player.x, w.player.y];
-const cooldown = () => secondsToTicks(tuning.player.MOVE_COOLDOWN);
+const cooldown = () => secondsToTicks(tuning.player.CELL_MOVE_TIME);
 
 beforeEach(() => {
   mergeTuning(tuning, JSON.parse(JSON.stringify(DEFAULT_TUNING)));
@@ -88,6 +88,16 @@ describe('player movement', () => {
     idle(w, cooldown());
     expect(pos(w)).toEqual([2, 3]);
     expect(w.player.moves).toBe(2);
+  });
+
+  it('uses the configured 200 ms cell move cadence', () => {
+    const w = freshWorld();
+    tick(w, ['left']);
+    idle(w, cooldown() - 1);
+    expect(pos(w)).toEqual([0, 4]);
+    idle(w, 1);
+    tick(w, ['right']);
+    expect(pos(w)).toEqual([1, 4]);
   });
 
   it('repeats a held direction after the initial delay, then at the repeat interval', () => {

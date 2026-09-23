@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { Session } from '../src/app/session';
 import { DEFAULT_TUNING, mergeTuning, secondsToTicks, tuning } from '../src/config/tuning';
+import { CHIPS } from '../src/data/chips';
+import { useTicks } from '../src/sim/chips/executor';
 import type { Command } from '../src/core/input/commands';
 
 const DT = 1 / 60;
@@ -115,7 +117,7 @@ describe('tutorial mode', () => {
     enterAction(s);
     for (const dir of ['left', 'right', 'left'] as const) {
       tick(s, [{ type: 'move', dir }]);
-      run(s, T(tuning.player.MOVE_COOLDOWN) + 2);
+      run(s, T(tuning.player.CELL_MOVE_TIME) + 2);
     }
     // The Mettik swings on its own; the cassette arrives when the beat passes.
     for (let i = 0; i < 60 * 20 && s.world.chips.hand[2] === null; i++) tick(s);
@@ -125,9 +127,12 @@ describe('tutorial mode', () => {
     const enemy = s.world.enemies[0];
     expect(enemy).toBeDefined();
     tick(s, [{ type: 'selectChip', slot: 2 }]);
-    (enemy as { x: number }).x = s.world.player.x;
+    if (enemy && enemy.x !== s.world.player.x) {
+      s.world.occupancy.move(enemy.id, enemy.x, enemy.y, s.world.player.x, enemy.y);
+      enemy.x = enemy.prevX = s.world.player.x;
+    }
     tick(s, [{ type: 'useChip' }]);
-    run(s, T(tuning.chips.CHIP_USE_TIME_CANNON) + 2);
+    run(s, useTicks(CHIPS.cannon) + 2);
     expect(enemy?.alive).toBe(false);
     // The win rolls straight into battle 2 with three cassettes in the rail.
     run(s, T(tuning.fx.RESULT_DELAY_WIN) + T(tuning.fx.INTRO_TIME) + 2);

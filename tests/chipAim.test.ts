@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_TUNING, mergeTuning, secondsToTicks, tuning } from '../src/config/tuning';
 import { CHIPS, type ChipId } from '../src/data/chips';
 import { chipAim, type AimLookup } from '../src/sim/chips/aim';
+import { useTicks } from '../src/sim/chips/executor';
 import { Mettik } from '../src/sim/enemies/mettik';
 import type { SimEvent } from '../src/sim/events';
 import { World } from '../src/sim/world';
@@ -41,7 +42,7 @@ function fired(w: World): string[] {
   const events: SimEvent[] = [];
   w.step(1 / 60, { commands: [{ type: 'useChip' }], held: null });
   events.push(...w.events);
-  for (let i = 0; i < T(tuning.chips.BOMB_FLIGHT_TIME) + T(tuning.chips.CHIP_HIT_FRAME) + 4; i++) {
+  for (let i = 0; i < T(3 * tuning.projectile.CELL_TRAVEL_TIME) + useTicks(CHIPS.minibomb) + 4; i++) {
     w.step(1 / 60, { commands: [], held: null });
     events.push(...w.events);
   }

@@ -38,7 +38,7 @@ export interface RailChip {
 export interface RailSlotView {
   chip: RailChip | null;
   state: SlotState;
-  /** 0..1 while the reserved chip is cooling; null otherwise. */
+  /** 0..1 while this unavailable slot shows the shared hand cooldown. */
   cooldown?: number | null;
   /** 1-based place in the Attack Queue, 0 when not queued. */
   order: number;
@@ -112,6 +112,8 @@ const GLOW_PULSE_HZ = 0.28;
 /** Internal light of a queued cartridge: floor and how much the breath adds. */
 const GLOW_SELECTED_BASE = 0.58;
 const GLOW_SELECTED_PULSE = 0.14;
+/** A committed charge is brighter and steadier than an editable selection. */
+const GLOW_COMMITTED = 1.0;
 /** Internal light of a cartridge that could join the series. */
 const GLOW_POSSIBLE = 0.3;
 /** NORMAL: barely lit, breathing between these while the rail calls for a pick. */
@@ -333,7 +335,7 @@ export class ChipRail {
           if (!rest) break;
           o.visible = c.t >= c.delay;
           const k = t.LOAD_TIME > 0 ? Math.min(1, Math.max(0, (c.t - c.delay) / t.LOAD_TIME)) : 1;
-          const cooling = this.slotViews?.[c.slot]?.state === 'cooling';
+          const cooling = this.slotViews?.[c.slot]?.cooldown != null;
           const loadOffset = cooling
             ? -t.CHIP_COOLDOWN_SINK - (1 - k) * (1 - k) * t.CHIP_PENDING_LOAD_DEPTH
             : (1 - k) * (1 - k) * LOAD_HEIGHT;
@@ -354,9 +356,11 @@ export class ChipRail {
         case 'idle': {
           if (!rest) break;
           const view = this.slotViews?.[c.slot];
-          const isActive = view?.state === 'queued';
-          const blocked = view?.state === 'blocked';
-          const cooling = view?.state === 'cooling';
+          const selected = view?.state === 'queued';
+          const committed = view?.state === 'committed';
+          const isActive = selected || committed;
+          const blocked = view?.state === 'blocked' || view?.state === 'locked';
+          const cooling = view?.cooldown != null;
           if (c.wasCooling && !cooling) this.flashContacts(c.slot);
           c.wasCooling = cooling;
           // While a series is built, chips that could join it tilt level with it.
@@ -364,7 +368,7 @@ export class ChipRail {
           c.cart.setLitContacts(isActive ? (view?.order ?? 0) : 0);
           // Tilt toward the player about the bottom edge: the far (top) edge
           // comes up out of the panel (decision 2026-09-19).
-          c.lift.target = isActive || candidate ? 1 : 0;
+          c.lift.target = isActive ? 1 : candidate ? 0.5 : 0;
           c.lift.step(dt, t.SPRING_STIFFNESS, t.SPRING_DAMPING);
           const k = c.lift.value;
           const tilt = THREE.MathUtils.degToRad(t.CHIP_TILT_DEG) * k;
@@ -392,8 +396,9 @@ export class ChipRail {
             c.cart.setGlow(COLOR.glowPossible, 0);
           } else if (isActive) {
             c.cart.setTint(COLOR.tintPlain, COLOR.faceSelected);
-            c.cart.setGlow(COLOR.glowSelected, GLOW_SELECTED_BASE + GLOW_SELECTED_PULSE * pulse);
-            this.barLevel[c.slot] = 0.72 + 0.28 * pulse;
+            const level = committed ? GLOW_COMMITTED : GLOW_SELECTED_BASE + GLOW_SELECTED_PULSE * pulse;
+            c.cart.setGlow(COLOR.glowSelected, level);
+            this.barLevel[c.slot] = committed ? 1 : 0.72 + 0.28 * pulse;
           } else if (candidate) {
             c.cart.setTint(COLOR.tintPlain, COLOR.facePossible);
             c.cart.setGlow(COLOR.glowPossible, GLOW_POSSIBLE);

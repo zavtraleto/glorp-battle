@@ -519,7 +519,7 @@ export class FxView {
     const pl = world.player;
     if (pl.prevX === pl.x && pl.prevY === pl.y) return;
     const elapsed = (tick - pl.lastMoveTick + alpha) / tuning.sim.SIM_HZ;
-    const t = elapsed / Math.max(1e-6, tuning.player.MOVE_VISUAL_TIME);
+    const t = elapsed / Math.max(1e-6, tuning.player.CELL_MOVE_TIME);
     if (t >= 1 || t < 0) return;
     cellToWorld(pl.prevX, pl.prevY, p);
     cellToWorld(pl.x, pl.y, q);

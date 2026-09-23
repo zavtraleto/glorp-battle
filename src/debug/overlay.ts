@@ -1,5 +1,13 @@
 import type { LoopStats } from '../core/loop';
+import type { Enemy } from '../sim/enemies/enemyBase';
 import type { PerfSnapshot } from './perfProbe';
+
+/** Pure playtest diagnostic: current timing phase and time to its deadline. */
+export function enemyTimingLines(enemies: readonly Enemy[], tick: number, simHz: number): string {
+  return enemies
+    .map((enemy) => `${enemy.kind}#${enemy.id} ${enemy.state} ${Math.round((enemy.phaseRemaining(tick) * 1000) / simHz)}ms`)
+    .join('\n');
+}
 
 export interface OverlayInfo {
   stats: LoopStats;

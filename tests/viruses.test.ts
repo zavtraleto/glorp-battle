@@ -71,7 +71,7 @@ describe('Helmhead', () => {
     const { w, e } = arena('helmhead', 1, 1);
     w.damageEnemy(e, 30);
     expect(e.hp).toBe(tuning.helmhead.HELM_HP);
-    until(w, () => e.state === 'TELEGRAPH');
+    until(w, () => e.state === 'INTENTION');
     w.damageEnemy(e, 30);
     expect(e.hp).toBe(tuning.helmhead.HELM_HP - 30);
     until(w, () => w.player.hitsTaken > 0);

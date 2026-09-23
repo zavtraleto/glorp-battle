@@ -7,7 +7,7 @@ import type { Attack, AttackContext } from './attack';
 
 export interface ArcOptions {
   damage: number;
-  flightTicks: number;
+  cellTravelTicks: number;
   panel: 'crack' | 'break';
 }
 
@@ -25,7 +25,11 @@ export class CannonBall implements Attack {
     readonly throwTick: number,
     private readonly opts: ArcOptions,
   ) {
-    this.landTick = throwTick + Math.max(1, opts.flightTicks);
+    const cellsTravelled = cells.reduce(
+      (distance, cell) => Math.max(distance, Math.abs(fromX - cell.x) + Math.abs(fromY - cell.y)),
+      1,
+    );
+    this.landTick = throwTick + Math.max(1, cellsTravelled * opts.cellTravelTicks);
   }
 
   /** Flight progress in [0, 1]. */

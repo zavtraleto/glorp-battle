@@ -47,7 +47,7 @@ function cw(over: Partial<ControlWorld> = {}): ControlWorld {
   return {
     state: 'ACTION',
     activeChip: null,
-    player: { flinched: false, actionTicks: 0 },
+    player: { flinched: false, actionTicks: 0, paralyzeTicks: 0 },
     chips: { attack: [0], locked: false },
     ...over,
   };
@@ -57,10 +57,11 @@ describe('control rules', () => {
   it('lets the shot fire only for a free player with a queued chip', () => {
     expect(shotAvailability(cw())).toBe('ok');
     expect(shotAvailability(cw({ chips: { attack: [], locked: false } }))).toBe('dull');
-    expect(shotAvailability(cw({ chips: { attack: [0], locked: true } }))).toBe('dull');
-    expect(shotAvailability(cw({ activeChip: {} }))).toBe('dull');
-    expect(shotAvailability(cw({ player: { flinched: true, actionTicks: 0 } }))).toBe('dull');
-    expect(shotAvailability(cw({ player: { flinched: false, actionTicks: 3 } }))).toBe('dull');
+    expect(shotAvailability(cw({ chips: { attack: [0], locked: true } }))).toBe('ok');
+    expect(shotAvailability(cw({ activeChip: {} }))).toBe('ok');
+    expect(shotAvailability(cw({ player: { flinched: true, actionTicks: 0, paralyzeTicks: 0 } }))).toBe('dull');
+    expect(shotAvailability(cw({ player: { flinched: false, actionTicks: 3, paralyzeTicks: 0 } }))).toBe('ok');
+    expect(shotAvailability(cw({ player: { flinched: false, actionTicks: 0, paralyzeTicks: 3 } }))).toBe('dull');
     expect(shotAvailability(cw({ state: 'BATTLE_INTRO' }))).toBe('dull');
   });
 

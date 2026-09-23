@@ -23,20 +23,13 @@ export class Bladdy extends Enemy {
   }
 
   override dangerCells(): Cell[] {
-    return this.state === 'TELEGRAPH' ? this.reach() : [];
-  }
-
-  override counterWindowOpen(tick: number): boolean {
-    if (this.state !== 'TELEGRAPH') return false;
-    const total = this.ticks(tuning.bladdy.BLD_TELEGRAPH);
-    const window = this.counterTicks(tuning.counter.COUNTER_WINDOW_BLADDY);
-    if (window === 0) return false;
-    const elapsed = this.elapsed(tick);
-    return elapsed >= Math.max(0, total - window) && elapsed < total;
+    return this.state === 'LOCK' || this.state === 'COUNTER' ? this.reach() : [];
   }
 
   override forceAttack(tick: number): void {
-    if (this.alive && (this.state === 'IDLE' || this.state === 'MOVE')) this.setState('TELEGRAPH', tick);
+    if (this.alive && (this.state === 'IDLE' || this.state === 'MOVE')) {
+      this.setTimedState('INTENTION', tick, this.ticks(tuning.bladdy.INTENTION_TIME));
+    }
   }
 
   /** At the front edge: the panel in front belongs to someone else. */
@@ -50,11 +43,11 @@ export class Bladdy extends Enemy {
     switch (this.state) {
       case 'IDLE':
       case 'MOVE': {
-        if (this.elapsed(t) < this.ticks(b.BLD_MOVE_INTERVAL)) return;
+        if (this.elapsed(t) < this.ticks(b.MOVE_TIME)) return;
         this.stateTick = t;
         const px = ctx.player.x;
         if (this.x === px && this.atFront(ctx)) {
-          this.setState('TELEGRAPH', t);
+          this.setTimedState('INTENTION', t, this.ticks(b.INTENTION_TIME));
           return;
         }
         const moved =
@@ -64,20 +57,26 @@ export class Bladdy extends Enemy {
         this.state = moved ? 'MOVE' : 'IDLE';
         return;
       }
-      case 'TELEGRAPH': {
-        if (this.elapsed(t) < this.ticks(b.BLD_TELEGRAPH)) return;
+      case 'INTENTION':
+        if (this.phaseDone(t)) this.setTimedState('LOCK', t, this.ticks(b.LOCK_TIME));
+        return;
+      case 'LOCK':
+        if (this.phaseDone(t)) this.setTimedState('COUNTER', t, this.ticks(b.COUNTER_TIME));
+        return;
+      case 'COUNTER': {
+        if (!this.phaseDone(t)) return;
         const swing: Attack = { id: ctx.nextAttackId(), kind: 'slash', hitIds: new Set(), done: true, update: () => undefined };
         const cells = this.reach();
         for (const c of cells) ctx.hitPlayerAt(swing, c.x, c.y, this.dmg(b.BLD_DMG));
         ctx.emit({ type: 'enemySlash', cells });
-        this.setState('ATTACK', t);
+        this.setTimedState('STRIKE', t, this.ticks(b.STRIKE_TIME));
         return;
       }
-      case 'ATTACK':
-        if (this.elapsed(t) >= this.ticks(b.BLD_ATTACK_TIME)) this.setState('RECOVERY', t);
+      case 'STRIKE':
+        if (this.phaseDone(t)) this.setTimedState('RECOVERY', t, this.ticks(b.RECOVERY_TIME));
         return;
       case 'RECOVERY':
-        if (this.elapsed(t) >= this.ticks(b.BLD_RECOVERY)) this.setState('IDLE', t);
+        if (this.phaseDone(t)) this.setState('IDLE', t);
         return;
       case 'STAGGER':
       case 'DEAD':

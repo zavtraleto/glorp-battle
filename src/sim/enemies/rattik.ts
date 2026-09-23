@@ -16,11 +16,13 @@ export class Rattik extends Enemy {
   }
 
   override dangerCells(): Cell[] {
-    return this.state === 'TELEGRAPH' ? laneCellsBelow(this.x, this.y + 1) : [];
+    return this.state === 'LOCK' || this.state === 'COUNTER' ? laneCellsBelow(this.x, this.y + 1) : [];
   }
 
   override forceAttack(tick: number): void {
-    if (this.alive && (this.state === 'IDLE' || this.state === 'MOVE')) this.setState('TELEGRAPH', tick);
+    if (this.alive && (this.state === 'IDLE' || this.state === 'MOVE')) {
+      this.setTimedState('INTENTION', tick, this.ticks(tuning.rattik.INTENTION_TIME));
+    }
   }
 
   update(ctx: EnemyContext): void {
@@ -29,25 +31,43 @@ export class Rattik extends Enemy {
     switch (this.state) {
       case 'IDLE':
       case 'MOVE': {
-        if (this.elapsed(t) < this.ticks(r.RAT_MOVE_INTERVAL)) return;
+        if (this.elapsed(t) < this.ticks(r.MOVE_TIME)) return;
         this.stateTick = t;
         const px = ctx.player.x;
         if (this.x === px) {
-          this.setState('TELEGRAPH', t);
+          this.setTimedState('INTENTION', t, this.ticks(r.INTENTION_TIME));
           return;
         }
         this.state = this.tryStep(ctx, this.x + Math.sign(px - this.x), this.y) ? 'MOVE' : 'IDLE';
         return;
       }
-      case 'TELEGRAPH':
-        if (this.elapsed(t) < this.ticks(r.RAT_TELEGRAPH)) return;
-        ctx.spawnAttack(new RatMine(ctx.nextAttackId(), this.x, this.y + 1, t, this.ticks(r.RAT_STEP), this.dmg(r.RAT_DMG)));
-        this.setState('RECOVERY', t);
+      case 'INTENTION':
+        if (this.phaseDone(t)) this.setTimedState('LOCK', t, this.ticks(r.LOCK_TIME));
         return;
-      case 'ATTACK':
+      case 'LOCK':
+        if (this.phaseDone(t)) this.setTimedState('COUNTER', t, this.ticks(r.COUNTER_TIME));
+        return;
+      case 'COUNTER':
+        if (!this.phaseDone(t)) return;
+        ctx.spawnAttack(
+          new RatMine(
+            ctx.nextAttackId(),
+            this.x,
+            this.y + 1,
+            t,
+            this.ticks(tuning.projectile.CELL_TRAVEL_TIME),
+            this.dmg(r.RAT_DMG),
+          ),
+        );
+        this.setTimedState('STRIKE', t, this.ticks(r.STRIKE_TIME));
+        return;
+      case 'STRIKE':
+        if (this.phaseDone(t)) this.setTimedState('RECOVERY', t, this.ticks(r.RECOVERY_TIME));
+        return;
       case 'RECOVERY':
-        if (this.elapsed(t) >= this.ticks(r.RAT_RECOVERY)) this.setState('IDLE', t);
+        if (this.phaseDone(t)) this.setState('IDLE', t);
         return;
+      case 'STAGGER':
       case 'DEAD':
         return;
     }

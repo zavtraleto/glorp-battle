@@ -1,5 +1,7 @@
 // Chip rail bookkeeping. Pure.
 
+import type { SlotState } from '../../sim/chips/chipSystem';
+
 /** The active (next) chip sits in the first occupied slot. */
 export function activeSlot(slots: readonly (number | null)[]): number {
   return slots.findIndex((uid) => uid !== null);
@@ -37,4 +39,10 @@ export function cancelFlashLevel(remaining: number, total: number): number {
 /** Finds the physical cartridge to reuse when the same deal returns mid-eject. */
 export function returningCartIndex(carts: readonly { deal: number; phase: string }[], deal: number): number {
   return carts.findIndex((cart) => cart.deal === deal && cart.phase === 'eject');
+}
+
+/** Shared cooldown covers unavailable chips, but never the usable committed tail. */
+export function cooldownForSlot(state: SlotState, progress: number | null): number | null {
+  if (progress === null) return null;
+  return state === 'locked' || state === 'cooling' ? progress : null;
 }

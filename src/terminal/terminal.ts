@@ -36,6 +36,7 @@ import { DarkLighting } from './parts/lighting';
 import { Pcb, PCB_PULSE_HZ } from './parts/pcb';
 import { SegmentDisplay } from './parts/segmentDisplay';
 import { chipDisplayText } from './chips/segmentFont';
+import { cooldownForSlot } from './chips/railPlan';
 import { Mount } from './parts/mount';
 import { mountCorners, screenBounds } from './interaction/project';
 import { Trackball } from './parts/trackball';
@@ -369,7 +370,10 @@ export class Terminal {
     this.rail.update(dt);
     this.syncIndicators(dt);
     this.deck.update(dt);
-    this.pcb.update(dt, world.chips.hand.map((_, i) => this.opts.session.screen === 'BATTLE' && world.state === 'ACTION' && world.chips.slotState(i) === 'queued'));
+    this.pcb.update(dt, world.chips.hand.map((_, i) => {
+      const state = world.chips.slotState(i);
+      return this.opts.session.screen === 'BATTLE' && world.state === 'ACTION' && (state === 'queued' || state === 'committed');
+    }));
     this.trackball.update(dt, this.trackballArmed(world));
     this.updateCabinetShake(dt);
 
@@ -480,15 +484,17 @@ export class Terminal {
     // flies out at once, and between battles the rail stays empty (2026-09-19).
     const screen = this.opts.session.screen;
     const inBattle = (screen === 'BATTLE' || screen === 'PAUSED') && world.state !== 'BATTLE_WON' && world.state !== 'PLAYER_DEAD';
+    const cooldown = inBattle ? chips.handCooldownProgress(world.tick) : null;
     this.rail.setAttract(this.mode() === 'BATTLE');
-    this.rail.syncHand(
-      chips.hand.map((chip, i) => ({
+    this.rail.syncHand(chips.hand.map((chip, i) => {
+      const state = inBattle ? chips.slotState(i) : 'empty';
+      return {
         chip: inBattle ? (chip ?? chips.pendingChip(i)) : null,
-        state: inBattle ? chips.slotState(i) : 'empty',
-        cooldown: inBattle ? chips.refillProgress(i, world.tick) : null,
+        state,
+        cooldown: cooldownForSlot(state, cooldown),
         order: inBattle ? chips.queuePosition(i) : 0,
-      })),
-    );
+      };
+    }));
     const queued = !inBattle || this.mode() === 'MENU' ? [] : chips.attackChips().map((c) => {
       const def = CHIPS[c.defId];
       return { name: chipName(c.defId), power: def.power, heal: def.heal, hits: def.hits };

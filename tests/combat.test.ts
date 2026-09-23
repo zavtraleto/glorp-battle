@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_TUNING, mergeTuning, secondsToTicks, tuning } from '../src/config/tuning';
 import type { Command, Dir } from '../src/core/input/commands';
+import { CHIPS } from '../src/data/chips';
 import { Shockwave } from '../src/sim/attacks/shockwave';
+import { chipTiming } from '../src/sim/chips/executor';
 import { Mettik } from '../src/sim/enemies/mettik';
 import type { SimEvent } from '../src/sim/events';
 import { World, type Cheats } from '../src/sim/world';
@@ -39,7 +41,7 @@ function cannon(w: World): void {
   w.chips.attack = [];
   w.giveChip({ uid: 9000 + w.tick, defId: 'cannon', code: '*', state: 'queued', deal: 0 });
   step(w, [{ type: 'useChip' }]);
-  run(w, T(tuning.chips.CHIP_HIT_FRAME));
+  run(w, chipTiming(CHIPS.cannon).startupTicks);
 }
 
 beforeEach(() => {
@@ -89,19 +91,21 @@ describe('Mettik', () => {
   it('attacks the player lane with a wave that arrives on schedule', () => {
     const w = makeWorld();
     const m = w.enemies[0] as Mettik;
-    const moveI = T(tuning.mettik.MET_MOVE_INTERVAL);
-    const tele = T(tuning.mettik.MET_TELEGRAPH);
-    const waveStep = T(tuning.mettik.MET_WAVE_STEP);
+    const moveI = T(tuning.mettik.MOVE_TIME);
+    const waveStep = T(tuning.projectile.CELL_TRAVEL_TIME);
     run(w, moveI);
-    expect(m.state).toBe('TELEGRAPH');
+    expect(m.state).toBe('INTENTION');
+    expect(w.dangerCells()).toEqual([]);
+    run(w, T(tuning.mettik.INTENTION_TIME));
+    expect(m.state).toBe('LOCK');
     expect(w.dangerCells()).toEqual([
       { x: 1, y: 2 },
       { x: 1, y: 3 },
       { x: 1, y: 4 },
       { x: 1, y: 5 },
     ]);
-    run(w, tele);
-    expect(m.state).toBe('ATTACK');
+    run(w, T(tuning.mettik.LOCK_TIME + tuning.mettik.COUNTER_TIME));
+    expect(m.state).toBe('STRIKE');
     expect(w.attacks).toHaveLength(1);
     // Wave spawns at y=2 and needs two steps to reach the player at y=4.
     run(w, 2 * waveStep - 1);
@@ -110,9 +114,9 @@ describe('Mettik', () => {
     expect(w.player.hp).toBe(100 - tuning.mettik.MET_DMG);
   });
 
-  it('the wave can be dodged by leaving the lane during the telegraph', () => {
+  it('the wave can be dodged by leaving the lane before Strike', () => {
     const w = makeWorld();
-    run(w, T(tuning.mettik.MET_MOVE_INTERVAL) + 5);
+    run(w, T(tuning.mettik.MOVE_TIME) + 5);
     move(w, 'left');
     run(w, T(2));
     expect(w.player.hp).toBe(100);
@@ -122,19 +126,19 @@ describe('Mettik', () => {
     const w = makeWorld();
     const m = w.enemies[0] as Mettik;
     move(w, 'right');
-    run(w, T(tuning.mettik.MET_MOVE_INTERVAL));
+    run(w, T(tuning.mettik.MOVE_TIME));
     expect([m.x, m.y]).toEqual([2, 1]);
     expect(m.state).toBe('MOVE');
   });
 
-  it('is not interrupted by hits during the telegraph', () => {
+  it('is not interrupted by ordinary hits during Intention', () => {
     const w = makeWorld();
     const m = w.enemies[0] as Mettik;
     m.hp = 999;
-    run(w, T(tuning.mettik.MET_MOVE_INTERVAL));
+    run(w, T(tuning.mettik.MOVE_TIME));
     w.damageEnemy(m, 1);
-    expect(m.state).toBe('TELEGRAPH');
-    run(w, T(tuning.mettik.MET_TELEGRAPH));
+    expect(m.state).toBe('INTENTION');
+    run(w, T(tuning.mettik.INTENTION_TIME + tuning.mettik.LOCK_TIME + tuning.mettik.COUNTER_TIME));
     expect(w.attacks.length).toBe(1);
   });
 
@@ -146,10 +150,11 @@ describe('Mettik', () => {
     let bAttacked = false;
     for (let i = 0; i < T(8); i++) {
       step(w);
-      const busyA = a.state === 'TELEGRAPH' || a.state === 'ATTACK';
-      const busyB = b.state === 'TELEGRAPH' || b.state === 'ATTACK';
+      const attackPhases = ['INTENTION', 'LOCK', 'COUNTER', 'STRIKE'] as const;
+      const busyA = attackPhases.includes(a.state as (typeof attackPhases)[number]);
+      const busyB = attackPhases.includes(b.state as (typeof attackPhases)[number]);
       if (busyA && busyB) both = true;
-      if (b.state === 'TELEGRAPH') bAttacked = true;
+      if (b.state === 'INTENTION') bAttacked = true;
     }
     expect(both).toBe(false);
     expect(bAttacked).toBe(true);
@@ -159,7 +164,7 @@ describe('Mettik', () => {
     const w = makeWorld({ ai: false });
     move(w, 'left');
     w.spawnAttack(new Shockwave(1, 1, 2, w.tick));
-    run(w, 4 * T(tuning.mettik.MET_WAVE_STEP) + 1);
+    run(w, 4 * T(tuning.projectile.CELL_TRAVEL_TIME) + 1);
     expect(w.attacks).toHaveLength(0);
   });
 });

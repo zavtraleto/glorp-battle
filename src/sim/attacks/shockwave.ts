@@ -25,7 +25,7 @@ function mettikWave(): WaveOptions {
   return {
     dir: 1,
     damage: tuning.mettik.MET_DMG,
-    stepTicks: Math.max(1, secondsToTicks(tuning.mettik.MET_WAVE_STEP)),
+    stepTicks: Math.max(1, secondsToTicks(tuning.projectile.CELL_TRAVEL_TIME)),
     owner: 'enemy',
   };
 }

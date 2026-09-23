@@ -149,7 +149,7 @@ describe('battle flow', () => {
     const slot = w.chips.hand.findIndex((c) => c !== null);
     step(w, [{ type: 'selectChip', slot }, { type: 'useChip' }]);
     expect(w.chips.hand[slot]).toBeNull();
-    run(w, T(tuning.chips.CHIP_REFILL_COOLDOWN) - 1);
+    run(w, T(tuning.chips.HAND_REFILL_COOLDOWN) - 1);
     expect(w.chips.hand[slot]).toBeNull();
     run(w, 1);
     expect(w.state).toBe('ACTION');
@@ -176,7 +176,7 @@ describe('battle flow', () => {
     }
     expect(w.chips.reshuffles).toBe(1);
     expect(seenReshuffled).toBe(true);
-    run(w, T(tuning.chips.CHIP_REFILL_COOLDOWN));
+    run(w, T(tuning.chips.HAND_REFILL_COOLDOWN));
     expect(w.chips.hand.every((c) => c !== null)).toBe(true);
   });
 

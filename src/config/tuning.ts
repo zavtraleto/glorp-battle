@@ -2,6 +2,36 @@
 // Never hardcode these values elsewhere: read them from `tuning`.
 // The debug panel edits this object live and persists overrides.
 
+/** Designer-facing combat timing unit. The simulation still runs at SIM_HZ. */
+export const COMBAT_TIMING_UNIT = 0.1;
+
+const FAST_ENEMY_TIMING = {
+  INTENTION_TIME: 0.2,
+  LOCK_TIME: 0.15,
+  COUNTER_TIME: 0.15,
+  STRIKE_TIME: 0.1,
+  RECOVERY_TIME: 0.25,
+  MOVE_TIME: 0.15,
+};
+
+const STANDARD_ENEMY_TIMING = {
+  INTENTION_TIME: 0.3,
+  LOCK_TIME: 0.2,
+  COUNTER_TIME: 0.18,
+  STRIKE_TIME: 0.1,
+  RECOVERY_TIME: 0.3,
+  MOVE_TIME: 0.2,
+};
+
+const HEAVY_ENEMY_TIMING = {
+  INTENTION_TIME: 0.4,
+  LOCK_TIME: 0.25,
+  COUNTER_TIME: 0.2,
+  STRIKE_TIME: 0.15,
+  RECOVERY_TIME: 0.4,
+  MOVE_TIME: 0.3,
+};
+
 export const DEFAULT_TUNING = {
   sim: {
     SIM_HZ: 60,
@@ -12,8 +42,7 @@ export const DEFAULT_TUNING = {
     PLAYER_MAX_HP: 100,
     PLAYER_START_X: 1,
     PLAYER_START_Y: 4,
-    MOVE_VISUAL_TIME: 0.066,
-    MOVE_COOLDOWN: 0.1,
+    CELL_MOVE_TIME: 0.2,
     PLAYER_FLINCH_TIME: 0.4,
     PLAYER_IFRAMES: 2.0,
   },
@@ -31,32 +60,33 @@ export const DEFAULT_TUNING = {
     HAND_SIZE: 5,
     /** Chips of the draw queue shown under the rail. */
     DRAW_PREVIEW: 3,
-    CHIP_USE_TIME_VULCAN: 0.3,
-    CHIP_USE_TIME_CANNON: 0.5,
-    CHIP_USE_TIME_SWORD: 0.4,
-    CHIP_USE_TIME_BOMB: 0.5,
-    CHIP_USE_TIME_RECOVER: 0.5,
-    CHIP_USE_TIME_FIELD: 0.4,
-    /** Pause between automatically chained chips. */
-    CHIP_CHAIN_DELAY: 0.05,
-    /** Default delay before a spent hand slot draws its replacement. */
-    CHIP_REFILL_COOLDOWN: 2.0,
-    CHIP_HIT_FRAME: 0.1,
+    CHIP_STARTUP_VULCAN: 0.1,
+    CHIP_RECOVERY_VULCAN: 0.1,
+    CHIP_STARTUP_CANNON: 0.1,
+    CHIP_RECOVERY_CANNON: 0.15,
+    CHIP_STARTUP_SWORD: 0.15,
+    CHIP_RECOVERY_SWORD: 0.2,
+    CHIP_STARTUP_BOMB: 0.2,
+    CHIP_RECOVERY_BOMB: 0.2,
+    CHIP_STARTUP_RECOVER: 0.1,
+    CHIP_RECOVERY_RECOVER: 0.15,
+    CHIP_STARTUP_FIELD: 0.15,
+    CHIP_RECOVERY_FIELD: 0.15,
+    /** Shared delay from the first charged shot until the next hand may activate. */
+    HAND_REFILL_COOLDOWN: 4.0,
     VULCAN_HIT_STEP: 0.05,
-    BOMB_FLIGHT_TIME: 0.5,
     /** ZapRing paralysis (roguelite spec §4.3). */
     PARALYZE_TIME: 1.5,
     INVIS_TIME: 3.0,
-    /** Player ShockWave: seconds per panel. */
-    PLAYER_WAVE_STEP: 0.15,
   },
-  /** Counter timing for the four enemies available in Play. */
+  /** Projectile speed in designer-facing seconds per cell. */
+  projectile: {
+    CELL_TRAVEL_TIME: 0.2,
+    FAST_CELL_TRAVEL_TIME: 0.15,
+    SLOW_CELL_TRAVEL_TIME: 0.3,
+  },
   counter: {
     COUNTER_STAGGER_TIME: 0.5,
-    COUNTER_WINDOW_METTIK: 0.18,
-    COUNTER_WINDOW_CANODRON: 0.15,
-    COUNTER_WINDOW_BLADDY: 0.15,
-    COUNTER_WINDOW_BUNNY: 0.15,
   },
   /** Tutorial hint ladder (tutorial spec §5), seconds of inaction. */
   tutorial: {
@@ -65,88 +95,61 @@ export const DEFAULT_TUNING = {
     TUT_HINT_LINE: 8,
   },
   mettik: {
+    ...STANDARD_ENEMY_TIMING,
     MET_HP: 40,
     MET_DMG: 10,
-    MET_MOVE_INTERVAL: 0.5,
-    MET_TELEGRAPH: 0.5,
-    MET_ATTACK_TIME: 0.2,
-    MET_WAVE_STEP: 0.25,
-    MET_RECOVERY: 1.5,
   },
   canodron: {
+    ...STANDARD_ENEMY_TIMING,
     CANO_HP: 60,
     CANO_DMG: 10,
     CANO_CURSOR_STEP: 0.15,
-    CANO_FIRE_DELAY: 0.3,
-    CANO_ATTACK_TIME: 0.2,
-    CANO_COOLDOWN: 2.0,
   },
   spiker: {
+    ...FAST_ENEMY_TIMING,
     SPK_HP: 90,
     SPK_DMG: 30,
-    SPK_WARP_INTERVAL: 0.8,
     SPK_WARPS_MIN: 2,
     SPK_WARPS_MAX: 4,
-    SPK_TELEGRAPH: 0.5,
-    SPK_SHOT_STEP: 0.12,
-    SPK_ATTACK_TIME: 0.2,
-    SPK_RECOVERY: 1.5,
   },
   /** Roguelite viruses (roguelite spec §5.2). HP and damage: MMBN3; timings: [оценка]. */
   hopzap: {
+    ...FAST_ENEMY_TIMING,
     HOP_HP: 40,
     HOP_DMG: 15,
-    HOP_MOVE_INTERVAL: 0.6,
-    HOP_TELEGRAPH: 0.5,
-    HOP_RING_STEP: 0.2,
     HOP_PARALYZE: 1.0,
-    HOP_RECOVERY: 1.2,
   },
   bladdy: {
+    ...HEAVY_ENEMY_TIMING,
     BLD_HP: 90,
     BLD_DMG: 30,
-    BLD_MOVE_INTERVAL: 0.8,
-    BLD_TELEGRAPH: 0.6,
-    BLD_ATTACK_TIME: 0.25,
-    BLD_RECOVERY: 1.5,
   },
   rattik: {
+    ...FAST_ENEMY_TIMING,
     RAT_HP: 40,
     RAT_DMG: 20,
-    RAT_MOVE_INTERVAL: 0.7,
-    RAT_TELEGRAPH: 0.4,
-    RAT_STEP: 0.18,
-    RAT_RECOVERY: 2.0,
   },
   helmhead: {
+    ...HEAVY_ENEMY_TIMING,
     HELM_HP: 80,
     HELM_DMG: 60,
     HELM_CLOSED: 2.0,
-    HELM_TELEGRAPH: 0.6,
-    HELM_FLIGHT: 0.6,
-    HELM_RECOVERY: 1.0,
   },
   finnik: {
+    ...FAST_ENEMY_TIMING,
     FIN_HP: 90,
     FIN_DMG: 30,
-    FIN_MOVE_INTERVAL: 0.8,
-    FIN_TELEGRAPH: 0.6,
     FIN_DASH_STEP: 0.08,
-    FIN_RECOVERY: 1.5,
   },
   /** Act boss (roguelite spec §5.3); all values [оценка]. */
   monolith: {
+    ...HEAVY_ENEMY_TIMING,
     MONO_HP: 400,
-    MONO_MOVE_INTERVAL: 1.2,
     MONO_ATTACK_INTERVAL: 2.5,
-    MONO_TELEGRAPH: 0.8,
-    MONO_ATTACK_TIME: 0.4,
     MONO_ROCK_DMG: 40,
-    MONO_ROCK_FALL: 0.3,
     MONO_ROCKS: 3,
     MONO_ROCKS_RAGE: 5,
     MONO_WAVE_DMG: 50,
-    MONO_WAVE_STEP: 0.2,
     MONO_RAGE_SPEED: 1.25,
   },
   fx: {
@@ -174,6 +177,8 @@ export const DEFAULT_TUNING = {
     HOLD_REPEAT_DELAY: 0.35,
     /** Interval between further repeated steps while the direction stays held. */
     HOLD_REPEAT: 0.2,
+    /** One early Attack press retained until the current chip lock ends. */
+    ACTION_BUFFER_TIME: 0.1,
   },
   /** Battle field look, "CRT Occult Vector" (docs/BATTLE_VISUAL.md §9). */
   battleVisual: {

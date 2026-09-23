@@ -10,12 +10,21 @@ import type { FieldObject, ObjectKind } from '../fieldObject';
 import type { Side } from '../grid';
 import type { SimEvent } from '../events';
 
-// Common enemy state machine (GDD §8.1):
-// IDLE → MOVE → TELEGRAPH → ATTACK → RECOVERY → IDLE; DEAD is terminal.
+// Common enemy timing grammar (GDD §8.1):
+// IDLE/MOVE → INTENTION → LOCK → COUNTER → STRIKE → RECOVERY; DEAD is terminal.
 // Hits never interrupt an enemy's action; they only flash.
 
 export type EnemyKind = 'mettik' | 'canodron' | 'spiker' | 'hopzap' | 'bladdy' | 'rattik' | 'helmhead' | 'finnik' | 'monolith';
-export type EnemyState = 'IDLE' | 'MOVE' | 'TELEGRAPH' | 'ATTACK' | 'RECOVERY' | 'STAGGER' | 'DEAD';
+export type EnemyState =
+  | 'IDLE'
+  | 'MOVE'
+  | 'INTENTION'
+  | 'LOCK'
+  | 'COUNTER'
+  | 'STRIKE'
+  | 'RECOVERY'
+  | 'STAGGER'
+  | 'DEAD';
 
 /** What an enemy may read or do during its update. */
 export interface EnemyContext {
@@ -52,6 +61,8 @@ export abstract class Enemy {
   state: EnemyState = 'IDLE';
   /** Tick when the current state was entered. */
   stateTick: number;
+  /** Tick when a timed phase ends; Infinity for untimed states. */
+  stateEndTick = Infinity;
   lastHitTick = -Infinity;
   deathTick = -Infinity;
   /** Hits do no damage while true (Helmhead's helmet, Finnik's dash). */
@@ -80,11 +91,6 @@ export abstract class Enemy {
     return Math.max(1, secondsToTicks(seconds / ENEMY_LEVELS[this.level].speed));
   }
 
-  /** Counter windows may be set to zero in the debug panel to disable them. */
-  protected counterTicks(seconds: number): number {
-    return secondsToTicks(seconds / ENEMY_LEVELS[this.level].speed);
-  }
-
   /** A damage tunable scaled by the level. */
   protected dmg(base: number): number {
     return Math.round(base * ENEMY_LEVELS[this.level].damage);
@@ -102,6 +108,31 @@ export abstract class Enemy {
   setState(state: EnemyState, tick: number): void {
     this.state = state;
     this.stateTick = tick;
+    this.stateEndTick = Infinity;
+  }
+
+  setTimedState(state: EnemyState, tick: number, durationTicks: number): void {
+    this.state = state;
+    this.stateTick = tick;
+    this.stateEndTick = tick + Math.max(0, durationTicks);
+  }
+
+  phaseDone(tick: number): boolean {
+    return tick >= this.stateEndTick;
+  }
+
+  phaseRemaining(tick: number): number {
+    return Number.isFinite(this.stateEndTick) ? Math.max(0, this.stateEndTick - tick) : 0;
+  }
+
+  freezePhase(ticks = 1): void {
+    this.stateTick += ticks;
+    if (Number.isFinite(this.stateEndTick)) this.stateEndTick += ticks;
+  }
+
+  /** Render interpolation duration matching this level's rounded simulation cadence. */
+  moveDurationSeconds(): number {
+    return this.ticks(tuning[this.kind].MOVE_TIME) / tuning.sim.SIM_HZ;
   }
 
   /** Debug "force enemy attack": start the attack sequence as soon as possible. */
@@ -117,14 +148,14 @@ export abstract class Enemy {
     return [];
   }
 
-  /** True only during the final, vulnerable part of an attack telegraph. */
-  counterWindowOpen(_tick: number): boolean {
-    return false;
+  /** True only during the explicit vulnerable phase before Strike. */
+  counterWindowOpen(): boolean {
+    return this.state === 'COUNTER';
   }
 
   /** Cancels the pending attack and starts the common Counter stagger. */
   counter(tick: number): boolean {
-    if (!this.counterWindowOpen(tick)) return false;
+    if (!this.counterWindowOpen()) return false;
     this.onCountered();
     this.setState('STAGGER', tick);
     return true;

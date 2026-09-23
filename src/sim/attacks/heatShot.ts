@@ -4,7 +4,7 @@ import type { AttackContext } from './attack';
 import type { LaneMover } from './shockwave';
 
 // Spiker fireball (GDD §8.4, §8.5): travels down the lane one panel per
-// SPK_SHOT_STEP; on hitting the player it bursts over that panel and the one
+// configured fast cell travel time; on hitting the player it bursts over that panel and the one
 // behind it, then disappears. An invulnerable player lets it pass.
 
 export class HeatShot implements LaneMover {
@@ -22,7 +22,7 @@ export class HeatShot implements LaneMover {
     public y: number,
     spawnTick: number,
     damage = tuning.spiker.SPK_DMG,
-    stepTicks = secondsToTicks(tuning.spiker.SPK_SHOT_STEP),
+    stepTicks = secondsToTicks(tuning.projectile.FAST_CELL_TRAVEL_TIME),
   ) {
     this.lastStepTick = spawnTick;
     this.stepTicks = Math.max(1, stepTicks);
