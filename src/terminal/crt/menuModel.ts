@@ -61,7 +61,6 @@ export function formatTime(seconds: number): string {
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
 function pathLabel(next: NextBattle): string {
-  if (next.kind === 'boss') return t('path.boss');
   return t(next.kind === 'elite' ? 'path.elite' : 'path.normal', { n: next.enemies });
 }
 

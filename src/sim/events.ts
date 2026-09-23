@@ -32,10 +32,6 @@ export type SimEvent =
   | { type: 'objectBroken'; id: EntityId; x: number; y: number }
   /** Enemy melee swing over these panels (Bladdy). */
   | { type: 'enemySlash'; cells: Cell[] }
-  /** A hit bounced off a guarded enemy. */
-  | { type: 'guarded'; id: EntityId; x: number; y: number }
   | { type: 'enemyWarped'; id: EntityId; fromX: number; fromY: number; x: number; y: number }
-  /** HeatShot burst: the hit panel plus the panel behind it. */
-  | { type: 'explosion'; cells: Cell[] }
   /** The draw pile ran dry and the spent chips shuffled back in (decision 2026-09-18 А). */
   | { type: 'drawReshuffled'; count: number };

@@ -21,7 +21,6 @@ export const en = {
   'path.hint': 'HP restores every {n} battles.',
   'path.normal': 'Battle x{n}',
   'path.elite': 'Elite x{n}',
-  'path.boss': 'Boss',
   'path.fight': 'Fight',
   'btn.abandon': 'Abandon run',
   'btn.title': 'Title',
@@ -112,13 +111,8 @@ export const en = {
   'chip.rockcube.desc': 'Puts a rock on the panel in front of you.',
   'enemy.mettik': 'Mettik',
   'enemy.canodron': 'Canodron',
-  'enemy.spiker': 'Spiker',
   'enemy.hopzap': 'Hopzap',
   'enemy.bladdy': 'Bladdy',
-  'enemy.rattik': 'Rattik',
-  'enemy.helmhead': 'Helmhead',
-  'enemy.finnik': 'Finnik',
-  'enemy.monolith': 'Monolith',
 } as const;
 
 export type StringKey = keyof typeof en;

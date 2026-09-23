@@ -113,7 +113,7 @@ export class FieldView {
       rows: ROWS,
       tick: world.tick,
       player: world.player.alive ? { x: world.player.x, y: world.player.y } : null,
-      enemies: world.enemies.filter((enemy) => enemy.alive && !enemy.offField).map((enemy) => ({ x: enemy.x, y: enemy.y })),
+      enemies: world.enemies.filter((enemy) => enemy.alive).map((enemy) => ({ x: enemy.x, y: enemy.y })),
       danger: world.state === 'ACTION' ? world.dangerCells() : [],
       attacks: this.marks,
       spawns,

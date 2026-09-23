@@ -28,7 +28,6 @@ export interface DebugActions {
   setCellState(x: number, y: number, state: DebugCellState | 'NONE'): void;
   clearCellStates(): void;
   demoCellStates(): void;
-  rerollEnemies(): void;
   /** Run (GDD §10–11). */
   runDepth(depth: number): void;
   /** Changes the real panels (roguelite spec §3). */
@@ -216,7 +215,6 @@ export class DebugPanel {
     ff.add({ run: () => a.simPanel(cell.x, cell.y, sim.action) }, 'run').name('apply to sim');
     ff.add({ clear: () => a.clearCellStates() }, 'clear').name('clear cell states');
     ff.add({ demo: () => a.demoCellStates() }, 'demo').name('demo all states');
-    ff.add({ reroll: () => a.rerollEnemies() }, 'reroll').name('new enemy looks');
     ff.close();
   }
 

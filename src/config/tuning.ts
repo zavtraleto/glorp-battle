@@ -105,14 +105,6 @@ export const DEFAULT_TUNING = {
     CANO_DMG: 10,
     CANO_CURSOR_STEP: 0.15,
   },
-  spiker: {
-    ...FAST_ENEMY_TIMING,
-    SPK_HP: 90,
-    SPK_DMG: 30,
-    SPK_WARPS_MIN: 2,
-    SPK_WARPS_MAX: 4,
-  },
-  /** Roguelite viruses (roguelite spec §5.2). HP and damage: MMBN3; timings: [оценка]. */
   hopzap: {
     ...FAST_ENEMY_TIMING,
     HOP_HP: 40,
@@ -123,34 +115,6 @@ export const DEFAULT_TUNING = {
     ...HEAVY_ENEMY_TIMING,
     BLD_HP: 90,
     BLD_DMG: 30,
-  },
-  rattik: {
-    ...FAST_ENEMY_TIMING,
-    RAT_HP: 40,
-    RAT_DMG: 20,
-  },
-  helmhead: {
-    ...HEAVY_ENEMY_TIMING,
-    HELM_HP: 80,
-    HELM_DMG: 60,
-    HELM_CLOSED: 2.0,
-  },
-  finnik: {
-    ...FAST_ENEMY_TIMING,
-    FIN_HP: 90,
-    FIN_DMG: 30,
-    FIN_DASH_STEP: 0.08,
-  },
-  /** Act boss (roguelite spec §5.3); all values [оценка]. */
-  monolith: {
-    ...HEAVY_ENEMY_TIMING,
-    MONO_HP: 400,
-    MONO_ATTACK_INTERVAL: 2.5,
-    MONO_ROCK_DMG: 40,
-    MONO_ROCKS: 3,
-    MONO_ROCKS_RAGE: 5,
-    MONO_WAVE_DMG: 50,
-    MONO_RAGE_SPEED: 1.25,
   },
   fx: {
     HIT_FLASH: 0.1,

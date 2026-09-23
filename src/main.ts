@@ -16,8 +16,6 @@ import { t } from './i18n';
 import { SceneRenderer } from './render/scene';
 import type { Cheats } from './sim/world';
 import { Terminal } from './terminal/terminal';
-import { ENEMY_SEEDS } from './data/enemies';
-import { clearCreatureCache } from './render/actors';
 import { loadSpriteArt } from './render/spriteArt';
 import { cellKey } from './render/cellStates';
 import { COLS } from './sim/grid';
@@ -80,7 +78,7 @@ function togglePause(): void {
 
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
 const sceneRenderer = new SceneRenderer({ renderer });
-// Hand-drawn sprites load in the background; until then the procedural ones stand in.
+// Hand-drawn sprites load in the background; until then the static placeholder stands in.
 void loadSpriteArt().then(() => sceneRenderer.refreshArt());
 const terminal = new Terminal({
   renderer,
@@ -261,11 +259,6 @@ const panel = new DebugPanel(loop.clock, {
     const w = session.world;
     f.markAttack([{ x: 2, y: 3 }], w.tick, 'accent');
     f.markAttack([{ x: 0, y: 3 }], w.tick, 'red');
-  },
-  rerollEnemies: () => {
-    for (const kind of Object.keys(ENEMY_SEEDS) as (keyof typeof ENEMY_SEEDS)[]) ENEMY_SEEDS[kind] = randomSeed();
-    clearCreatureCache();
-    sceneRenderer.reset();
   },
 });
 panel.syncSeed(session.seed, Math.min(4, session.battleIndex));

@@ -14,7 +14,7 @@ describe('debug tuning order', () => {
       CHIP_STARTUP_CANNON: 0.1,
       CHIP_RECOVERY_CANNON: 0.15,
     });
-    for (const group of ['mettik', 'canodron', 'spiker', 'hopzap', 'bladdy', 'rattik', 'helmhead', 'finnik', 'monolith']) {
+    for (const group of ['mettik', 'canodron', 'hopzap', 'bladdy']) {
       expect(values[group]).toMatchObject({
         INTENTION_TIME: expect.any(Number),
         LOCK_TIME: expect.any(Number),

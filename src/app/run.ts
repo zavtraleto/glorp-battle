@@ -9,8 +9,6 @@ import type { EnemyKind } from '../sim/enemies/enemyBase';
 // healing. HP and the 20-card Play folder carry over between battles.
 
 export const RUN_STEPS = 8;
-/** Legacy encounter-catalogue depths, retained for debug content validation. */
-export const ELITE_STEPS: readonly number[] = [5, 8];
 
 interface PlayChip {
   defId: ChipId;

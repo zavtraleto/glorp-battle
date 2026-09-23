@@ -141,8 +141,8 @@ describe('Session', () => {
     expect(s.screen).toBe('BATTLE');
     expect(s.world.encounter.id).toBe('n3');
     expect(s.world.chips.chips).toHaveLength(30);
-    expect(s.debugEncounter('boss')).toBe(true);
-    expect(s.world.enemies.some((e) => e.kind === 'monolith')).toBe(true);
+    expect(s.debugEncounter('e1')).toBe(true);
+    expect(s.world.enemies.map((e) => e.kind)).toEqual(['bladdy', 'mettik']);
     expect(s.debugEncounter('nope')).toBe(false);
   });
 

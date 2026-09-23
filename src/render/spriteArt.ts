@@ -2,30 +2,38 @@ import * as THREE from 'three';
 import playerUrl from '../assets/sprites/player.png';
 import mettikUrl from '../assets/sprites/mettik.png';
 import canodronUrl from '../assets/sprites/canodron.png';
-import monolithUrl from '../assets/sprites/monolith.png';
-import type { EnemyKind } from '../sim/enemies/enemyBase';
+import hopzapUrl from '../assets/sprites/hopzap.png';
+import bladdyUrl from '../assets/sprites/bladdy.png';
 
 // Hand-drawn sprites (BATTLE_VISUAL.md §5): full-colour art drawn on its own
 // render layer after the palette pass, toned down to sit on the dark CRT.
 // Sources live in /assets at full size; src/assets/sprites holds area-averaged,
 // hard-alpha cut-downs (player: 128×128; enemies: within 128×160) that ship
-// with the game. Kinds without art keep their procedural creature.
+// with the game. Kinds without art use one static placeholder bitmap.
 
-export type ArtId = 'player' | 'mettik' | 'canodron' | 'monolith';
+export type ArtId = 'player' | 'mettik' | 'canodron' | 'hopzap' | 'bladdy';
+export type EnemySpriteId = Exclude<ArtId, 'player'> | 'placeholder';
 
 const URLS: Record<ArtId, string> = {
   player: playerUrl,
   mettik: mettikUrl,
   canodron: canodronUrl,
-  monolith: monolithUrl,
+  hopzap: hopzapUrl,
+  bladdy: bladdyUrl,
 };
 
 /** Enemy kinds drawn with hand-made art. */
-export const ENEMY_ART: Partial<Record<EnemyKind, ArtId>> = {
+export const ENEMY_ART: Readonly<Record<string, EnemySpriteId>> = {
   mettik: 'mettik',
   canodron: 'canodron',
-  monolith: 'monolith',
+  hopzap: 'hopzap',
+  bladdy: 'bladdy',
 };
+
+/** Shipped art id, or the one placeholder used by future enemy kinds. */
+export function enemyArtId(kind: string): EnemySpriteId {
+  return ENEMY_ART[kind] ?? 'placeholder';
+}
 
 /** Tone-down toward the CRT: keep this much saturation and brightness. */
 const SATURATION = 0.78;

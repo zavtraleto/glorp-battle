@@ -1,4 +1,4 @@
-import type { CreatureBitmap, Pixel } from './creatureGen';
+import type { Pixel, SpriteBitmap } from './spriteBitmap';
 
 // The player's hand-drawn silhouette (spec §7): 36×48, 'o' phosphor body,
 // 'v' accent visor and hand lights. Feet on the bottom row.
@@ -56,7 +56,7 @@ const ROWS = [
 
 export const PLAYER_ROWS: readonly string[] = ROWS;
 
-export function playerBitmap(): CreatureBitmap {
+export function playerBitmap(): SpriteBitmap {
   const h = ROWS.length;
   const w = (ROWS[0] as string).length;
   const px = new Uint8Array(w * h);
@@ -67,5 +67,5 @@ export function playerBitmap(): CreatureBitmap {
       px[y * w + x] = v;
     }
   });
-  return { w, h, px, elements: ['visor'] };
+  return { w, h, px };
 }

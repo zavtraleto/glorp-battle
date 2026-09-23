@@ -1,7 +1,5 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import { ENEMY_SEEDS } from '../src/data/enemies';
-import { CREATURE_SIZE, generateCreature } from '../src/render/creatureGen';
 import { battleSignal, NO_SIGNAL } from '../src/render/battleSignals';
 import { cellKey, cellStates, type CellInputs } from '../src/render/cellStates';
 import {
@@ -17,6 +15,7 @@ import {
 import { fitView } from '../src/render/viewCamera';
 import { SceneRenderer } from '../src/render/scene';
 import { spritePixels } from '../src/render/pixelSprite';
+import * as spriteArtModule from '../src/render/spriteArt';
 import { toneForCrt } from '../src/render/spriteArt';
 import { PLAYER_ROWS, playerBitmap } from '../src/render/playerSprite';
 import type { Panel } from '../src/sim/field';
@@ -280,35 +279,20 @@ describe('actor screen anchors', () => {
   });
 });
 
-describe('generateCreature', () => {
-  it('draws creatures at 48 texels', () => {
-    const c = generateCreature(1);
-    expect([c.w, c.h]).toEqual([CREATURE_SIZE, CREATURE_SIZE]);
-    expect(CREATURE_SIZE).toBe(48);
-  });
+describe('enemy sprite art', () => {
+  it('uses shipped art for current enemies and one placeholder for unknown kinds', () => {
+    const enemyArtId = (spriteArtModule as unknown as {
+      enemyArtId?: (kind: string) => string;
+    }).enemyArtId;
 
-  it('is deterministic per seed and varies between seeds', () => {
-    const a = generateCreature(7);
-    expect(generateCreature(7).px).toEqual(a.px);
-    const distinct = new Set(Array.from({ length: 20 }, (_, i) => Array.from(generateCreature(i + 1).px).join('')));
-    expect(distinct.size).toBe(20);
-  });
-
-  it('keeps a large silhouette, few inner elements and 3 pixel values', () => {
-    for (let seed = 1; seed <= 300; seed++) {
-      const c = generateCreature(seed);
-      expect(c.w * c.h).toBe(c.px.length);
-      const filled = c.px.reduce((n, p) => n + (p ? 1 : 0), 0);
-      expect(filled / c.px.length, `seed ${seed}`).toBeGreaterThanOrEqual(0.25);
-      expect(c.elements.length, `seed ${seed}`).toBeGreaterThanOrEqual(1);
-      expect(c.elements.length, `seed ${seed}`).toBeLessThanOrEqual(3);
-      for (const p of c.px) expect(p).toBeLessThanOrEqual(2);
-    }
-  }, 15_000);
-
-  it('gives every enemy kind its own look', () => {
-    const looks = Object.values(ENEMY_SEEDS).map((s) => Array.from(generateCreature(s).px).join(''));
-    expect(new Set(looks).size).toBe(looks.length);
+    expect(enemyArtId).toBeTypeOf('function');
+    expect(['mettik', 'canodron', 'hopzap', 'bladdy'].map((kind) => enemyArtId?.(kind))).toEqual([
+      'mettik',
+      'canodron',
+      'hopzap',
+      'bladdy',
+    ]);
+    expect(enemyArtId?.('future-enemy')).toBe('placeholder');
   });
 });
 

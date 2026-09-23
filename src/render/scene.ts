@@ -106,11 +106,9 @@ export class SceneRenderer {
     this.fx.handleEvent(e, world);
     const tick = world.tick;
     if (e.type === 'chipEffect') this.field.markAttack(e.cells, tick, 'accent');
-    else if (e.type === 'explosion') this.field.markAttack(e.cells, tick, 'red');
     else if (e.type === 'enemyShot') this.field.markAttack([{ x: e.x, y: e.toY }], tick, 'red');
     else if (e.type === 'bombLanded') this.field.markAttack(e.cells, tick, 'accent');
     else if (e.type === 'enemySlash') this.field.markAttack(e.cells, tick, 'red');
-    else if (e.type === 'guarded') this.field.markAttack([{ x: e.x, y: e.y }], tick, 'accent');
     else if (e.type === 'objectBroken') this.field.markAttack([{ x: e.x, y: e.y }], tick, 'red');
   }
 
@@ -160,7 +158,7 @@ export class SceneRenderer {
     this.fx.update(world, alpha);
     // Moving enemy attacks light up the cell they are in.
     for (const a of world.attacks) {
-      if (a.kind === 'shockwave' || a.kind === 'heatshot') {
+      if (a.kind === 'shockwave') {
         const m = a as unknown as { x: number; y: number };
         this.field.markAttack([{ x: m.x, y: m.y }], world.tick, 'red');
       }

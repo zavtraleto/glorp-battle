@@ -74,7 +74,6 @@ describe('menuFor', () => {
       ['Folder', '21'],
     ]);
     expect(path.items.map((i) => i.label)).toEqual(['Fight']);
-    expect(menuFor(session('PATH', { next: { kind: 'boss', enemies: 2 } }))!.subtitle).toBe('Boss');
     expect(path.hint).toEqual([]);
     expect(menuFor(session('COMPLETE'))!.rows).toEqual([
       ['Battles', '2'],

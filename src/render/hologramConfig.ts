@@ -33,7 +33,8 @@ export interface HologramConfig {
 export const HOLOGRAM_CHARACTER_OVERRIDES: Partial<Record<HologramCharacter, Partial<HologramConfig>>> = {
   mettik: { glowColor: '#9BE564' },
   canodron: { glowColor: '#FFB45E' },
-  monolith: { glowColor: '#B58CFF' },
+  hopzap: { glowColor: '#7EE7FF' },
+  bladdy: { glowColor: '#FF7A7A' },
 };
 
 function configFromTuning(v: Tuning['hologram']): HologramConfig {
@@ -72,7 +73,8 @@ const CHARACTER_SEED: Record<HologramCharacter, number> = {
   player: 11,
   mettik: 23,
   canodron: 37,
-  monolith: 53,
+  hopzap: 53,
+  bladdy: 71,
 };
 
 /** Small positive float with stable variation between art types and actor instances. */

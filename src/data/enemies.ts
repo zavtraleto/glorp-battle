@@ -1,20 +1,4 @@
-import type { EnemyKind } from '../sim/enemies/enemyBase';
-
-// Presentation data and level multipliers for enemies (BATTLE_VISUAL.md §5.1,
-// roguelite spec §5.1). Base stats live in config/tuning.ts, names in i18n (`enemy.<kind>`).
-
-/** Creature generator seed per enemy kind: a fixed seed keeps each kind recognisable. */
-export const ENEMY_SEEDS: Record<EnemyKind, number> = {
-  mettik: 11,
-  canodron: 23,
-  spiker: 42,
-  hopzap: 57,
-  bladdy: 64,
-  rattik: 77,
-  helmhead: 91,
-  finnik: 103,
-  monolith: 131,
-};
+// Enemy level multipliers. Base stats live in config/tuning.ts, names in i18n.
 
 export type EnemyLevel = 1 | 2 | 3;
 

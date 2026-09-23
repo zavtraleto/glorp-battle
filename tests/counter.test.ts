@@ -9,7 +9,7 @@ const DT = 1 / 60;
 const T = (seconds: number) => secondsToTicks(seconds);
 const ATTACK_PHASES: readonly EnemyState[] = ['INTENTION', 'LOCK', 'COUNTER', 'STRIKE', 'RECOVERY'];
 const ATTACK_ENEMIES: readonly EnemyKind[] = [
-  'mettik', 'canodron', 'spiker', 'hopzap', 'bladdy', 'rattik', 'helmhead', 'finnik', 'monolith',
+  'mettik', 'canodron', 'hopzap', 'bladdy',
 ];
 
 beforeEach(() => mergeTuning(tuning, JSON.parse(JSON.stringify(DEFAULT_TUNING))));

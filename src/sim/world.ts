@@ -362,10 +362,6 @@ export class World implements EnemyContext, AttackContext {
 
   damageEnemy(enemy: Enemy, amount: number, canCounter = false): void {
     if (!enemy.alive) return;
-    if (enemy.guarded) {
-      this.events.push({ type: 'guarded', id: enemy.id, x: enemy.x, y: enemy.y });
-      return;
-    }
     const countered = canCounter && amount > 0 && enemy.counterWindowOpen();
     const died = enemy.applyDamage(amount, this.tick);
     this.events.push({ type: 'damaged', targetId: enemy.id, amount, x: enemy.x, y: enemy.y, hpLeft: enemy.hp });
@@ -660,7 +656,6 @@ export class World implements EnemyContext, AttackContext {
     for (const e of this.enemies) {
       if (!e.alive) continue;
       // The debug kill ignores guards.
-      e.guarded = false;
       this.damageEnemy(e, e.hp);
     }
   }

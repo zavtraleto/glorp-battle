@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { CreatureBitmap } from './creatureGen';
+import type { SpriteBitmap } from './spriteBitmap';
 import { signal, type Role } from './palette';
 import type { SpriteArt } from './spriteArt';
 import {
@@ -9,7 +9,7 @@ import {
 import type { HologramCharacter } from './hologramConfig';
 
 // Camera-facing sprite (BATTLE_VISUAL.md §2, §5), snapped to the CRT pixel
-// grid, with a hit flash and a pixel dissolve. Procedural creatures are palette
+// grid, with a hit flash and a pixel dissolve. Code-defined bitmaps are palette
 // signals; hand-drawn art is full colour on its own render layer.
 
 /** Render layer of full-colour art, drawn after the palette pass. */
@@ -66,7 +66,7 @@ function alphaOf(x: number, y: number): number {
   return 130 + Math.floor(noise(x, y) * 125);
 }
 
-function makeTexture(b: CreatureBitmap, body: THREE.Color, accent: THREE.Color): THREE.DataTexture {
+function makeTexture(b: SpriteBitmap, body: THREE.Color, accent: THREE.Color): THREE.DataTexture {
   const data = new Uint8Array(b.w * b.h * 4);
   for (let y = 0; y < b.h; y++) {
     for (let x = 0; x < b.w; x++) {
@@ -106,8 +106,8 @@ export class PixelSprite {
   /** Art textures are shared by every sprite that uses them. */
   private readonly ownsTextures: boolean;
 
-  /** A procedural creature in `role`'s signal colour, or hand-drawn full-colour art. */
-  constructor(source: CreatureBitmap | SpriteArt, role: Role, identity?: HologramSpriteIdentity) {
+  /** A palette bitmap in `role`'s signal colour, or hand-drawn full-colour art. */
+  constructor(source: SpriteBitmap | SpriteArt, role: Role, identity?: HologramSpriteIdentity) {
     if ('normal' in source) {
       if (!identity) throw new Error('PNG sprite art requires a hologram identity');
       this.normal = source.normal;
