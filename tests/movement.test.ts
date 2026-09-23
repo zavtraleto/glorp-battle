@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_TUNING, mergeTuning, secondsToTicks, tuning } from '../src/config/tuning';
 import { InputState, type Command, type Dir } from '../src/core/input/commands';
+import { FixedStepClock } from '../src/core/loop';
 import { SwipeRecognizer } from '../src/core/input/swipe';
 import { Occupancy } from '../src/sim/occupancy';
 import { World } from '../src/sim/world';
@@ -176,32 +177,30 @@ describe('SwipeRecognizer', () => {
   });
 
   it('one stroke yields exactly one step, however long', () => {
-    const s = new SwipeRecognizer(24, 0.35, 0.07);
+    const s = new SwipeRecognizer(24, 0.35);
     s.begin(0, 0, 0);
     expect(s.move(30, 0, 0.02)).toBe('right');
     expect(s.move(80, 0, 0.04)).toBeNull();
     expect(s.move(200, 3, 0.06)).toBeNull();
   });
 
-  // Finger held down: strokes with stops each step again (decision 2026-09-19).
-  it('steps again after the finger rests', () => {
-    const s = new SwipeRecognizer(24, 0.35, 0.07);
+  it('does not emit an extra discrete step after a rest in the same direction', () => {
+    const s = new SwipeRecognizer(24, 0.35);
     s.begin(0, 0, 0);
     expect(s.move(30, 0, 0.02)).toBe('right');
-    // No movement until 0.12 s: the next stroke starts from the resting point.
     expect(s.move(40, 0, 0.12)).toBeNull();
-    expect(s.move(60, 0, 0.14)).toBe('right');
+    expect(s.move(70, 0, 0.14)).toBeNull();
   });
 
-  it('does not re-arm on a rest shorter than the re-arm time', () => {
-    const s = new SwipeRecognizer(24, 0.35, 0.07);
+  it('does not emit another step while continuing the same stroke', () => {
+    const s = new SwipeRecognizer(24, 0.35);
     s.begin(0, 0, 0);
     expect(s.move(30, 0, 0.02)).toBe('right');
     expect(s.move(70, 0, 0.06)).toBeNull();
   });
 
   it('steps again when the stroke turns, measured from where it turned', () => {
-    const s = new SwipeRecognizer(24, 0.35, 0.07);
+    const s = new SwipeRecognizer(24, 0.35);
     s.begin(0, 0, 0);
     expect(s.move(30, 0, 0.01)).toBe('right');
     expect(s.move(90, 0, 0.02)).toBeNull();
@@ -211,7 +210,7 @@ describe('SwipeRecognizer', () => {
   });
 
   it('counts a gesture with steps as a step, not a tap', () => {
-    const s = new SwipeRecognizer(24, 0.35, 0.07);
+    const s = new SwipeRecognizer(24, 0.35);
     s.begin(0, 0, 0);
     s.move(30, 0, 0.02);
     s.move(40, 0, 0.12);
@@ -276,6 +275,33 @@ describe('InputState', () => {
     expect(i.heldDir).toBe('left');
     i.clear();
     expect(i.heldDir).toBeNull();
+  });
+
+  it('keeps keyboard hold underneath an active pointer hold', () => {
+    const i = new InputState();
+    i.setHeld('left', 'keyboard');
+    i.setHeld('up', 'pointer');
+    expect(i.heldDir).toBe('up');
+    i.setHeld(null, 'pointer');
+    expect(i.heldDir).toBe('left');
+  });
+
+  it.each([30, 60, 120])('repeats held movement identically at %i render FPS', (fps) => {
+    const w = freshWorld();
+    w.occupancy.move(w.player.id, w.player.x, w.player.y, 1, 5);
+    w.player.x = w.player.prevX = 1;
+    w.player.y = w.player.prevY = 5;
+    const input = new InputState();
+    input.push({ type: 'move', dir: 'up' });
+    input.setHeld('up', 'pointer');
+    const clock = new FixedStepClock({ hz: 60, maxFrameTime: 0.25 });
+
+    for (let frame = 0; frame < fps * 0.6; frame++) {
+      const ticks = clock.advance(1 / fps);
+      for (let n = 0; n < ticks; n++) w.step(clock.dt, { commands: input.drain(), held: input.heldDir });
+    }
+
+    expect([w.player.x, w.player.y, w.player.moves]).toEqual([1, 3, 2]);
   });
 
   it('drains queued commands once and bounds the queue', () => {

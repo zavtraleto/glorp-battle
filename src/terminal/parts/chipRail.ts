@@ -159,9 +159,6 @@ export class ChipRail {
   private maxH = Infinity;
   /** Cartridge height, world units: the tilt pivots on its bottom edge. */
   private cartH = 1;
-  /** One instanced bar per slot: the light that ties a queued chip to the PCB. */
-  private bars: THREE.InstancedMesh | null = null;
-  private readonly barColor = new THREE.Color();
   private readonly coolingBody = new THREE.Color();
   /** Called when a cartridge leaves its slot (a shot): the slot index. */
   onEject: ((slot: number) => void) | null = null;
@@ -177,27 +174,12 @@ export class ChipRail {
   private readonly unitPlane = new THREE.PlaneGeometry(1, 1);
   private readonly frameMat = new THREE.MeshLambertMaterial({ color: COLOR.frame, flatShading: true });
   private readonly contactTex = contactTexture();
-  /**
-   * The bar of light under a queued cartridge: a hard-edged rectangle, no
-   * gradient and no texture — it has to read as the same pixel object the
-   * cartridges are (decision 2026-09-20).
-   */
-  private readonly barMat = new THREE.MeshBasicMaterial({
-    transparent: true,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-  });
-  private readonly m = new THREE.Matrix4();
-  /** Bar brightness per slot, reused every frame (no allocation in the loop). */
-  private readonly barLevel = new Array<number>(RAIL_SLOTS).fill(0);
 
   constructor() {
     this.group.add(this.statics);
   }
 
   build(layout: TerminalLayout, texel: number): void {
-    this.bars?.dispose();
-    this.bars = null;
     this.statics.clear();
     for (const c of this.contacts) c.mat.dispose();
     this.contacts = [];
@@ -212,7 +194,6 @@ export class ChipRail {
     const h = Math.min(CHIP_TEXELS_H * texel, this.maxH);
     this.cartH = h;
     this.slotPos = [];
-    const bars = new THREE.InstancedMesh(this.unitPlane, this.barMat, RAIL_SLOTS);
     for (let i = 0; i < RAIL_SLOTS; i++) {
       const x = rail.cx - rail.w * RAIL_LEFT + pitch * (i + 0.5);
       this.slotPos.push(new THREE.Vector3(x, rail.cy, REST_Z));
@@ -226,17 +207,7 @@ export class ChipRail {
       pad.scale.set(w * 0.8, 10 * texel, 1);
       this.statics.add(pad);
       this.contacts.push({ mat, left: 0 });
-      // The bar lies on the panel just below the slot, where the PCB traces start.
-      // As wide as the cartridge and no wider: two queued chips side by side
-      // must read as two bars, not one slab.
-      this.m.makeScale(w, 6 * texel, 1);
-      this.m.setPosition(x, rail.cy - h / 2 - 3 * texel, 0.09);
-      bars.setMatrixAt(i, this.m);
-      bars.setColorAt(i, this.barColor.setScalar(0));
     }
-    bars.instanceMatrix.needsUpdate = true;
-    this.statics.add(bars);
-    this.bars = bars;
     for (const c of this.carts) c.cart.shape(texel, this.maxH);
   }
 
@@ -320,7 +291,6 @@ export class ChipRail {
     this.hasActive = false;
     const pulse = 0.75 + 0.25 * Math.sin(this.time * Math.PI * 2 * GLOW_PULSE_HZ);
     const slide = 1 - Math.exp(-dt * SLIDE_RATE);
-    this.barLevel.fill(0);
 
     for (const c of [...this.carts]) {
       c.t += dt;
@@ -398,7 +368,6 @@ export class ChipRail {
             c.cart.setTint(COLOR.tintPlain, COLOR.faceSelected);
             const level = committed ? GLOW_COMMITTED : GLOW_SELECTED_BASE + GLOW_SELECTED_PULSE * pulse;
             c.cart.setGlow(COLOR.glowSelected, level);
-            this.barLevel[c.slot] = committed ? 1 : 0.72 + 0.28 * pulse;
           } else if (candidate) {
             c.cart.setTint(COLOR.tintPlain, COLOR.facePossible);
             c.cart.setGlow(COLOR.glowPossible, GLOW_POSSIBLE);
@@ -434,8 +403,6 @@ export class ChipRail {
       }
     }
 
-    this.updateBars(this.barLevel);
-
     const flash = t.CONTACT_FLASH_TIME;
     this.contacts.forEach((ct, i) => {
       ct.left = Math.max(0, ct.left - dt);
@@ -444,17 +411,6 @@ export class ChipRail {
       const k = Math.max(base, flash > 0 ? ct.left / flash : 0);
       ct.mat.color.copy(COLOR.contactOff).lerp(COLOR.contactOn, k);
     });
-  }
-
-  /** The bars under the queued cartridges, one instance per slot. */
-  private updateBars(level: readonly number[]): void {
-    const bars = this.bars;
-    if (!bars) return;
-    for (let i = 0; i < RAIL_SLOTS; i++) {
-      this.barColor.copy(COLOR.glowSelected).multiplyScalar(level[i] ?? 0);
-      bars.setColorAt(i, this.barColor);
-    }
-    if (bars.instanceColor) bars.instanceColor.needsUpdate = true;
   }
 
   private startLeave(c: Cart): void {

@@ -89,7 +89,7 @@ export class Pcb {
       const o = i - mid;
       // Drop out of the slot, run along a staggered bus, then down into the
       // ring: outer slots take the lower buses so traces never cross.
-      const busY = s.bottom - 0.06 - Math.abs(o) * 0.045;
+      const busY = s.bottom - 0.06 - Math.abs(o) * 0.12;
       const entryX = ringX + o * 0.12;
       const entryY = ringY + Math.sqrt(Math.max(0, ringR * ringR - (entryX - ringX) ** 2));
       const chamfer = Math.min(0.05, Math.abs(s.x - entryX) / 2);

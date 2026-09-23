@@ -7,8 +7,8 @@ import { attachPointers } from './pointerEvents';
 // Pointer Events → terminal controls (spec §10.2). Each pointer captures the
 // zone it went down in until it is lifted; a trackball gesture continues
 // outside its zone. The pause key fires on press, in the same frame. The
-// trackball fires on release: only then is it known whether the gesture was a
-// step or a tap, and a started shot cannot be taken back.
+// trackball moves as soon as a swipe crosses the threshold; on release it is
+// known whether a gesture without movement was a tap.
 
 export interface RouterHandlers {
   /** A control was pressed (visual reaction, same frame). */
@@ -16,6 +16,8 @@ export interface RouterHandlers {
   release(zone: ZoneId): void;
   /** One trackball step. */
   move(dir: Dir): void;
+  /** Direction held by an active trackball gesture; null on release/cancel. */
+  hold?(dir: Dir | null): void;
   /** Trackball drag delta in CSS px, for the rolling visual. */
   roll(dx: number, dy: number): void;
   /**
@@ -37,10 +39,13 @@ interface Capture {
   lastX: number;
   lastY: number;
   swipe: SwipeRecognizer | null;
+  heldDir: Dir | null;
+  heldOrder: number;
 }
 
 export class PointerRouter {
   private readonly captures = new Map<number, Capture>();
+  private heldOrder = 0;
 
   constructor(
     /** Screen point → organ. The terminal projects tilted zones through the camera. */
@@ -56,10 +61,10 @@ export class PointerRouter {
     if (!zone || this.handlers.accepts?.(zone) === false) return false;
     let swipe: SwipeRecognizer | null = null;
     if (zone === 'trackball') {
-      swipe = new SwipeRecognizer(tuning.input.SWIPE_MIN_PX, tuning.terminal.TAP_MAX_TIME, tuning.input.SWIPE_REARM_TIME);
+      swipe = new SwipeRecognizer(tuning.input.SWIPE_MIN_PX, tuning.terminal.TAP_MAX_TIME);
       swipe.begin(x, y, this.now());
     }
-    this.captures.set(id, { zone, downX: x, downY: y, lastX: x, lastY: y, swipe });
+    this.captures.set(id, { zone, downX: x, downY: y, lastX: x, lastY: y, swipe, heldDir: null, heldOrder: 0 });
     this.handlers.press(zone);
     if (zone !== 'trackball') this.handlers.action(zone, x, y);
     return true;
@@ -72,9 +77,13 @@ export class PointerRouter {
     c.lastX = x;
     c.lastY = y;
     c.swipe.threshold = tuning.input.SWIPE_MIN_PX;
-    c.swipe.rearmTime = tuning.input.SWIPE_REARM_TIME;
     const dir = c.swipe.move(x, y, this.now());
-    if (dir) this.handlers.move(dir);
+    if (dir) {
+      c.heldDir = dir;
+      c.heldOrder = ++this.heldOrder;
+      this.handlers.move(dir);
+      this.syncHold();
+    }
   }
 
   /** Reports the zone under a free (not captured) mouse pointer. */
@@ -91,7 +100,16 @@ export class PointerRouter {
     if (!c) return;
     this.captures.delete(id);
     if (c.swipe?.end(this.now()) === 'tap') this.handlers.action(c.zone, c.downX, c.downY);
+    if (c.heldDir) this.syncHold();
     this.handlers.release(c.zone);
+  }
+
+  private syncHold(): void {
+    let latest: Capture | null = null;
+    for (const capture of this.captures.values()) {
+      if (capture.heldDir && (!latest || capture.heldOrder > latest.heldOrder)) latest = capture;
+    }
+    this.handlers.hold?.(latest?.heldDir ?? null);
   }
 
   cancelAll(): void {

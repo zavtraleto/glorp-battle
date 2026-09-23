@@ -74,12 +74,13 @@ const EDGE_KILL = 0xffe2a0;
 const EDGE_HURT = 0xff2020;
 const EDGE = { hit: 0.18, kill: 0.6, hurt: 0.5 };
 /** HP segments sit this many CRT pixels above an enemy's head. */
-const HP_BAR_GAP = 3;
+const HP_BAR_GAP = 1;
 /** User-tuned size of the framed 14-segment module under the CRT. */
 const CHIP_DISPLAY_SCALE = 0.6;
 
 export interface TerminalHandlers {
   move(dir: Dir): void;
+  holdMove(dir: Dir | null): void;
   /** A session menu item was chosen. */
   menu(action: MenuAction): void;
   /** Tap on a rail slot: build or unbuild the Attack Queue (GDD §7.2). */
@@ -172,6 +173,7 @@ export class Terminal {
         if (this.mode() === 'MENU') this.moveMenu(d);
         else opts.handlers.move(d);
       },
+      hold: (d) => opts.handlers.holdMove(d),
       roll: (dx, dy) => this.trackball.roll(dx, dy),
       action: (z, x, y) => this.act(z, true, x, y),
       accepts: (z) => acceptsPress(this.mode(), z),

@@ -171,8 +171,6 @@ export const DEFAULT_TUNING = {
   },
   input: {
     SWIPE_MIN_PX: 24,
-    /** Finger held on the trackball: resting this long lets the next stroke step again. */
-    SWIPE_REARM_TIME: 0.07,
     /** Delay before the first repeated step while a movement key is held. */
     HOLD_REPEAT_DELAY: 0.35,
     /** Interval between further repeated steps while the direction stays held. */
@@ -185,9 +183,12 @@ export const DEFAULT_TUNING = {
     /** Camera pitch below the horizon and vertical field of view, degrees. */
     VIEW_PITCH: 30,
     VIEW_FOV: 25,
-    /** Share of the CRT frame the field may fill. */
-    /** Leaves the top band of the picture to the HUD (spec §8). */
-    VIEW_FILL: 1,
+    /** Half-extent of the field in NDC; values above 1 deliberately crop it. */
+    VIEW_FILL: 1.08,
+    /** Field centre in NDC, applied to the field, sprites and effects together. */
+    VIEW_OFFSET_X: 0,
+    /** Extra vertical shift after reserving the HUD band; negative moves down. */
+    VIEW_OFFSET_Y: -0.06,
     /** Gap between cell outlines (share of a cell). */
     CELL_GAP: 0.08,
     /** Brightness of idle grid lines. */

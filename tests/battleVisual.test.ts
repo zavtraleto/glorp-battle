@@ -15,6 +15,7 @@ import {
   type Role,
 } from '../src/render/palette';
 import { fitView } from '../src/render/viewCamera';
+import { SceneRenderer } from '../src/render/scene';
 import { spritePixels } from '../src/render/pixelSprite';
 import { toneForCrt } from '../src/render/spriteArt';
 import { PLAYER_ROWS, playerBitmap } from '../src/render/playerSprite';
@@ -81,6 +82,7 @@ function inputs(over: Partial<CellInputs> = {}): CellInputs {
     rows: 6,
     tick: 100,
     player: { x: 1, y: 4 },
+    enemies: [],
     danger: [],
     attacks: new Map(),
     spawns: new Map(),
@@ -101,6 +103,13 @@ describe('cellStates', () => {
     const s = cellStates(inputs());
     expect(s[k(1, 4)]!.state).toBe('ACTIVE');
     expect(s.filter((c) => c.state === 'NORMAL')).toHaveLength(17);
+  });
+
+  it('marks living enemy cells ACTIVE like the player cell', () => {
+    const s = cellStates(inputs({ enemies: [{ x: 0, y: 1 }, { x: 2, y: 2 }] }));
+    expect(s[k(0, 1)]!.state).toBe('ACTIVE');
+    expect(s[k(2, 2)]!.state).toBe('ACTIVE');
+    expect(s[k(1, 4)]!.state).toBe('ACTIVE');
   });
 
   it('shows telegraphs, attacks and their afterglow', () => {
@@ -224,6 +233,50 @@ describe('fitView', () => {
       maxY = Math.max(maxY, p.y);
     }
     expect((minY + maxY) / 2).toBeCloseTo(0, 2);
+  });
+
+  it('allows an oversized field to be moved freely in the frame', () => {
+    const cam = new THREE.PerspectiveCamera();
+    fitView(cam, corners, {
+      pitchDeg: 28,
+      fovDeg: 40,
+      aspect: 0.727,
+      fill: 1.08,
+      offsetX: 0.14,
+      offsetY: -0.18,
+    });
+    const projected = corners.map((corner) => corner.clone().project(cam));
+    const minX = Math.min(...projected.map((point) => point.x));
+    const maxX = Math.max(...projected.map((point) => point.x));
+    const minY = Math.min(...projected.map((point) => point.y));
+    const maxY = Math.max(...projected.map((point) => point.y));
+    expect((minX + maxX) / 2).toBeCloseTo(0.14, 2);
+    expect((minY + maxY) / 2).toBeCloseTo(-0.18, 2);
+    expect(Math.max(maxX - minX, maxY - minY) / 2).toBeGreaterThan(1);
+  });
+});
+
+describe('actor screen anchors', () => {
+  it('anchors HP to the visible top of a padded hologram sprite', () => {
+    const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+    camera.position.set(0, 0, 10);
+    camera.lookAt(0, 0, 0);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
+
+    const sprite = new THREE.Sprite();
+    sprite.scale.set(1, 2, 1);
+    sprite.center.set(0.5, 0.14);
+    const fake = {
+      camera,
+      playerView: { sprite: new THREE.Sprite() },
+      enemyViews: new Map([[2, { sprite }]]),
+      projectToTarget: SceneRenderer.prototype.projectToTarget,
+    } as unknown as SceneRenderer;
+
+    const actual = SceneRenderer.prototype.actorTopTargetPos.call(fake, 2)!;
+    const visibleTop = new THREE.Vector3(0, 1.44, 0).project(camera);
+    expect(actual.y).toBeCloseTo((1 - visibleTop.y) / 2, 6);
   });
 });
 
