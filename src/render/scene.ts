@@ -53,7 +53,7 @@ export class SceneRenderer {
 
   private fitCamera(w: number, h: number): void {
     const v = tuning.battleVisual;
-    const key = `${v.VIEW_PITCH}|${v.VIEW_FOV}|${v.VIEW_FILL}|${v.HUD_BAND}|${w}|${h}`;
+    const key = `${v.VIEW_PITCH}|${v.VIEW_FOV}|${v.VIEW_FILL}|${v.VIEW_OFFSET_X}|${v.VIEW_OFFSET_Y}|${v.HUD_BAND}|${w}|${h}`;
     if (key === this.lastCameraKey) return;
     this.lastCameraKey = key;
     fitView(this.camera, this.corners, {
@@ -61,8 +61,9 @@ export class SceneRenderer {
       fovDeg: v.VIEW_FOV,
       aspect: w / h,
       fill: v.VIEW_FILL,
+      offsetX: v.VIEW_OFFSET_X,
       // The status band owns the top of the picture, so the field sits below it.
-      offsetY: -v.HUD_BAND,
+      offsetY: -v.HUD_BAND + v.VIEW_OFFSET_Y,
     });
   }
 
@@ -86,7 +87,10 @@ export class SceneRenderer {
     const sprite = id === 1 ? this.playerView.sprite : this.enemyViews.get(id)?.sprite;
     if (!sprite || !sprite.visible) return null;
     const v = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 1);
-    v.multiplyScalar(sprite.scale.y).add(sprite.position);
+    // The sprite centre sits at the feet. Hologram quads also carry equal
+    // transparent padding above and below the visible art; centre.y records
+    // that padding share, so exclude both sides from the visible height.
+    v.multiplyScalar(sprite.scale.y * (1 - sprite.center.y * 2)).add(sprite.position);
     return this.projectToTarget(v);
   }
 
@@ -102,11 +106,9 @@ export class SceneRenderer {
     this.fx.handleEvent(e, world);
     const tick = world.tick;
     if (e.type === 'chipEffect') this.field.markAttack(e.cells, tick, 'accent');
-    else if (e.type === 'explosion') this.field.markAttack(e.cells, tick, 'red');
     else if (e.type === 'enemyShot') this.field.markAttack([{ x: e.x, y: e.toY }], tick, 'red');
     else if (e.type === 'bombLanded') this.field.markAttack(e.cells, tick, 'accent');
     else if (e.type === 'enemySlash') this.field.markAttack(e.cells, tick, 'red');
-    else if (e.type === 'guarded') this.field.markAttack([{ x: e.x, y: e.y }], tick, 'accent');
     else if (e.type === 'objectBroken') this.field.markAttack([{ x: e.x, y: e.y }], tick, 'red');
   }
 
@@ -156,7 +158,7 @@ export class SceneRenderer {
     this.fx.update(world, alpha);
     // Moving enemy attacks light up the cell they are in.
     for (const a of world.attacks) {
-      if (a.kind === 'shockwave' || a.kind === 'heatshot') {
+      if (a.kind === 'shockwave') {
         const m = a as unknown as { x: number; y: number };
         this.field.markAttack([{ x: m.x, y: m.y }], world.tick, 'red');
       }

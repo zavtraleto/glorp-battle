@@ -14,7 +14,7 @@ import type { SimEvent } from '../events';
 // IDLE/MOVE → INTENTION → LOCK → COUNTER → STRIKE → RECOVERY; DEAD is terminal.
 // Hits never interrupt an enemy's action; they only flash.
 
-export type EnemyKind = 'mettik' | 'canodron' | 'spiker' | 'hopzap' | 'bladdy' | 'rattik' | 'helmhead' | 'finnik' | 'monolith';
+export type EnemyKind = 'mettik' | 'canodron' | 'hopzap' | 'bladdy';
 export type EnemyState =
   | 'IDLE'
   | 'MOVE'
@@ -65,10 +65,6 @@ export abstract class Enemy {
   stateEndTick = Infinity;
   lastHitTick = -Infinity;
   deathTick = -Infinity;
-  /** Hits do no damage while true (Helmhead's helmet, Finnik's dash). */
-  guarded = false;
-  /** Not on any panel right now (Finnik's dash): not in Occupancy, not drawn. */
-  offField = false;
   /** Ticks left of paralysis: no actions, state timers stand still. */
   paralyzeTicks = 0;
 
@@ -192,7 +188,7 @@ export abstract class Enemy {
     return !this.alive && tick - this.deathTick >= secondsToTicks(tuning.fx.DELETE_ANIM_TIME);
   }
 
-  /** Instant relocation (Spiker warp): no slide animation. */
+  /** Instant relocation (Hopzap): no slide animation. */
   protected warpTo(ctx: EnemyContext, nx: number, ny: number): boolean {
     if (!ctx.field.canStand('enemy', nx, ny) || !ctx.occupancy.isFree(nx, ny)) return false;
     const fromX = this.x;

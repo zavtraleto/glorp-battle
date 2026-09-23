@@ -9,6 +9,8 @@ export interface ViewParams {
   aspect: number;
   /** Share of the frame (NDC half-extent) the field may occupy. */
   fill: number;
+  /** Where the field is centred horizontally, in NDC. */
+  offsetX?: number;
   /** Where the field is centred vertically, NDC: negative drops it below the HUD band. */
   offsetY: number;
 }
@@ -68,7 +70,7 @@ export function fitView(camera: THREE.PerspectiveCamera, points: readonly THREE.
       dist = (lo + hi) / 2;
       place(dist);
       const b = bounds();
-      const extent = Math.max(-b.minX, b.maxX, -b.minY, b.maxY);
+      const extent = Math.max((b.maxX - b.minX) / 2, (b.maxY - b.minY) / 2);
       // Points behind the camera project wildly: treat as "too close".
       if (!Number.isFinite(extent) || extent > p.fill || behind(camera, points)) lo = dist;
       else hi = dist;
@@ -77,7 +79,7 @@ export function fitView(camera: THREE.PerspectiveCamera, points: readonly THREE.
     place(dist);
     const b = bounds();
     // Shift sideways/up so the field sits in the middle of the frame.
-    offset.x += ((b.minX + b.maxX) / 2) * dist * tanV * p.aspect;
+    offset.x += ((b.minX + b.maxX) / 2 - (p.offsetX ?? 0)) * dist * tanV * p.aspect;
     offset.y += ((b.minY + b.maxY) / 2 - p.offsetY) * dist * tanV;
   }
   place(dist);

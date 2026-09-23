@@ -28,7 +28,6 @@ export interface DebugActions {
   setCellState(x: number, y: number, state: DebugCellState | 'NONE'): void;
   clearCellStates(): void;
   demoCellStates(): void;
-  rerollEnemies(): void;
   /** Run (GDD §10–11). */
   runDepth(depth: number): void;
   /** Changes the real panels (roguelite spec §3). */
@@ -41,7 +40,9 @@ const RANGES: Record<string, [number, number, number]> = {
   TIME_SCALE: [0.05, 4, 0.05],
   VIEW_PITCH: [5, 80, 1],
   VIEW_FOV: [15, 90, 1],
-  VIEW_FILL: [0.5, 1, 0.01],
+  VIEW_FILL: [0.5, 1.5, 0.01],
+  VIEW_OFFSET_X: [-1, 1, 0.01],
+  VIEW_OFFSET_Y: [-1, 1, 0.01],
   CELL_GAP: [0, 0.4, 0.01],
   GRID_DIM: [0, 1, 0.01],
   ACTIVE_FILL: [0, 1, 0.01],
@@ -214,7 +215,6 @@ export class DebugPanel {
     ff.add({ run: () => a.simPanel(cell.x, cell.y, sim.action) }, 'run').name('apply to sim');
     ff.add({ clear: () => a.clearCellStates() }, 'clear').name('clear cell states');
     ff.add({ demo: () => a.demoCellStates() }, 'demo').name('demo all states');
-    ff.add({ reroll: () => a.rerollEnemies() }, 'reroll').name('new enemy looks');
     ff.close();
   }
 

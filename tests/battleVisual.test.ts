@@ -1,7 +1,5 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import { ENEMY_SEEDS } from '../src/data/enemies';
-import { CREATURE_SIZE, generateCreature } from '../src/render/creatureGen';
 import { battleSignal, NO_SIGNAL } from '../src/render/battleSignals';
 import { cellKey, cellStates, type CellInputs } from '../src/render/cellStates';
 import {
@@ -15,7 +13,9 @@ import {
   type Role,
 } from '../src/render/palette';
 import { fitView } from '../src/render/viewCamera';
+import { SceneRenderer } from '../src/render/scene';
 import { spritePixels } from '../src/render/pixelSprite';
+import * as spriteArtModule from '../src/render/spriteArt';
 import { toneForCrt } from '../src/render/spriteArt';
 import { PLAYER_ROWS, playerBitmap } from '../src/render/playerSprite';
 import type { Panel } from '../src/sim/field';
@@ -81,6 +81,7 @@ function inputs(over: Partial<CellInputs> = {}): CellInputs {
     rows: 6,
     tick: 100,
     player: { x: 1, y: 4 },
+    enemies: [],
     danger: [],
     attacks: new Map(),
     spawns: new Map(),
@@ -101,6 +102,13 @@ describe('cellStates', () => {
     const s = cellStates(inputs());
     expect(s[k(1, 4)]!.state).toBe('ACTIVE');
     expect(s.filter((c) => c.state === 'NORMAL')).toHaveLength(17);
+  });
+
+  it('marks living enemy cells ACTIVE like the player cell', () => {
+    const s = cellStates(inputs({ enemies: [{ x: 0, y: 1 }, { x: 2, y: 2 }] }));
+    expect(s[k(0, 1)]!.state).toBe('ACTIVE');
+    expect(s[k(2, 2)]!.state).toBe('ACTIVE');
+    expect(s[k(1, 4)]!.state).toBe('ACTIVE');
   });
 
   it('shows telegraphs, attacks and their afterglow', () => {
@@ -225,37 +233,66 @@ describe('fitView', () => {
     }
     expect((minY + maxY) / 2).toBeCloseTo(0, 2);
   });
+
+  it('allows an oversized field to be moved freely in the frame', () => {
+    const cam = new THREE.PerspectiveCamera();
+    fitView(cam, corners, {
+      pitchDeg: 28,
+      fovDeg: 40,
+      aspect: 0.727,
+      fill: 1.08,
+      offsetX: 0.14,
+      offsetY: -0.18,
+    });
+    const projected = corners.map((corner) => corner.clone().project(cam));
+    const minX = Math.min(...projected.map((point) => point.x));
+    const maxX = Math.max(...projected.map((point) => point.x));
+    const minY = Math.min(...projected.map((point) => point.y));
+    const maxY = Math.max(...projected.map((point) => point.y));
+    expect((minX + maxX) / 2).toBeCloseTo(0.14, 2);
+    expect((minY + maxY) / 2).toBeCloseTo(-0.18, 2);
+    expect(Math.max(maxX - minX, maxY - minY) / 2).toBeGreaterThan(1);
+  });
 });
 
-describe('generateCreature', () => {
-  it('draws creatures at 48 texels', () => {
-    const c = generateCreature(1);
-    expect([c.w, c.h]).toEqual([CREATURE_SIZE, CREATURE_SIZE]);
-    expect(CREATURE_SIZE).toBe(48);
+describe('actor screen anchors', () => {
+  it('anchors HP to the visible top of a padded hologram sprite', () => {
+    const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+    camera.position.set(0, 0, 10);
+    camera.lookAt(0, 0, 0);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
+
+    const sprite = new THREE.Sprite();
+    sprite.scale.set(1, 2, 1);
+    sprite.center.set(0.5, 0.14);
+    const fake = {
+      camera,
+      playerView: { sprite: new THREE.Sprite() },
+      enemyViews: new Map([[2, { sprite }]]),
+      projectToTarget: SceneRenderer.prototype.projectToTarget,
+    } as unknown as SceneRenderer;
+
+    const actual = SceneRenderer.prototype.actorTopTargetPos.call(fake, 2)!;
+    const visibleTop = new THREE.Vector3(0, 1.44, 0).project(camera);
+    expect(actual.y).toBeCloseTo((1 - visibleTop.y) / 2, 6);
   });
+});
 
-  it('is deterministic per seed and varies between seeds', () => {
-    const a = generateCreature(7);
-    expect(generateCreature(7).px).toEqual(a.px);
-    const distinct = new Set(Array.from({ length: 20 }, (_, i) => Array.from(generateCreature(i + 1).px).join('')));
-    expect(distinct.size).toBe(20);
-  });
+describe('enemy sprite art', () => {
+  it('uses shipped art for current enemies and one placeholder for unknown kinds', () => {
+    const enemyArtId = (spriteArtModule as unknown as {
+      enemyArtId?: (kind: string) => string;
+    }).enemyArtId;
 
-  it('keeps a large silhouette, few inner elements and 3 pixel values', () => {
-    for (let seed = 1; seed <= 300; seed++) {
-      const c = generateCreature(seed);
-      expect(c.w * c.h).toBe(c.px.length);
-      const filled = c.px.reduce((n, p) => n + (p ? 1 : 0), 0);
-      expect(filled / c.px.length, `seed ${seed}`).toBeGreaterThanOrEqual(0.25);
-      expect(c.elements.length, `seed ${seed}`).toBeGreaterThanOrEqual(1);
-      expect(c.elements.length, `seed ${seed}`).toBeLessThanOrEqual(3);
-      for (const p of c.px) expect(p).toBeLessThanOrEqual(2);
-    }
-  }, 15_000);
-
-  it('gives every enemy kind its own look', () => {
-    const looks = Object.values(ENEMY_SEEDS).map((s) => Array.from(generateCreature(s).px).join(''));
-    expect(new Set(looks).size).toBe(looks.length);
+    expect(enemyArtId).toBeTypeOf('function');
+    expect(['mettik', 'canodron', 'hopzap', 'bladdy'].map((kind) => enemyArtId?.(kind))).toEqual([
+      'mettik',
+      'canodron',
+      'hopzap',
+      'bladdy',
+    ]);
+    expect(enemyArtId?.('future-enemy')).toBe('placeholder');
   });
 });
 

@@ -17,8 +17,6 @@ export interface WaveOptions {
   damage: number;
   stepTicks: number;
   owner: 'enemy' | 'player';
-  /** Cracks every panel it passes (Monolith's quake). */
-  crack?: boolean;
 }
 
 function mettikWave(): WaveOptions {
@@ -43,7 +41,6 @@ export class Shockwave implements LaneMover {
   readonly damage: number;
   readonly dir: 1 | -1;
   private readonly owner: 'enemy' | 'player';
-  private readonly crack: boolean;
 
   constructor(
     readonly id: number,
@@ -57,7 +54,6 @@ export class Shockwave implements LaneMover {
     this.damage = opts.damage;
     this.dir = opts.dir;
     this.owner = opts.owner;
-    this.crack = opts.crack ?? false;
     this.kind = opts.owner === 'player' ? 'playerWave' : 'shockwave';
   }
 
@@ -75,7 +71,6 @@ export class Shockwave implements LaneMover {
         this.done = true;
         return;
       }
-      if (this.crack) ctx.field.crack(this.x, this.y);
     }
     if (ctx.hitObjectAt(this, this.x, this.y, this.damage)) {
       this.done = true;

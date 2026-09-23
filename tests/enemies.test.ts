@@ -4,11 +4,9 @@ import type { Command, Dir } from '../src/core/input/commands';
 import { BATTLES } from '../src/data/battles';
 import { ENEMY_LEVELS } from '../src/data/enemies';
 import { CHIPS } from '../src/data/chips';
-import { HeatShot } from '../src/sim/attacks/heatShot';
 import { Shockwave } from '../src/sim/attacks/shockwave';
 import { Mettik } from '../src/sim/enemies/mettik';
 import { Canodron } from '../src/sim/enemies/canodron';
-import { Spiker } from '../src/sim/enemies/spiker';
 import { useTicks } from '../src/sim/chips/executor';
 import type { SimEvent } from '../src/sim/events';
 import { World } from '../src/sim/world';
@@ -147,83 +145,6 @@ describe('Canodron', () => {
   });
 });
 
-describe('Spiker', () => {
-  const spiker = (w: World) => w.enemies.find((e) => e.kind === 'spiker') as Spiker;
-
-  function aiOnlySpiker(seed: number): World {
-    // Battle 4 (n4) is a lone Spiker, so nothing else needs freezing.
-    return world(4, seed);
-  }
-
-  it('warps between random free enemy panels, then lines up and throws', () => {
-    const w = aiOnlySpiker(3);
-    const s = spiker(w);
-    const warps: string[] = [];
-    let intentionAt = -1;
-    for (let i = 0; i < T(6) && intentionAt < 0; i++) {
-      step(w);
-      if (s.state === 'INTENTION') intentionAt = w.tick;
-    }
-    for (const e of events) if (e.type === 'enemyWarped') warps.push(`${e.x},${e.y}`);
-    expect(intentionAt).toBeGreaterThan(0);
-    // MIN..MAX random warps plus possibly one warp into the lane.
-    expect(warps.length).toBeGreaterThanOrEqual(tuning.spiker.SPK_WARPS_MIN);
-    expect(warps.length).toBeLessThanOrEqual(tuning.spiker.SPK_WARPS_MAX + 1);
-    for (const e of events) {
-      if (e.type !== 'enemyWarped') continue;
-      expect(e.y).toBeLessThanOrEqual(2);
-    }
-    expect(s.x).toBe(w.player.x);
-    expect(w.dangerCells().every((c) => c.x === s.x && c.y > s.y)).toBe(true);
-  });
-
-  it('the HeatShot hits for SPK_DMG and bursts', () => {
-    const w = aiOnlySpiker(3);
-    const s = spiker(w);
-    while (s.state !== 'STRIKE') step(w);
-    expect(w.attacks.some((a) => a instanceof HeatShot)).toBe(true);
-    run(w, T(2));
-    expect(w.player.hp).toBe(100 - tuning.spiker.SPK_DMG);
-    const burst = events.find((e) => e.type === 'explosion');
-    expect(burst && burst.type === 'explosion' && burst.cells).toEqual([
-      { x: w.player.x, y: 4 },
-      { x: w.player.x, y: 5 },
-    ]);
-  });
-
-  it('the HeatShot can be dodged', () => {
-    const w = aiOnlySpiker(3);
-    const s = spiker(w);
-    while (s.state !== 'INTENTION') step(w);
-    move(w, s.x === 0 ? 'right' : 'left');
-    run(w, T(2));
-    expect(w.player.hp).toBe(100);
-  });
-
-  it('is deterministic for a seed', () => {
-    const trace = (seed: number) => {
-      const w = aiOnlySpiker(seed);
-      run(w, T(8));
-      return events.splice(0).filter((e) => e.type === 'enemyWarped').map((e) => JSON.stringify(e));
-    };
-    const a = trace(11);
-    const b = trace(11);
-    const c = trace(12);
-    expect(a).toEqual(b);
-    expect(a).not.toEqual(c);
-  });
-
-  it('never shares a panel with the Canodron over a long fight', () => {
-    const w = world(4, 5);
-    w.cheats.god = true;
-    for (let i = 0; i < T(30); i++) {
-      step(w);
-      const [a, b] = w.enemies;
-      if (a && b) expect(`${a.x},${a.y}`).not.toBe(`${b.x},${b.y}`);
-    }
-  });
-});
-
 describe('battles 2–4 are winnable', () => {
   it.each([2, 3, 4])('battle %i with god mode and HiCannon chips', (battle) => {
     const w = world(battle, 9);
@@ -245,7 +166,7 @@ describe('battles 2–4 are winnable', () => {
   });
 });
 
-describe('levels, guard and player paralysis', () => {
+describe('levels and player paralysis', () => {
   /** Battle 1 with its Mettik replaced by one of the given level. */
   function withMettik(level: 1 | 2 | 3): { w: World; m: Mettik } {
     const w = world(1);
@@ -275,14 +196,6 @@ describe('levels, guard and player paralysis', () => {
     expect(a.damage).toBe(tuning.mettik.MET_DMG);
     expect(b.at).toBeGreaterThan(0);
     expect(b.at).toBeLessThan(a.at);
-  });
-
-  it('a guarded enemy takes no damage', () => {
-    const { w, m } = withMettik(1);
-    m.guarded = true;
-    w.damageEnemy(m, 30);
-    expect(m.hp).toBe(tuning.mettik.MET_HP);
-    expect(w.drainEvents().some((e) => e.type === 'guarded')).toBe(true);
   });
 
   it('paralysis stops the player without i-frames', () => {

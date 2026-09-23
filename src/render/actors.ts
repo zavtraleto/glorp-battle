@@ -1,13 +1,12 @@
 import * as THREE from 'three';
 import { secondsToTicks, tuning } from '../config/tuning';
-import { ENEMY_SEEDS } from '../data/enemies';
 import type { Enemy } from '../sim/enemies/enemyBase';
 import type { Player } from '../sim/player';
-import { CREATURE_SIZE, generateCreature, type CreatureBitmap } from './creatureGen';
 import { CELL_DEPTH, CELL_WIDTH, cellToWorld } from './field';
 import { PixelSprite } from './pixelSprite';
 import { playerBitmap } from './playerSprite';
-import { ENEMY_ART, spriteArt } from './spriteArt';
+import { enemyArtId, spriteArt } from './spriteArt';
+import { enemyPlaceholderBitmap } from './spriteBitmap';
 
 // Player and enemy sprites (BATTLE_VISUAL.md §5): pixel bitmaps standing in
 // their cells, animated with whole-pixel lifts, flashes and a dissolve.
@@ -106,22 +105,6 @@ export class PlayerView {
   }
 }
 
-const bitmaps = new Map<number, CreatureBitmap>();
-
-/** Bosses are drawn from a bigger bitmap and a wider sprite (roguelite spec §5.3). */
-const BOSS_SIZE = 72;
-const BOSS_WIDTH = 1.4;
-
-function creature(seed: number, size: number): CreatureBitmap {
-  const key = seed * 1000 + size;
-  let b = bitmaps.get(key);
-  if (!b) {
-    b = generateCreature(seed, size);
-    bitmaps.set(key, b);
-  }
-  return b;
-}
-
 export class EnemyView {
   private readonly pixels: PixelSprite;
   readonly sprite: THREE.Sprite;
@@ -129,16 +112,16 @@ export class EnemyView {
   private readonly widthShare: number;
 
   constructor(enemy: Enemy) {
-    const boss = enemy.kind === 'monolith';
-    const artId = ENEMY_ART[enemy.kind];
+    const spriteId = enemyArtId(enemy.kind);
+    const artId = spriteId === 'placeholder' ? null : spriteId;
     const art = artId ? spriteArt(artId) : null;
     this.pixels = new PixelSprite(
-      art ?? creature(ENEMY_SEEDS[enemy.kind], boss ? BOSS_SIZE : CREATURE_SIZE),
+      art ?? enemyPlaceholderBitmap(),
       'red',
       artId && art ? { character: artId, instanceId: enemy.id } : undefined,
     );
     this.sprite = this.pixels.sprite;
-    this.widthShare = (art ? ENEMY_ART_WIDTH : tuning.battleVisual.SPRITE_CELL_FRAC) * (boss ? BOSS_WIDTH : 1);
+    this.widthShare = art ? ENEMY_ART_WIDTH : tuning.battleVisual.SPRITE_CELL_FRAC;
     this.phase = enemy.id * 1.7;
   }
 
@@ -178,16 +161,10 @@ export class EnemyView {
     this.pixels.setFlash(flash);
     const sinceHit = (tick - enemy.lastHitTick + alpha) / tuning.sim.SIM_HZ;
     this.pixels.setRipple(sinceHit >= 0 && sinceHit < HIT_RIPPLE_TIME ? 1 - sinceHit / HIT_RIPPLE_TIME : 0, time);
-    if (enemy.offField) this.sprite.visible = false;
     this.pixels.setDissolve(enemy.alive ? 0 : deathProgress(enemy.deathTick, tick, alpha, dt));
   }
 
   dispose(): void {
     this.pixels.dispose();
   }
-}
-
-/** Forgets generated bitmaps (after the debug panel changes enemy seeds). */
-export function clearCreatureCache(): void {
-  bitmaps.clear();
 }

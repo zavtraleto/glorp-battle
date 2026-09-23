@@ -2,8 +2,7 @@ import { ROWS } from '../grid';
 import type { AttackContext } from './attack';
 import type { LaneMover } from './shockwave';
 
-// Enemy projectile flying down a lane (roguelite spec §5.2): Hopzap's ZapRing
-// and Finnik's dash. It flies over holes, stops on objects and on the first hit.
+// Hopzap's ZapRing flies down a lane, over holes, stopping on objects and the first hit.
 
 export interface LaneShotOptions {
   damage: number;

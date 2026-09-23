@@ -187,10 +187,12 @@ function makeRouter() {
   const layout = computeLayout(390, 844);
   const log: string[] = [];
   const rolls: [number, number][] = [];
+  const holds: (Dir | null)[] = [];
   const handlers: RouterHandlers = {
     press: (z) => log.push(`press:${z}`),
     release: (z) => log.push(`release:${z}`),
     move: (d: Dir) => log.push(`move:${d}`),
+    hold: (d: Dir | null) => holds.push(d),
     roll: (dx, dy) => rolls.push([dx, dy]),
     action: (z) => log.push(`action:${z}`),
   };
@@ -204,7 +206,7 @@ function makeRouter() {
     const r = layout.zones[z];
     return [r.x + r.w / 2, r.y + r.h / 2] as const;
   };
-  return { layout, log, rolls, router, center, clock };
+  return { layout, log, rolls, holds, router, center, clock };
 }
 
 describe('PointerRouter', () => {
@@ -259,6 +261,30 @@ describe('PointerRouter', () => {
     expect(log.filter((l) => l.startsWith('move:'))).toEqual(['move:right']);
     expect(log).not.toContain('action:trackball');
     expect(rolls.reduce((s, r) => s + r[0], 0)).toBe(90);
+  });
+
+  it('holds the swiped direction until the trackball pointer is released', () => {
+    const { router, log, holds, center } = makeRouter();
+    const [x, y] = center('trackball');
+    router.down(1, x, y);
+    router.move(1, x + 30, y);
+    router.move(1, x + 90, y);
+    router.up(1);
+
+    expect(log.filter((line) => line.startsWith('move:'))).toEqual(['move:right']);
+    expect(holds).toEqual(['right', null]);
+  });
+
+  it('changes the held direction when the same gesture turns', () => {
+    const { router, log, holds, center } = makeRouter();
+    const [x, y] = center('trackball');
+    router.down(1, x, y);
+    router.move(1, x + 30, y);
+    router.move(1, x + 30, y - 30);
+    router.up(1);
+
+    expect(log.filter((line) => line.startsWith('move:'))).toEqual(['move:right', 'move:up']);
+    expect(holds).toEqual(['right', 'up', null]);
   });
 
   it('keeps the gesture alive outside the zone', () => {

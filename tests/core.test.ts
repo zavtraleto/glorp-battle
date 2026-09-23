@@ -6,7 +6,6 @@ import { Rng, deriveSeed } from '../src/core/rng';
 import { parseDebugParams } from '../src/debug/params';
 import { inTerritory, sideOfRow } from '../src/sim/grid';
 import { CHIPS } from '../src/data/chips';
-import { ENEMY_SEEDS } from '../src/data/enemies';
 import { chipDesc, chipName, enemyName, t } from '../src/i18n';
 
 describe('FixedStepClock', () => {
@@ -151,6 +150,6 @@ describe('i18n', () => {
       expect(chipName(id)).not.toContain('chip.');
       expect(chipDesc(id)).not.toContain('chip.');
     }
-    for (const kind of Object.keys(ENEMY_SEEDS)) expect(enemyName(kind)).not.toContain('enemy.');
+    for (const kind of ['mettik', 'canodron', 'hopzap', 'bladdy']) expect(enemyName(kind)).not.toContain('enemy.');
   });
 });

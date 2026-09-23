@@ -2,17 +2,13 @@ import type { Dir } from './commands';
 
 // Swipe recognition for the trackball (spec §10.2). Pure logic, no DOM: fed with
 // pointer positions and a clock in seconds.
-// One stroke = one step [decision 2026-09-19]: the direction fires as soon as
-// the finger travels `threshold` px (dominant axis). Keeping on in the same
-// direction does nothing more; the finger stays down and makes a new stroke
-// either after resting for `rearmTime` or by heading off in another direction
-// for `threshold` px. A gesture that ends without a step, inside `tapMaxTime`,
-// is a tap — the trackball is also the chip trigger.
+// A direction fires as soon as the finger travels `threshold` px (dominant
+// axis). The pointer router then holds that direction for simulation-driven
+// repeat. A turn can emit a new direction; continuing the same way emits no
+// extra discrete steps. A gesture that ends without a step, inside
+// `tapMaxTime`, is a tap — the trackball is also the chip trigger.
 
 export type GestureEnd = 'step' | 'tap' | 'none';
-
-/** Movement below this many px between samples counts as the finger resting. */
-const REST_PX = 2;
 
 function dominant(dx: number, dy: number): Dir {
   return Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up';
@@ -21,10 +17,6 @@ function dominant(dx: number, dy: number): Dir {
 export class SwipeRecognizer {
   private anchorX = 0;
   private anchorY = 0;
-  private lastX = 0;
-  private lastY = 0;
-  /** When the finger last really moved. */
-  private movedAt = 0;
   private startedAt = 0;
   private active = false;
   /** Direction of the current stroke's step, or null while the gesture is armed. */
@@ -34,7 +26,6 @@ export class SwipeRecognizer {
   constructor(
     public threshold: number,
     public tapMaxTime: number,
-    public rearmTime = Infinity,
   ) {}
 
   get isActive(): boolean {
@@ -45,23 +36,14 @@ export class SwipeRecognizer {
     this.active = true;
     this.stroke = null;
     this.steps = 0;
-    this.anchorX = this.lastX = x;
-    this.anchorY = this.lastY = y;
-    this.startedAt = this.movedAt = now;
+    this.anchorX = x;
+    this.anchorY = y;
+    this.startedAt = now;
   }
 
   /** Returns a direction when a stroke crosses the threshold, otherwise null. */
-  move(x: number, y: number, now = this.movedAt): Dir | null {
+  move(x: number, y: number, _now = this.startedAt): Dir | null {
     if (!this.active) return null;
-    // A rest re-arms the gesture from where the finger stopped.
-    if (this.stroke && now - this.movedAt >= this.rearmTime) {
-      this.stroke = null;
-      this.anchorX = this.lastX;
-      this.anchorY = this.lastY;
-    }
-    if (Math.hypot(x - this.lastX, y - this.lastY) >= REST_PX) this.movedAt = now;
-    this.lastX = x;
-    this.lastY = y;
 
     const dx = x - this.anchorX;
     const dy = y - this.anchorY;
