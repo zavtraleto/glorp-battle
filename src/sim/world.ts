@@ -102,8 +102,8 @@ export class World implements EnemyContext, AttackContext {
   bombs: PlayerBomb[] = [];
   /** Chip currently being used by the player (GDD §6.5). */
   activeChip: ActiveChip | null = null;
-  /** Earliest tick when the next chip in the frozen chain may start. */
-  private nextChipTick: number | null = null;
+  /** One early Attack press retained until this simulation tick. */
+  private bufferedChipUntil: number | null = null;
   chipsUsed = 0;
   /** Events emitted since the last drain. */
   events: SimEvent[] = [];
@@ -180,6 +180,7 @@ export class World implements EnemyContext, AttackContext {
   pause(): boolean {
     if (this.state !== 'ACTION') return false;
     this.player.bufferedDir = null;
+    this.bufferedChipUntil = null;
     this.pausedFrom = this.state;
     this.setState('PAUSED');
     return true;
@@ -298,8 +299,8 @@ export class World implements EnemyContext, AttackContext {
       }
       this.activeChip = null;
     }
+    this.bufferedChipUntil = null;
     if (this.chips.locked) {
-      this.nextChipTick = null;
       const cancelledSlots = this.chips.cancelAttack();
       for (const slot of cancelledSlots) {
         const chip = this.chips.hand[slot];
@@ -365,7 +366,7 @@ export class World implements EnemyContext, AttackContext {
       this.events.push({ type: 'guarded', id: enemy.id, x: enemy.x, y: enemy.y });
       return;
     }
-    const countered = canCounter && amount > 0 && enemy.counterWindowOpen(this.tick);
+    const countered = canCounter && amount > 0 && enemy.counterWindowOpen();
     const died = enemy.applyDamage(amount, this.tick);
     this.events.push({ type: 'damaged', targetId: enemy.id, amount, x: enemy.x, y: enemy.y, hpLeft: enemy.hp });
     if (!died && countered && enemy.counter(this.tick)) {
@@ -438,14 +439,36 @@ export class World implements EnemyContext, AttackContext {
     }
   }
 
-  /** Starts the next queued chip if the player is free (no buffering, GDD §6.5). */
-  private tryUseChip(): void {
+  /** Starts one charged chip if the player is free; every chip needs a press. */
+  private tryUseChip(): boolean {
     const p = this.player;
-    if (p.flinched || p.actionTicks > 0 || p.paralyzeTicks > 0 || this.activeChip || !this.chips.startAttack()) return;
+    if (p.flinched || p.actionTicks > 0 || p.paralyzeTicks > 0 || this.activeChip || !this.chips.startAttack(this.tick)) return false;
     const slot = this.chips.attack[0];
     const chip = this.chips.takeNext(this.tick);
-    if (!chip) return;
+    if (!chip) return false;
     this.beginChip(chip, slot ?? -1);
+    return true;
+  }
+
+  private requestUseChip(): void {
+    if (this.tryUseChip()) {
+      this.bufferedChipUntil = null;
+      return;
+    }
+    const p = this.player;
+    const actionLocked = this.activeChip !== null || p.actionTicks > 0;
+    if (!actionLocked || p.flinched || p.paralyzeTicks > 0 || this.chips.attack.length === 0) return;
+    this.bufferedChipUntil = this.tick + secondsToTicks(tuning.input.ACTION_BUFFER_TIME);
+  }
+
+  private useBufferedChip(): void {
+    const until = this.bufferedChipUntil;
+    if (until === null) return;
+    if (this.tick > until) {
+      this.bufferedChipUntil = null;
+      return;
+    }
+    if (this.tryUseChip()) this.bufferedChipUntil = null;
   }
 
   private beginChip(chip: ChipInstance, slot: number): void {
@@ -482,16 +505,8 @@ export class World implements EnemyContext, AttackContext {
       this.activeChip = null;
       if (this.chips.attack.length === 0) {
         this.chips.finishAttack();
-        return;
       }
-      this.nextChipTick = this.tick + secondsToTicks(tuning.chips.CHIP_CHAIN_DELAY);
     }
-    if (!this.chips.locked || this.nextChipTick === null || this.tick < this.nextChipTick) return;
-    const slot = this.chips.attack[0];
-    const chip = this.chips.takeNext(this.tick);
-    this.nextChipTick = null;
-    if (chip) this.beginChip(chip, slot ?? -1);
-    else this.chips.finishAttack();
   }
 
   private resolveChip(a: ActiveChip): void {
@@ -526,7 +541,7 @@ export class World implements EnemyContext, AttackContext {
           new Shockwave(this.attackIdCounter++, px, py - 1, this.tick, {
             dir: -1,
             damage: power,
-            stepTicks: secondsToTicks(tuning.chips.PLAYER_WAVE_STEP),
+            stepTicks: secondsToTicks(tuning.projectile.FAST_CELL_TRAVEL_TIME),
             owner: 'player',
           }),
         );
@@ -697,11 +712,12 @@ export class World implements EnemyContext, AttackContext {
     const moves: Dir[] = [];
     for (const c of input.commands) {
       if (c.type === 'move') moves.push(c.dir);
-      else if (c.type === 'useChip') this.tryUseChip();
+      else if (c.type === 'useChip') this.requestUseChip();
       else if (c.type === 'selectChip') this.selectChip(c.slot);
     }
     p.updateMovement(this.tick, moves, input.held);
     this.updateActiveChip();
+    this.useBufferedChip();
     this.updateBombs();
 
     for (const e of this.enemies) {
@@ -713,7 +729,7 @@ export class World implements EnemyContext, AttackContext {
       if (e.paralyzeTicks > 0) {
         // Paralysis freezes the enemy's state timer too.
         e.paralyzeTicks--;
-        e.stateTick++;
+        e.freezePhase();
         continue;
       }
       if (this.cheats.aiEnabled) e.update(this);
@@ -729,7 +745,7 @@ export class World implements EnemyContext, AttackContext {
       this.attacks = [];
       this.bombs = [];
       this.activeChip = null;
-      this.nextChipTick = null;
+      this.bufferedChipUntil = null;
       this.chips.cancelAttack();
       this.setState('BATTLE_WON');
     }

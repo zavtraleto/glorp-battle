@@ -18,11 +18,13 @@ export class Finnik extends Enemy {
   }
 
   override dangerCells(): Cell[] {
-    return this.state === 'TELEGRAPH' ? laneCellsBelow(this.x, this.y + 1) : [];
+    return this.state === 'LOCK' || this.state === 'COUNTER' ? laneCellsBelow(this.x, this.y + 1) : [];
   }
 
   override forceAttack(tick: number): void {
-    if (this.alive && (this.state === 'IDLE' || this.state === 'MOVE')) this.setState('TELEGRAPH', tick);
+    if (this.alive && (this.state === 'IDLE' || this.state === 'MOVE')) {
+      this.setTimedState('INTENTION', tick, this.ticks(tuning.finnik.INTENTION_TIME));
+    }
   }
 
   /** Back on the field: own panel if free, else the nearest free one. */
@@ -56,18 +58,24 @@ export class Finnik extends Enemy {
     switch (this.state) {
       case 'IDLE':
       case 'MOVE': {
-        if (this.elapsed(t) < this.ticks(f.FIN_MOVE_INTERVAL)) return;
+        if (this.elapsed(t) < this.ticks(f.MOVE_TIME)) return;
         this.stateTick = t;
         const px = ctx.player.x;
         if (this.x === px) {
-          this.setState('TELEGRAPH', t);
+          this.setTimedState('INTENTION', t, this.ticks(f.INTENTION_TIME));
           return;
         }
         this.state = this.tryStep(ctx, this.x + Math.sign(px - this.x), this.y) ? 'MOVE' : 'IDLE';
         return;
       }
-      case 'TELEGRAPH':
-        if (this.elapsed(t) < this.ticks(f.FIN_TELEGRAPH)) return;
+      case 'INTENTION':
+        if (this.phaseDone(t)) this.setTimedState('LOCK', t, this.ticks(f.LOCK_TIME));
+        return;
+      case 'LOCK':
+        if (this.phaseDone(t)) this.setTimedState('COUNTER', t, this.ticks(f.COUNTER_TIME));
+        return;
+      case 'COUNTER':
+        if (!this.phaseDone(t)) return;
         ctx.occupancy.remove(this.id, this.x, this.y);
         ctx.field.onLeave(this.x, this.y, t);
         this.offField = true;
@@ -77,17 +85,18 @@ export class Finnik extends Enemy {
           stepTicks: this.ticks(f.FIN_DASH_STEP),
         });
         ctx.spawnAttack(this.dash);
-        this.setState('ATTACK', t);
+        this.setTimedState('STRIKE', t, this.ticks(f.STRIKE_TIME));
         return;
-      case 'ATTACK':
-        if (this.dash && !this.dash.done) return;
+      case 'STRIKE':
+        if (!this.phaseDone(t) || (this.dash && !this.dash.done)) return;
         if (!this.land(ctx)) return;
         this.dash = null;
-        this.setState('RECOVERY', t);
+        this.setTimedState('RECOVERY', t, this.ticks(f.RECOVERY_TIME));
         return;
       case 'RECOVERY':
-        if (this.elapsed(t) >= this.ticks(f.FIN_RECOVERY)) this.setState('IDLE', t);
+        if (this.phaseDone(t)) this.setState('IDLE', t);
         return;
+      case 'STAGGER':
       case 'DEAD':
         return;
     }

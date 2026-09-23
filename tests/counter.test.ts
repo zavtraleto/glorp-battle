@@ -1,45 +1,115 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_TUNING, mergeTuning, secondsToTicks, tuning } from '../src/config/tuning';
-import type { EnemyKind } from '../src/sim/enemies/enemyBase';
-import { createEnemy } from '../src/sim/enemies/factory';
+import { CHIPS } from '../src/data/chips';
+import { PlayerBomb } from '../src/sim/attacks/bomb';
+import type { EnemyKind, EnemyState } from '../src/sim/enemies/enemyBase';
+import { World } from '../src/sim/world';
 
+const DT = 1 / 60;
 const T = (seconds: number) => secondsToTicks(seconds);
+const ATTACK_PHASES: readonly EnemyState[] = ['INTENTION', 'LOCK', 'COUNTER', 'STRIKE', 'RECOVERY'];
+const ATTACK_ENEMIES: readonly EnemyKind[] = [
+  'mettik', 'canodron', 'spiker', 'hopzap', 'bladdy', 'rattik', 'helmhead', 'finnik', 'monolith',
+];
 
 beforeEach(() => mergeTuning(tuning, JSON.parse(JSON.stringify(DEFAULT_TUNING))));
 
-describe('Play enemy Counter windows', () => {
-  const cases: readonly [EnemyKind, number, number][] = [
-    ['mettik', tuning.mettik.MET_TELEGRAPH, tuning.counter.COUNTER_WINDOW_METTIK],
-    ['canodron', tuning.canodron.CANO_FIRE_DELAY, tuning.counter.COUNTER_WINDOW_CANODRON],
-    ['bladdy', tuning.bladdy.BLD_TELEGRAPH, tuning.counter.COUNTER_WINDOW_BLADDY],
-    ['hopzap', tuning.hopzap.HOP_TELEGRAPH, tuning.counter.COUNTER_WINDOW_BUNNY],
-  ];
+function world(kind: EnemyKind, aiEnabled = true): World {
+  return new World({
+    seed: 17,
+    battleIndex: 1,
+    skipIntro: true,
+    cheats: { god: true, aiEnabled },
+    encounter: { id: `timing-${kind}`, tier: 'normal', minDepth: 1, maxDepth: 1, enemies: [{ kind, x: 1, y: 1 }] },
+  });
+}
 
-  it.each(cases)('%s opens only for the final configured part of its telegraph', (kind, telegraph, window) => {
-    const enemy = createEnemy({ kind, x: 1, y: 1 }, 100, 0);
-    enemy.forceAttack(0);
-    const opensAt = T(telegraph) - T(window);
+function step(w: World): void {
+  w.step(DT, { commands: [], held: null });
+  w.drainEvents();
+}
 
-    expect(enemy.counterWindowOpen(Math.max(0, opensAt - 1))).toBe(false);
-    expect(enemy.counterWindowOpen(opensAt)).toBe(true);
-    expect(enemy.counterWindowOpen(T(telegraph))).toBe(false);
+describe('enemy attack timing grammar', () => {
+  it.each(ATTACK_ENEMIES)('%s follows intention, lock, counter, strike, recovery', (kind) => {
+    const w = world(kind);
+    const enemy = w.enemies[0]!;
+    enemy.forceAttack(w.tick);
+    const seen: EnemyState[] = [];
+    for (let i = 0; i < T(12) && seen.length < ATTACK_PHASES.length; i++) {
+      if (ATTACK_PHASES.includes(enemy.state) && seen.at(-1) !== enemy.state) seen.push(enemy.state);
+      step(w);
+    }
+    expect(seen).toEqual(ATTACK_PHASES);
   });
 
-  it('Counter cancels Canodron lock and enters stagger', () => {
-    const enemy = createEnemy({ kind: 'canodron', x: 1, y: 1 }, 101, 0);
-    enemy.forceAttack(0);
-    const opensAt = T(tuning.canodron.CANO_FIRE_DELAY) - T(tuning.counter.COUNTER_WINDOW_CANODRON);
+  it('counters only a damaging hit during the explicit COUNTER state', () => {
+    const w = world('mettik', false);
+    const enemy = w.enemies[0]!;
+    enemy.setTimedState('LOCK', w.tick, T(0.2));
+    w.damageEnemy(enemy, 1, true);
+    expect(enemy.state).toBe('LOCK');
 
-    expect(enemy.counter(opensAt)).toBe(true);
+    enemy.setTimedState('COUNTER', w.tick, T(0.18));
+    w.damageEnemy(enemy, 1, true);
     expect(enemy.state).toBe('STAGGER');
-    expect(enemy.cursorCell()).toBeNull();
+    expect(w.drainEvents().some((event) => event.type === 'enemyCountered')).toBe(true);
   });
 
-  it('allows a Counter window to be disabled from the debug tuning', () => {
-    tuning.counter.COUNTER_WINDOW_METTIK = 0;
-    const enemy = createEnemy({ kind: 'mettik', x: 1, y: 1 }, 102, 0);
-    enemy.forceAttack(0);
+  it('evaluates a delayed player hit at impact rather than throw time', () => {
+    const w = world('mettik', false);
+    const enemy = w.enemies[0]!;
+    enemy.hp = 200;
+    const bomb = new PlayerBomb(700, 1, 4, 1, 1, 50, w.tick, CHIPS.minibomb);
+    w.bombs.push(bomb);
+    enemy.setTimedState('LOCK', w.tick, bomb.landTick);
 
-    expect(enemy.counterWindowOpen(T(tuning.mettik.MET_TELEGRAPH) - 1)).toBe(false);
+    for (let i = 0; i < bomb.landTick - 1; i++) step(w);
+    enemy.setTimedState('COUNTER', w.tick, T(tuning.mettik.COUNTER_TIME));
+    step(w);
+
+    expect(enemy.state).toBe('STAGGER');
+  });
+
+  it('freezes a timed enemy phase while paralyzed', () => {
+    const w = world('mettik');
+    const enemy = w.enemies[0]!;
+    enemy.setTimedState('COUNTER', w.tick, T(0.18));
+    const remaining = enemy.phaseRemaining(w.tick);
+    enemy.paralyze(3);
+    step(w);
+    step(w);
+    step(w);
+    expect(enemy.state).toBe('COUNTER');
+    expect(enemy.phaseRemaining(w.tick)).toBe(remaining);
+  });
+
+  it('freezes Canodron cursor travel while paralyzed', () => {
+    const w = world('canodron');
+    const enemy = w.enemies[0]!;
+    enemy.forceAttack(w.tick);
+    expect(enemy.cursorCell()).toEqual({ x: 1, y: 2, locked: false });
+
+    enemy.paralyze(30);
+    for (let i = 0; i < 30; i++) step(w);
+    for (let i = 0; i < T(tuning.canodron.CANO_CURSOR_STEP) - 1; i++) step(w);
+    expect(enemy.cursorCell()).toEqual({ x: 1, y: 2, locked: false });
+    step(w);
+    expect(enemy.cursorCell()).toEqual({ x: 1, y: 3, locked: false });
+  });
+
+  it('reports the level-scaled movement duration used by simulation', () => {
+    const w = new World({
+      seed: 17,
+      battleIndex: 1,
+      skipIntro: true,
+      encounter: {
+        id: 'scaled-move',
+        tier: 'normal',
+        minDepth: 1,
+        maxDepth: 1,
+        enemies: [{ kind: 'mettik', x: 1, y: 1, level: 3 }],
+      },
+    });
+    expect(w.enemies[0]!.moveDurationSeconds()).toBe(T(tuning.mettik.MOVE_TIME / 1.2) / tuning.sim.SIM_HZ);
   });
 });

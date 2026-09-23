@@ -6,13 +6,26 @@ describe('debug tuning order', () => {
     const { DEFAULT_TUNING } = await import('../src/config/tuning');
     const values = DEFAULT_TUNING as unknown as Record<string, Record<string, number>>;
 
-    expect(values.chips?.CHIP_CHAIN_DELAY).toBeGreaterThan(0);
+    expect(values.chips?.HAND_REFILL_COOLDOWN).toBe(4);
+    expect(values.player?.CELL_MOVE_TIME).toBe(0.2);
+    expect(values.input?.ACTION_BUFFER_TIME).toBe(0.1);
+    expect(values.projectile?.CELL_TRAVEL_TIME).toBe(0.2);
+    expect(values.chips).toMatchObject({
+      CHIP_STARTUP_CANNON: 0.1,
+      CHIP_RECOVERY_CANNON: 0.15,
+    });
+    for (const group of ['mettik', 'canodron', 'spiker', 'hopzap', 'bladdy', 'rattik', 'helmhead', 'finnik', 'monolith']) {
+      expect(values[group]).toMatchObject({
+        INTENTION_TIME: expect.any(Number),
+        LOCK_TIME: expect.any(Number),
+        COUNTER_TIME: expect.any(Number),
+        STRIKE_TIME: expect.any(Number),
+        RECOVERY_TIME: expect.any(Number),
+        MOVE_TIME: expect.any(Number),
+      });
+    }
     expect(values.counter).toMatchObject({
       COUNTER_STAGGER_TIME: expect.any(Number),
-      COUNTER_WINDOW_METTIK: expect.any(Number),
-      COUNTER_WINDOW_CANODRON: expect.any(Number),
-      COUNTER_WINDOW_BLADDY: expect.any(Number),
-      COUNTER_WINDOW_BUNNY: expect.any(Number),
     });
   });
 

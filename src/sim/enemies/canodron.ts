@@ -14,28 +14,18 @@ export class Canodron extends Enemy {
   private cursorY = -1;
   private cursorStepTick = 0;
   private locked = false;
-  private lockTick = 0;
 
   constructor(id: number, x: number, y: number, spawnTick: number, level: EnemyLevel = 1) {
     super(id, x, y, tuning.canodron.CANO_HP, spawnTick, level);
   }
 
   override cursorCell(): { x: number; y: number; locked: boolean } | null {
-    if (this.state !== 'TELEGRAPH' || this.cursorY < 0) return null;
+    if (!['INTENTION', 'LOCK', 'COUNTER'].includes(this.state) || this.cursorY < 0) return null;
     return { x: this.x, y: this.cursorY, locked: this.locked };
   }
 
   override dangerCells(): Cell[] {
-    return this.state === 'TELEGRAPH' && this.locked ? laneCellsBelow(this.x, this.y + 1) : [];
-  }
-
-  override counterWindowOpen(tick: number): boolean {
-    if (this.state !== 'TELEGRAPH' || !this.locked) return false;
-    const total = this.ticks(tuning.canodron.CANO_FIRE_DELAY);
-    const window = this.counterTicks(tuning.counter.COUNTER_WINDOW_CANODRON);
-    if (window === 0) return false;
-    const elapsed = tick - this.lockTick;
-    return elapsed >= Math.max(0, total - window) && elapsed < total;
+    return this.state === 'LOCK' || this.state === 'COUNTER' ? laneCellsBelow(this.x, this.y + 1) : [];
   }
 
   protected override onCountered(): void {
@@ -46,11 +36,15 @@ export class Canodron extends Enemy {
   override forceAttack(tick: number): void {
     if (!this.alive || this.state !== 'IDLE') return;
     this.startCursor(tick);
-    this.lock(tick);
+  }
+
+  override freezePhase(ticks = 1): void {
+    super.freezePhase(ticks);
+    this.cursorStepTick += ticks;
   }
 
   private startCursor(tick: number): void {
-    this.setState('TELEGRAPH', tick);
+    this.setState('INTENTION', tick);
     this.cursorY = this.y + 1;
     this.cursorStepTick = tick;
     this.locked = false;
@@ -58,7 +52,7 @@ export class Canodron extends Enemy {
 
   private lock(tick: number): void {
     this.locked = true;
-    this.lockTick = tick;
+    this.setTimedState('LOCK', tick, this.ticks(tuning.canodron.LOCK_TIME));
   }
 
   private resetCursor(tick: number): void {
@@ -76,17 +70,15 @@ export class Canodron extends Enemy {
       case 'MOVE':
         if (p.x === this.x) this.startCursor(t);
         return;
-      case 'TELEGRAPH': {
-        if (this.locked) {
-          if (t - this.lockTick < this.ticks(c.CANO_FIRE_DELAY)) return;
-          ctx.shootLane(this.x, this.y + 1, this.dmg(c.CANO_DMG));
-          this.cursorY = -1;
-          this.locked = false;
-          this.setState('ATTACK', t);
-          return;
-        }
+      case 'INTENTION': {
         if (p.x !== this.x) {
           this.resetCursor(t);
+          return;
+        }
+        // Once aim reaches the current target row, hold it there until the
+        // early signal has remained visible for the full Intention duration.
+        if (p.y === this.cursorY) {
+          if (this.elapsed(t) >= this.ticks(c.INTENTION_TIME)) this.lock(t);
           return;
         }
         if (t - this.cursorStepTick >= this.ticks(c.CANO_CURSOR_STEP)) {
@@ -97,14 +89,24 @@ export class Canodron extends Enemy {
             return;
           }
         }
-        if (p.y === this.cursorY) this.lock(t);
+        if (p.y === this.cursorY && this.elapsed(t) >= this.ticks(c.INTENTION_TIME)) this.lock(t);
         return;
       }
-      case 'ATTACK':
-        if (this.elapsed(t) >= this.ticks(c.CANO_ATTACK_TIME)) this.setState('RECOVERY', t);
+      case 'LOCK':
+        if (this.phaseDone(t)) this.setTimedState('COUNTER', t, this.ticks(c.COUNTER_TIME));
+        return;
+      case 'COUNTER':
+        if (!this.phaseDone(t)) return;
+        ctx.shootLane(this.x, this.y + 1, this.dmg(c.CANO_DMG));
+        this.cursorY = -1;
+        this.locked = false;
+        this.setTimedState('STRIKE', t, this.ticks(c.STRIKE_TIME));
+        return;
+      case 'STRIKE':
+        if (this.phaseDone(t)) this.setTimedState('RECOVERY', t, this.ticks(c.RECOVERY_TIME));
         return;
       case 'RECOVERY':
-        if (this.elapsed(t) >= this.ticks(c.CANO_COOLDOWN)) this.setState('IDLE', t);
+        if (this.phaseDone(t)) this.setState('IDLE', t);
         return;
       case 'STAGGER':
       case 'DEAD':

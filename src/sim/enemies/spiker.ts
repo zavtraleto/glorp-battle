@@ -19,13 +19,13 @@ export class Spiker extends Enemy {
   }
 
   override dangerCells(): Cell[] {
-    return this.state === 'TELEGRAPH' ? laneCellsBelow(this.x, this.y + 1) : [];
+    return this.state === 'LOCK' || this.state === 'COUNTER' ? laneCellsBelow(this.x, this.y + 1) : [];
   }
 
   override forceAttack(tick: number): void {
-    if (!this.alive || this.state !== 'MOVE') return;
+    if (!this.alive || (this.state !== 'MOVE' && this.state !== 'IDLE')) return;
     this.warpsLeft = 0;
-    this.stateTick = tick - this.ticks(tuning.spiker.SPK_WARP_INTERVAL);
+    this.setTimedState('INTENTION', tick, this.ticks(tuning.spiker.INTENTION_TIME));
   }
 
   private freeCells(ctx: EnemyContext, lane: number | null): Cell[] {
@@ -54,7 +54,7 @@ export class Spiker extends Enemy {
       case 'IDLE':
       case 'MOVE': {
         if (this.warpsLeft < 0) this.warpsLeft = ctx.rngAi.int(s.SPK_WARPS_MIN, Math.max(s.SPK_WARPS_MIN, s.SPK_WARPS_MAX));
-        if (this.elapsed(t) < this.ticks(s.SPK_WARP_INTERVAL)) return;
+        if (this.elapsed(t) < this.ticks(s.MOVE_TIME)) return;
         this.stateTick = t;
         if (this.warpsLeft > 0) {
           this.warpRandom(ctx, null);
@@ -64,28 +64,42 @@ export class Spiker extends Enemy {
         // Line up with the player: already there, or warp into the lane.
         const lane = ctx.player.x;
         if (this.x === lane || this.warpRandom(ctx, lane)) {
-          this.setState('TELEGRAPH', t);
+          this.setTimedState('INTENTION', t, this.ticks(s.INTENTION_TIME));
         } else {
           // Lane is full: keep warping and try again next interval.
           this.warpRandom(ctx, null);
         }
         return;
       }
-      case 'TELEGRAPH':
-        if (this.elapsed(t) < this.ticks(s.SPK_TELEGRAPH)) return;
-        ctx.spawnAttack(
-          new HeatShot(ctx.nextAttackId(), this.x, this.y + 1, t, this.dmg(s.SPK_DMG), this.ticks(s.SPK_SHOT_STEP)),
-        );
-        this.setState('ATTACK', t);
+      case 'INTENTION':
+        if (this.phaseDone(t)) this.setTimedState('LOCK', t, this.ticks(s.LOCK_TIME));
         return;
-      case 'ATTACK':
-        if (this.elapsed(t) >= this.ticks(s.SPK_ATTACK_TIME)) this.setState('RECOVERY', t);
+      case 'LOCK':
+        if (this.phaseDone(t)) this.setTimedState('COUNTER', t, this.ticks(s.COUNTER_TIME));
+        return;
+      case 'COUNTER':
+        if (!this.phaseDone(t)) return;
+        ctx.spawnAttack(
+          new HeatShot(
+            ctx.nextAttackId(),
+            this.x,
+            this.y + 1,
+            t,
+            this.dmg(s.SPK_DMG),
+            this.ticks(tuning.projectile.FAST_CELL_TRAVEL_TIME),
+          ),
+        );
+        this.setTimedState('STRIKE', t, this.ticks(s.STRIKE_TIME));
+        return;
+      case 'STRIKE':
+        if (this.phaseDone(t)) this.setTimedState('RECOVERY', t, this.ticks(s.RECOVERY_TIME));
         return;
       case 'RECOVERY':
-        if (this.elapsed(t) < this.ticks(s.SPK_RECOVERY)) return;
+        if (!this.phaseDone(t)) return;
         this.warpsLeft = -1;
         this.setState('MOVE', t);
         return;
+      case 'STAGGER':
       case 'DEAD':
         return;
     }

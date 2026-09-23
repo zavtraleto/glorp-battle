@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_TUNING, mergeTuning, secondsToTicks, tuning } from '../src/config/tuning';
 import { CHIPS } from '../src/data/chips';
+import { chipTiming } from '../src/sim/chips/executor';
 import type { SimEvent } from '../src/sim/events';
 import { Shockwave } from '../src/sim/attacks/shockwave';
 import { Field } from '../src/sim/field';
@@ -115,7 +116,7 @@ describe('panels in battle', () => {
     const w = battle();
     w.field.setOwner(1, 2, 'player', w.tick);
     stepMove(w, 'up');
-    wait(w, T(tuning.player.MOVE_COOLDOWN));
+    wait(w, T(tuning.player.CELL_MOVE_TIME));
     stepMove(w, 'up');
     expect(w.player.y).toBe(2);
   });
@@ -126,7 +127,7 @@ describe('panels in battle', () => {
     w.occupancy.move(met.id, met.x, met.y, 2, 1);
     met.x = 2;
     w.field.breakPanel(1, 1, w.tick, false);
-    wait(w, T(tuning.mettik.MET_MOVE_INTERVAL) + 1);
+    wait(w, T(tuning.mettik.MOVE_TIME) + 1);
     expect(met.x).toBe(2);
   });
 
@@ -143,7 +144,7 @@ describe('panels in battle', () => {
     w.field.breakPanel(1, 3, w.tick, false);
     const wave = new Shockwave(w.nextAttackId(), 1, 2, w.tick);
     w.spawnAttack(wave);
-    wait(w, T(tuning.mettik.MET_WAVE_STEP) * 4);
+    wait(w, T(tuning.projectile.CELL_TRAVEL_TIME) * 4);
     expect(wave.done).toBe(true);
     expect(w.player.hitsTaken).toBe(0);
   });
@@ -165,7 +166,7 @@ describe('field objects', () => {
     const rock = w.placeObject('rock', 1, 3, 'player')!;
     const met = w.enemies[0]!; // (1,1), behind the rock in the player's lane
     useNow(w, 'cannon');
-    wait(w, T(tuning.chips.CHIP_HIT_FRAME) + 1);
+    wait(w, chipTiming(CHIPS.cannon).startupTicks + 1);
     expect(met.hp).toBe(tuning.mettik.MET_HP);
     expect(rock.hp).toBe(tuning.field.ROCK_HP - CHIPS.cannon.power!);
     expect(w.shootLane(1, 2, 500)).toBe(3);
@@ -180,7 +181,7 @@ describe('field objects', () => {
     const rock = w.placeObject('rock', 1, 3, 'player')!;
     const wave = new Shockwave(w.nextAttackId(), 1, 2, w.tick);
     w.spawnAttack(wave);
-    wait(w, T(tuning.mettik.MET_WAVE_STEP) * 4);
+    wait(w, T(tuning.projectile.CELL_TRAVEL_TIME) * 4);
     expect(wave.done).toBe(true);
     expect(rock.hp).toBe(tuning.field.ROCK_HP - tuning.mettik.MET_DMG);
     expect(w.player.hitsTaken).toBe(0);

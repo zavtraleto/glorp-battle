@@ -2,9 +2,15 @@ import { secondsToTicks, tuning } from '../../config/tuning';
 import { CHIPS, type ChipDef } from '../../data/chips';
 import type { ChipInstance } from './chipSystem';
 
-// Chip use timing (GDD §6.5): selection/Attack stay locked for the chip's use
-// time, while movement remains live. Effects resolve at CHIP_HIT_FRAME
-// (support chips resolve instantly).
+// Chip use timing (GDD §6.5): startup → impact/active → recovery. The chip
+// action stays locked for the whole sequence while movement remains live.
+
+export interface ChipTiming {
+  startupTicks: number;
+  activeTicks: number;
+  recoveryTicks: number;
+  totalTicks: number;
+}
 
 export interface ActiveChip {
   readonly chip: ChipInstance;
@@ -22,9 +28,23 @@ export interface ActiveChip {
   resolved: boolean;
 }
 
+export function chipTiming(def: ChipDef): ChipTiming {
+  const values = tuning.chips as unknown as Record<string, number>;
+  const startupTicks = Math.max(0, secondsToTicks(values[`CHIP_STARTUP_${def.useTime}`] ?? 0));
+  const recoveryTicks = Math.max(0, secondsToTicks(values[`CHIP_RECOVERY_${def.useTime}`] ?? 0));
+  const hits = Math.max(1, Math.floor(def.hits ?? 1));
+  const hitStep = def.hitStep ? Math.max(1, secondsToTicks(tuning.chips[def.hitStep])) : 0;
+  const activeTicks = Math.max(0, hits - 1) * hitStep;
+  return {
+    startupTicks,
+    activeTicks,
+    recoveryTicks,
+    totalTicks: Math.max(1, startupTicks + activeTicks + recoveryTicks),
+  };
+}
+
 export function useTicks(def: ChipDef): number {
-  const key = `CHIP_USE_TIME_${def.useTime}` as const;
-  return Math.max(1, secondsToTicks(tuning.chips[key]));
+  return chipTiming(def).totalTicks;
 }
 
 export function startChip(
@@ -35,12 +55,10 @@ export function startChip(
   originY = 0,
 ): ActiveChip {
   const def = CHIPS[chip.defId];
-  const total = useTicks(def);
-  const hitDelay = def.kind !== 'attack' ? 0 : Math.min(total, secondsToTicks(tuning.chips.CHIP_HIT_FRAME));
+  const timing = chipTiming(def);
   const hits = Math.max(1, Math.floor(def.hits ?? 1));
   const hitStep = def.hitStep ? Math.max(1, secondsToTicks(tuning.chips[def.hitStep])) : 0;
-  const hitTicks = Array.from({ length: hits }, (_, i) => tick + hitDelay + i * hitStep);
-  const lastHit = hitTicks[hitTicks.length - 1] as number;
+  const hitTicks = Array.from({ length: hits }, (_, i) => tick + timing.startupTicks + i * hitStep);
   return {
     chip,
     slot,
@@ -49,7 +67,7 @@ export function startChip(
     originX,
     originY,
     hitTicks,
-    endTick: Math.max(tick + total, lastHit),
+    endTick: tick + timing.totalTicks,
     nextHit: 0,
     resolved: false,
   };

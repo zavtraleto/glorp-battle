@@ -47,7 +47,7 @@ describe('railChanges', () => {
     cs.startAttack();
     cs.takeNext(0);
     cs.finishAttack();
-    cs.refillReady(120);
+    cs.refillReady(240);
     expect(cs.hand[0]?.uid).toBe(uid);
     expect(railChanges(before, keys())).toEqual([{ slot: 0, eject: true, load: true }]);
   });
@@ -69,5 +69,20 @@ describe('cancel flash', () => {
     if (!returning) return;
     expect(returning([{ deal: 8, phase: 'idle' }, { deal: 4, phase: 'eject' }], 4)).toBe(1);
     expect(returning([{ deal: 4, phase: 'idle' }], 4)).toBe(-1);
+  });
+});
+
+describe('shared cooldown presentation', () => {
+  it('covers every unavailable chip without obscuring the committed tail', () => {
+    const cooldownForSlot = (railPlan as unknown as {
+      cooldownForSlot?: (state: string, progress: number | null) => number | null;
+    }).cooldownForSlot;
+    expect(cooldownForSlot).toBeTypeOf('function');
+    if (!cooldownForSlot) return;
+
+    expect(cooldownForSlot('locked', 0.5)).toBe(0.5);
+    expect(cooldownForSlot('cooling', 0.5)).toBe(0.5);
+    expect(cooldownForSlot('committed', 0.5)).toBeNull();
+    expect(cooldownForSlot('ready', 0.5)).toBeNull();
   });
 });

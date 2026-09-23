@@ -35,11 +35,14 @@ export class Monolith extends Enemy {
   }
 
   override dangerCells(): Cell[] {
-    return this.state === 'TELEGRAPH' ? this.targets : [];
+    return this.state === 'LOCK' || this.state === 'COUNTER' ? this.targets : [];
   }
 
   override forceAttack(tick: number): void {
-    if (this.alive && (this.state === 'IDLE' || this.state === 'MOVE')) this.nextAttackTick = tick;
+    if (this.alive && (this.state === 'IDLE' || this.state === 'MOVE')) {
+      this.nextAttackTick = tick;
+      this.setTimedState('INTENTION', tick, this.ticks(tuning.monolith.INTENTION_TIME));
+    }
   }
 
   /** Free panels of the player's area, in field order. */
@@ -55,10 +58,9 @@ export class Monolith extends Enemy {
     return cells;
   }
 
-  private plan(ctx: EnemyContext): void {
+  private lockTargets(ctx: EnemyContext): void {
     const m = tuning.monolith;
     const p = ctx.player;
-    this.attack = ctx.rngAi.pick(ATTACKS);
     switch (this.attack) {
       case 'rocks': {
         const count = this.enraged ? m.MONO_ROCKS_RAGE : m.MONO_ROCKS;
@@ -77,6 +79,14 @@ export class Monolith extends Enemy {
     }
   }
 
+  protected override onCountered(): void {
+    this.targets = [];
+  }
+
+  protected override finishCounterStagger(ctx: EnemyContext): void {
+    this.nextAttackTick = ctx.tick + this.interval();
+  }
+
   private strike(ctx: EnemyContext): void {
     const m = tuning.monolith;
     const t = ctx.tick;
@@ -85,7 +95,7 @@ export class Monolith extends Enemy {
         ctx.spawnAttack(
           new CannonBall(ctx.nextAttackId(), 'rockfall', this.x, this.y, this.targets, t, {
             damage: this.dmg(m.MONO_ROCK_DMG),
-            flightTicks: this.ticks(m.MONO_ROCK_FALL),
+            cellTravelTicks: this.ticks(tuning.projectile.CELL_TRAVEL_TIME),
             panel: 'crack',
           }),
         );
@@ -99,7 +109,7 @@ export class Monolith extends Enemy {
           new Shockwave(ctx.nextAttackId(), x, this.y + 1, t, {
             dir: 1,
             damage: this.dmg(m.MONO_WAVE_DMG),
-            stepTicks: this.ticks(m.MONO_WAVE_STEP),
+            stepTicks: this.ticks(tuning.projectile.CELL_TRAVEL_TIME),
             owner: 'enemy',
             crack: true,
           }),
@@ -128,28 +138,38 @@ export class Monolith extends Enemy {
       case 'IDLE':
       case 'MOVE':
         if (t >= this.nextAttackTick) {
-          this.plan(ctx);
-          this.setState('TELEGRAPH', t);
+          this.attack = ctx.rngAi.pick(ATTACKS);
+          this.setTimedState('INTENTION', t, this.ticks(m.INTENTION_TIME));
           return;
         }
-        if (this.elapsed(t) < this.ticks(m.MONO_MOVE_INTERVAL)) return;
+        if (this.elapsed(t) < this.ticks(m.MOVE_TIME)) return;
         this.stateTick = t;
         this.drift(ctx);
         return;
-      case 'TELEGRAPH':
-        if (this.elapsed(t) < this.ticks(m.MONO_TELEGRAPH)) return;
-        this.strike(ctx);
-        this.targets = [];
-        this.setState('ATTACK', t);
+      case 'INTENTION':
+        if (!this.phaseDone(t)) return;
+        this.lockTargets(ctx);
+        this.setTimedState('LOCK', t, this.ticks(m.LOCK_TIME));
         return;
-      case 'ATTACK':
-        if (this.elapsed(t) < this.ticks(m.MONO_ATTACK_TIME)) return;
+      case 'LOCK':
+        if (this.phaseDone(t)) this.setTimedState('COUNTER', t, this.ticks(m.COUNTER_TIME));
+        return;
+      case 'COUNTER':
+        if (!this.phaseDone(t)) return;
+        this.strike(ctx);
+        this.setTimedState('STRIKE', t, this.ticks(m.STRIKE_TIME));
+        return;
+      case 'STRIKE':
+        if (!this.phaseDone(t)) return;
+        this.targets = [];
+        this.setTimedState('RECOVERY', t, this.ticks(m.RECOVERY_TIME));
+        return;
+      case 'RECOVERY':
+        if (!this.phaseDone(t)) return;
         this.nextAttackTick = t + this.interval();
         this.setState('IDLE', t);
         return;
-      case 'RECOVERY':
-        this.setState('IDLE', t);
-        return;
+      case 'STAGGER':
       case 'DEAD':
         return;
     }

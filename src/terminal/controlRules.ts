@@ -8,7 +8,7 @@ import type { TerminalMode } from './terminalMode';
 export interface ControlWorld {
   state: GameState;
   activeChip: unknown;
-  player: { flinched: boolean; actionTicks: number };
+  player: { flinched: boolean; actionTicks: number; paralyzeTicks: number };
   chips: { attack: readonly number[]; locked: boolean };
 }
 
@@ -17,9 +17,8 @@ export type Availability = 'ok' | 'dull';
 
 /** Whether a tap on the trackball may use the active chip. */
 export function shotAvailability(w: ControlWorld): Availability {
-  if (w.state !== 'ACTION' || w.chips.attack.length === 0 || w.chips.locked) return 'dull';
-  const busy = w.activeChip !== null || w.player.flinched || w.player.actionTicks > 0;
-  return busy ? 'dull' : 'ok';
+  if (w.state !== 'ACTION' || w.chips.attack.length === 0) return 'dull';
+  return w.player.flinched || w.player.paralyzeTicks > 0 ? 'dull' : 'ok';
 }
 
 /** A tap on the ball would act: pick a menu item, or fire a loaded chip. */

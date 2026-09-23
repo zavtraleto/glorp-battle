@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_TUNING, mergeTuning, secondsToTicks, tuning } from '../src/config/tuning';
 import { Rng } from '../src/core/rng';
-import { CHIPS, type ChipCode, type ChipId } from '../src/data/chips';
+import { type ChipCode, type ChipId } from '../src/data/chips';
 import { ChipSystem, type FolderChip } from '../src/sim/chips/chipSystem';
 
 // Real-time hand, Attack Queue and per-slot refills (GDD §5, §7). No Custom Screen: the
@@ -98,6 +98,17 @@ describe('attack queue', () => {
     expect(s.attack).toHaveLength(tuning.chips.HAND_SIZE);
     for (let i = 0; i < 5; i++) expect(s.slotState(i)).toBe('queued');
   });
+
+  it('exposes the committed tail separately from the locked hand', () => {
+    const s = sys(Array.from({ length: 6 }, () => chip('cannon', 'A')));
+    s.toggleSelect(0);
+    s.toggleSelect(1);
+    s.startAttack();
+    s.takeNext(0);
+
+    expect(s.slotState(1)).toBe('committed');
+    expect(s.slotState(2)).toBe('locked');
+  });
 });
 
 describe('code rule', () => {
@@ -129,6 +140,8 @@ describe('code rule', () => {
     s.startAttack();
     s.takeNext(0);
     s.finishAttack();
+    expect(s.locked).toBe(true);
+    s.refillReady(T(4));
     expect(s.locked).toBe(false);
     const sword = slotOf(s, 'sword', 'B');
     expect(s.slotState(sword)).toBe('ready');
@@ -136,8 +149,38 @@ describe('code rule', () => {
   });
 });
 
-describe('slot refill cooldowns', () => {
-  it('reserves the next chip while keeping it unavailable until the slot cooldown ends', () => {
+describe('shared hand cooldown', () => {
+  it('refills only spent slots and preserves intentionally empty hand slots', () => {
+    const s = new ChipSystem(FIVE, new Rng(1));
+    s.dealHandExact([chip('cannon', 'A'), null, null, null, null]);
+    s.toggleSelect(0);
+    s.startAttack();
+    s.takeNext(0);
+    s.finishAttack();
+
+    expect(s.refillReady(T(4))).toBe(1);
+    expect(s.hand[0]).not.toBeNull();
+    expect(s.hand.slice(1)).toEqual([null, null, null, null]);
+  });
+
+  it('keeps a ready refill sunk until the committed charge is finished', () => {
+    const s = sys(Array.from({ length: 7 }, () => chip('cannon', 'A')));
+    s.toggleSelect(0);
+    s.toggleSelect(1);
+    s.startAttack();
+    s.takeNext(0);
+    s.reserveRefill(0);
+
+    expect(s.refillReady(T(4))).toBe(0);
+    expect(s.hand[0]).toBeNull();
+
+    s.takeNext(T(4));
+    s.reserveRefill(1);
+    s.finishAttack();
+    expect(s.refillReady(T(4))).toBe(2);
+  });
+
+  it('reserves a replacement at resolution and reports shared progress', () => {
     const s = sys(TEN);
     const next = s.drawPreview(1)[0]!;
     s.toggleSelect(0);
@@ -150,58 +193,47 @@ describe('slot refill cooldowns', () => {
     expect(s.slotState(0)).toBe('cooling');
     expect(s.drawPreview(5)).not.toContain(next);
     expect(s.refillProgress(0, 0)).toBe(0);
-    expect(s.refillProgress(0, T(1))).toBeCloseTo(0.5, 5);
-    expect(s.refillReady(T(2) - 1)).toBe(0);
+    expect(s.refillProgress(0, T(1))).toBeCloseTo(0.25, 5);
+    s.finishAttack();
+    expect(s.refillReady(T(4) - 1)).toBe(0);
     expect(s.hand[0]).toBeNull();
-    expect(s.refillReady(T(2))).toBe(1);
+    expect(s.refillReady(T(4))).toBe(1);
     expect(s.hand[0]).toBe(next);
     expect(s.pendingChip(0)).toBeNull();
   });
 
-  it('measures refill progress from the outgoing chip cooldown', () => {
-    const original = CHIPS.cannon;
-    CHIPS.cannon = { ...original, cooldown: 4 };
-    try {
-      const s = new ChipSystem([chip('cannon', 'A'), chip('sword', 'B')], new Rng(1));
-      s.dealHandExact([chip('cannon', 'A')]);
-      s.toggleSelect(0);
-      s.startAttack();
-      s.takeNext(0);
-      s.reserveRefill(0);
-      expect(s.pendingChip(0)?.defId).toBe('sword');
-      expect(s.refillProgress(0, T(2))).toBeCloseTo(0.5, 5);
-    } finally {
-      CHIPS.cannon = original;
-    }
-  });
-
-  it('empties a fired slot until its own cooldown elapses', () => {
+  it('reports the shared hand cooldown for untouched chips too', () => {
     const s = sys(TEN);
+    const progress = (s as unknown as { handCooldownProgress?: (tick: number) => number | null }).handCooldownProgress;
+    expect(progress).toBeTypeOf('function');
+    if (!progress) return;
+
     s.toggleSelect(0);
     s.startAttack();
-    const fired = s.takeNext(0);
+    s.takeNext(0);
+    s.reserveRefill(0);
     s.finishAttack();
-    expect(fired?.state).toBe('used');
-    expect(s.hand[0]).toBeNull();
-    expect(s.slotState(0)).toBe('empty');
-    expect(s.refillReady(T(2) - 1)).toBe(0);
-    expect(s.hand[0]).toBeNull();
-    expect(s.refillReady(T(2))).toBe(1);
-    expect(s.hand[0]).not.toBeNull();
+
+    expect(progress.call(s, T(2))).toBeCloseTo(0.5, 5);
+    expect(s.slotState(1)).toBe('locked');
+    expect(s.hand[1]).not.toBeNull();
   });
 
-  it('refills slots independently from each chip start tick', () => {
+  it('refills every spent slot together from the first shot timestamp', () => {
     const s = sys(Array.from({ length: 7 }, () => chip('cannon', 'A')));
     s.toggleSelect(0);
     s.toggleSelect(1);
     s.startAttack();
     s.takeNext(0);
-    s.takeNext(T(0.5));
+    s.reserveRefill(0);
+    s.takeNext(T(3));
+    s.reserveRefill(1);
     s.finishAttack();
-    expect(s.refillReady(T(2))).toBe(1);
-    expect(s.hand[0]).not.toBeNull();
+    expect(s.refillReady(T(4) - 1)).toBe(0);
+    expect(s.hand[0]).toBeNull();
     expect(s.hand[1]).toBeNull();
-    expect(s.refillReady(T(2.5))).toBe(1);
+    expect(s.refillReady(T(4))).toBe(2);
+    expect(s.hand[0]).not.toBeNull();
     expect(s.hand[1]).not.toBeNull();
   });
 
@@ -212,7 +244,7 @@ describe('slot refill cooldowns', () => {
     s.startAttack();
     s.takeNext(0);
     s.finishAttack();
-    s.refillReady(T(2));
+    s.refillReady(T(4));
     expect(s.hand[4]).toBe(keep);
   });
 
@@ -223,29 +255,10 @@ describe('slot refill cooldowns', () => {
     s.startAttack();
     s.takeNext(0);
     s.finishAttack();
-    s.refillReady(T(2));
+    s.refillReady(T(4));
     expect(s.reshuffles).toBe(1);
     expect(s.hand.every((c) => c !== null)).toBe(true);
     expect(s.count('used')).toBe(0);
-  });
-
-  it('does not reshuffle the unresolved active chip while another slot refills', () => {
-    const s = sys(FIVE);
-    s.toggleSelect(0);
-    s.toggleSelect(1);
-    s.startAttack();
-    const activeSlot = s.attack[0]!;
-    const active = s.takeNext(0)!;
-    const otherSlot = s.attack[0]!;
-    const other = s.takeNext(-T(2))!;
-
-    expect(s.refillReady(0, { slot: activeSlot, uid: active.uid })).toBe(1);
-    expect(s.hand[activeSlot]).toBeNull();
-    expect(s.hand[otherSlot]).toBe(other);
-    expect(s.hand.includes(active)).toBe(false);
-    expect(s.drawPreview(5).includes(active)).toBe(false);
-    expect(s.restoreInterrupted(active, activeSlot)).toBe(true);
-    expect(s.hand[activeSlot]).toBe(active);
   });
 });
 
@@ -258,7 +271,7 @@ describe('reshuffle', () => {
     cs.startAttack();
     for (let i = 0; i < 3; i++) cs.takeNext(0);
     cs.finishAttack();
-    cs.refillReady(T(2)); // draws the last pile chip, then the 3 spent ones come back
+    cs.refillReady(T(4)); // draws the last pile chip, then the 3 spent ones come back
     expect(cs.hand.every((c) => c !== null)).toBe(true);
     expect(cs.reshuffles).toBe(1);
     expect(cs.count('used')).toBe(0);
@@ -276,7 +289,7 @@ describe('reshuffle', () => {
     cs.startAttack();
     cs.takeNext(0);
     cs.finishAttack();
-    cs.refillReady(T(2));
+    cs.refillReady(T(4));
     expect(cs.reshuffles).toBe(1);
     expect(cs.hand[0]?.uid).toBe(first?.uid);
     expect(cs.hand[0]?.deal).toBeGreaterThan(deal);

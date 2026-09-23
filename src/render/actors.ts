@@ -43,9 +43,10 @@ function slideAnchor(
   tick: number,
   alpha: number,
   dt: number,
+  moveTime: number,
 ): THREE.Vector3 {
   const elapsed = (tick - lastMoveTick + alpha) * dt;
-  const t = Math.min(1, Math.max(0, elapsed / Math.max(1e-6, tuning.player.MOVE_VISUAL_TIME)));
+  const t = Math.min(1, Math.max(0, elapsed / Math.max(1e-6, moveTime)));
   // Ease-out keeps the "snap" feel of MMBN while still reading as motion.
   const k = 1 - (1 - t) * (1 - t);
   cellToWorld(prevX, prevY, from);
@@ -82,7 +83,17 @@ export class PlayerView {
   update(player: Player, tick: number, alpha: number, dt: number, usingChip: boolean, frame: SpriteFrame): void {
     this.pixels.setTime((tick + alpha) / tuning.sim.SIM_HZ);
     const time = (tick + alpha) / tuning.sim.SIM_HZ;
-    const a = slideAnchor(player.prevX, player.prevY, player.x, player.y, player.lastMoveTick, tick, alpha, dt);
+    const a = slideAnchor(
+      player.prevX,
+      player.prevY,
+      player.x,
+      player.y,
+      player.lastMoveTick,
+      tick,
+      alpha,
+      dt,
+      tuning.player.CELL_MOVE_TIME,
+    );
     this.pixels.place(a, CELL_WIDTH * this.widthShare, frame.camera, frame.width, frame.height, usingChip ? 1 : 0);
     this.sprite.renderOrder = rowRenderOrder(player.y);
     // Paralysis flickers like a hit.
@@ -132,17 +143,30 @@ export class EnemyView {
   }
 
   update(enemy: Enemy, tick: number, alpha: number, dt: number, frame: SpriteFrame): void {
-    const a = slideAnchor(enemy.prevX, enemy.prevY, enemy.x, enemy.y, enemy.lastMoveTick, tick, alpha, dt);
+    const a = slideAnchor(
+      enemy.prevX,
+      enemy.prevY,
+      enemy.x,
+      enemy.y,
+      enemy.lastMoveTick,
+      tick,
+      alpha,
+      dt,
+      enemy.moveDurationSeconds(),
+    );
     const time = (tick + alpha) / tuning.sim.SIM_HZ;
     this.pixels.setTime(time);
     let lift = Math.sin(time * Math.PI * 2 * IDLE_BOB_HZ + this.phase) > 0.3 ? 1 : 0;
     let flash = flashing(enemy.lastHitTick, tick);
 
-    if (enemy.state === 'TELEGRAPH') {
-      // "Inhale": lifted and pulsing with the danger cells.
+    if (enemy.state === 'INTENTION' || enemy.state === 'LOCK') {
+      // Early warning and committed target share a readable lifted pose.
       lift = 2;
       flash ||= Math.sin(time * Math.PI * 2 * tuning.battleVisual.DANGER_PULSE_HZ) > 0.2;
-    } else if (enemy.state === 'ATTACK') {
+    } else if (enemy.state === 'COUNTER') {
+      lift = 2;
+      flash ||= Math.sin(time * Math.PI * 4 * tuning.battleVisual.DANGER_PULSE_HZ) > 0;
+    } else if (enemy.state === 'STRIKE') {
       lift = 1;
       flash = true;
     }

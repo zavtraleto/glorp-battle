@@ -15,7 +15,7 @@ export type ChipId =
   | 'recov10' | 'recov30' | 'recover50' | 'recov80' | 'invis' | 'barrier'
   | 'geddon1' | 'geddon2' | 'areagrab' | 'panlgrab' | 'panlout1' | 'panlout3' | 'repair' | 'rockcube';
 
-/** Which tunable holds the use (animation) time: `CHIP_USE_TIME_<group>`. */
+/** Which tunable pair holds startup/recovery: `CHIP_STARTUP/RECOVERY_<group>`. */
 export type UseTimeGroup = 'VULCAN' | 'CANNON' | 'SWORD' | 'BOMB' | 'RECOVER' | 'FIELD';
 export type HitStepKey = 'VULCAN_HIT_STEP';
 export type Rarity = 'common' | 'uncommon' | 'rare';
@@ -54,8 +54,6 @@ export interface ChipDef {
   power: number | null;
   kind: 'attack' | 'support' | 'field';
   useTime: UseTimeGroup;
-  /** Seconds before this chip's spent slot refills; the common tuning is used when omitted. */
-  cooldown?: number;
   /** Codes this chip can come with. */
   codes: readonly ChipCode[];
   rarity: Rarity;

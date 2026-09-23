@@ -19,11 +19,21 @@ export class Helmhead extends Enemy {
   }
 
   override dangerCells(): Cell[] {
-    return (this.state === 'TELEGRAPH' || this.state === 'ATTACK') && this.target ? [this.target] : [];
+    return (this.state === 'LOCK' || this.state === 'COUNTER') && this.target ? [this.target] : [];
   }
 
   override forceAttack(tick: number): void {
-    if (this.alive && this.state === 'IDLE') this.stateTick = tick - this.ticks(tuning.helmhead.HELM_CLOSED);
+    if (!this.alive || this.state !== 'IDLE') return;
+    this.guarded = false;
+    this.setTimedState('INTENTION', tick, this.ticks(tuning.helmhead.INTENTION_TIME));
+  }
+
+  protected override onCountered(): void {
+    this.target = null;
+  }
+
+  protected override finishCounterStagger(): void {
+    this.guarded = true;
   }
 
   update(ctx: EnemyContext): void {
@@ -35,28 +45,36 @@ export class Helmhead extends Enemy {
         this.guarded = true;
         if (this.elapsed(t) < this.ticks(h.HELM_CLOSED)) return;
         this.guarded = false;
-        this.target = { x: ctx.player.x, y: ctx.player.y };
-        this.setState('TELEGRAPH', t);
+        this.setTimedState('INTENTION', t, this.ticks(h.INTENTION_TIME));
         return;
-      case 'TELEGRAPH': {
-        if (this.elapsed(t) < this.ticks(h.HELM_TELEGRAPH) || !this.target) return;
+      case 'INTENTION':
+        if (!this.phaseDone(t)) return;
+        this.target = { x: ctx.player.x, y: ctx.player.y };
+        this.setTimedState('LOCK', t, this.ticks(h.LOCK_TIME));
+        return;
+      case 'LOCK':
+        if (this.phaseDone(t)) this.setTimedState('COUNTER', t, this.ticks(h.COUNTER_TIME));
+        return;
+      case 'COUNTER': {
+        if (!this.phaseDone(t) || !this.target) return;
         const ball = new CannonBall(ctx.nextAttackId(), 'cannonball', this.x, this.y, [this.target], t, {
           damage: this.dmg(h.HELM_DMG),
-          flightTicks: this.ticks(h.HELM_FLIGHT),
+          cellTravelTicks: this.ticks(tuning.projectile.CELL_TRAVEL_TIME),
           panel: 'break',
         });
         ctx.spawnAttack(ball);
-        this.setState('ATTACK', t);
+        this.setTimedState('STRIKE', t, this.ticks(h.STRIKE_TIME));
         return;
       }
-      case 'ATTACK':
-        if (this.elapsed(t) < this.ticks(h.HELM_FLIGHT)) return;
+      case 'STRIKE':
+        if (!this.phaseDone(t)) return;
         this.target = null;
-        this.setState('RECOVERY', t);
+        this.setTimedState('RECOVERY', t, this.ticks(h.RECOVERY_TIME));
         return;
       case 'RECOVERY':
-        if (this.elapsed(t) >= this.ticks(h.HELM_RECOVERY)) this.setState('IDLE', t);
+        if (this.phaseDone(t)) this.setState('IDLE', t);
         return;
+      case 'STAGGER':
       case 'DEAD':
         return;
     }

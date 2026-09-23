@@ -83,7 +83,7 @@ export class Player {
   }
 
   private cooldownReady(tick: number): boolean {
-    return tick - this.lastMoveTick >= secondsToTicks(tuning.player.MOVE_COOLDOWN);
+    return tick - this.lastMoveTick >= secondsToTicks(tuning.player.CELL_MOVE_TIME);
   }
 
   /** Performs a step if possible. Blocked steps do nothing (no cooldown, no buffer). */
