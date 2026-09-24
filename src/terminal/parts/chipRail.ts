@@ -125,7 +125,7 @@ const GLOW_FLIGHT = 0.45;
 const SLIDE_RATE = 22;
 /** Cartridge width as a share of its slot pitch. */
 const CART_FILL = 0.92;
-/** Tutorial hint level 1: the "pick me" attract amplitude is multiplied by this (tutorial spec §5). */
+/** Tutorial callout target: the "pick me" attract amplitude is multiplied by this (GDD §10.5). */
 const HINT_PULSE_GAIN = 2.2;
 
 function contactTexture(): THREE.CanvasTexture {
@@ -276,7 +276,7 @@ export class ChipRail {
     this.attractAllowed = allowed;
   }
 
-  /** Tutorial hint level 1: pulse harder so the eye goes here (tutorial spec §5). */
+  /** A tutorial callout points here: pulse harder (GDD §10.5). */
   setHintPulse(on: boolean): void {
     this.hintPulse = on;
   }

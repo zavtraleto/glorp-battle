@@ -45,7 +45,7 @@ export type GameState =
 export interface Cheats {
   god: boolean;
   aiEnabled: boolean;
-  /** Tutorial: damage lands but the player never drops below 1 HP (spec §4.3). */
+  /** Tutorial: damage lands but the player never drops below 1 HP (GDD §10.5). */
   noKo?: boolean;
 }
 
@@ -61,8 +61,21 @@ export interface WorldOptions {
   startWave?: number;
   /** Skip the intro and start in ACTION with the hand dealt (tests). */
   skipIntro?: boolean;
-  /** Tutorial: the exact starting hand by slot instead of a dealt one (spec §4.4). */
+  /** Tutorial: the exact starting hand by slot instead of a dealt one (GDD §10.5). */
   hand?: readonly (FolderChip | null)[];
+}
+
+/**
+ * Tutorial callout (GDD §10.5): ACTION stands still until the player does the
+ * one thing it asks for. Every other command is dropped.
+ */
+export interface Hold {
+  /** A step that can actually be made releases the hold. */
+  move?: boolean;
+  /** An Attack press releases the hold. */
+  attack?: boolean;
+  /** Taps on these rail slots go through; the hold stays (the director lifts it). */
+  slots?: readonly number[];
 }
 
 /** States in which the battle simulation (enemies, attacks, timers) is frozen. */
@@ -139,6 +152,8 @@ export class World implements EnemyContext, AttackContext {
   attacks: Attack[] = [];
   /** Player bombs in flight. */
   bombs: PlayerBomb[] = [];
+  /** Tutorial callout in progress; ACTION does not advance while it is set. */
+  hold: Hold | null = null;
   /** Chip currently being used by the player (GDD §6.5). */
   activeChip: ActiveChip | null = null;
   /** Active multi-chip window, driven exclusively by the unscaled player clock. */
@@ -174,7 +189,7 @@ export class World implements EnemyContext, AttackContext {
   }
 
   get simFrozen(): boolean {
-    return FROZEN_STATES.has(this.state);
+    return FROZEN_STATES.has(this.state) || (this.state === 'ACTION' && this.hold !== null);
   }
 
   /** Unscaled ACTION tick used by player movement, chips and player-owned effects. */
@@ -933,7 +948,29 @@ export class World implements EnemyContext, AttackContext {
     else this.chips.dealHand();
   }
 
-  /** Tutorial: a cassette arrives in this slot mid-battle (spec §4.4). */
+  /** Tutorial: a new folder and hand for the next lesson (GDD §10.5). */
+  setFolder(folder: readonly FolderChip[], hand: readonly (FolderChip | null)[]): void {
+    this.chips.replaceFolder(folder);
+    this.chips.dealHandExact(hand);
+  }
+
+  /**
+   * Tutorial hold (GDD §10.5): lets the allowed commands through and says
+   * whether the hold is gone, so this tick runs as usual.
+   */
+  private releaseHold(input: TickInput): boolean {
+    const hold = this.hold;
+    if (!hold) return true;
+    for (const c of input.commands) {
+      if (c.type === 'selectChip' && hold.slots?.includes(c.slot)) this.selectChip(c.slot);
+      else if (c.type === 'move' && hold.move && this.player.canStep(c.dir)) this.hold = null;
+      else if (c.type === 'useChip' && hold.attack) this.hold = null;
+      if (!this.hold) return true;
+    }
+    return false;
+  }
+
+  /** Tutorial: a cassette arrives in this slot mid-battle (GDD §10.5). */
   dealChip(slot: number, spec: FolderChip): boolean {
     return this.chips.dealSlot(slot, spec) !== null;
   }
@@ -983,6 +1020,7 @@ export class World implements EnemyContext, AttackContext {
         this.removeDeletedEnemies();
         return;
       case 'ACTION':
+        if (!this.releaseHold(input)) return;
         break;
       default:
         return;

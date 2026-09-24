@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_TUNING, mergeTuning, tuning } from '../src/config/tuning';
 import type { FolderChip } from '../src/sim/chips/chipSystem';
+import type { Command } from '../src/core/input/commands';
 import { World } from '../src/sim/world';
 
 beforeEach(() => mergeTuning(tuning, JSON.parse(JSON.stringify(DEFAULT_TUNING))));
@@ -91,5 +92,70 @@ describe('noKo', () => {
     w.hitPlayerAt(attack, p.x, p.y, 40);
     expect(p.hp).toBe(0);
     expect(p.alive).toBe(false);
+  });
+});
+
+describe('tutorial hold', () => {
+  const step = (w: World, commands: Command[] = []) => w.step(1 / 60, { commands, held: null });
+
+  it('freezes ACTION: no clock, no enemy, no chip, until the asked-for command', () => {
+    const w = world([{ defId: 'cannon', code: 'A' }, null, null, null, null]);
+    w.hold = { move: true };
+    const time = w.time;
+    step(w, [{ type: 'useChip' }, { type: 'selectChip', slot: 0 }]);
+    for (let i = 0; i < 30; i++) step(w);
+    expect(w.time).toBe(time);
+    expect(w.simFrozen).toBe(true);
+    expect(w.chips.attack).toEqual([]);
+    step(w, [{ type: 'move', dir: 'left' }]);
+    expect(w.hold).toBeNull();
+    expect(w.player.x).toBe(tuning.player.PLAYER_START_X - 1);
+    expect(w.time).toBeGreaterThan(time);
+  });
+
+  it('keeps the hold when the step runs into the edge of the field', () => {
+    const w = world();
+    w.hold = { move: true };
+    step(w, [{ type: 'move', dir: 'left' }]);
+    w.hold = { move: true };
+    for (let i = 0; i < 30; i++) step(w);
+    step(w, [{ type: 'move', dir: 'left' }]);
+    expect(w.player.x).toBe(0);
+    expect(w.hold).toEqual({ move: true });
+  });
+
+  it('lets taps on the named slots through and keeps holding', () => {
+    const w = world([{ defId: 'cannon', code: 'A' }, { defId: 'cannon', code: 'A' }, null, null, null]);
+    w.hold = { slots: [1] };
+    step(w, [{ type: 'selectChip', slot: 0 }, { type: 'selectChip', slot: 1 }]);
+    expect(w.chips.attack).toEqual([1]);
+    expect(w.hold).toEqual({ slots: [1] });
+  });
+
+  it('an Attack press lifts an attack hold and fires on the same tick', () => {
+    const w = world([{ defId: 'cannon', code: 'A' }, null, null, null, null]);
+    w.selectChip(0);
+    w.hold = { attack: true };
+    step(w, [{ type: 'useChip' }]);
+    expect(w.hold).toBeNull();
+    expect(w.activeChip?.def.id).toBe('cannon');
+  });
+});
+
+describe('lesson folder', () => {
+  it('replaces the folder and the hand; new cassettes get new uids', () => {
+    const w = world([{ defId: 'cannon', code: 'A' }, null, null, null, null]);
+    const old = w.chips.hand[0]!.uid;
+    w.setFolder([{ defId: 'sword', code: '*' }, { defId: 'areagrab', code: '*' }], [
+      { defId: 'areagrab', code: '*' },
+      { defId: 'sword', code: '*' },
+      null,
+      null,
+      null,
+    ]);
+    expect(w.chips.hand.map((c) => c?.defId ?? null)).toEqual(['areagrab', 'sword', null, null, null]);
+    expect(w.chips.chips).toHaveLength(2);
+    expect(w.chips.hand[0]!.uid).toBeGreaterThan(old);
+    expect(w.chips.drawRemaining).toBe(0);
   });
 });

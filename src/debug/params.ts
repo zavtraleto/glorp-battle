@@ -1,5 +1,5 @@
 // URL debug parameters (GDD §15.5, TERMINAL.md §14):
-// ?debug=1&seed=123&battle=3&encounter=e1&wave=2&folder=basic|field|all&god=1&timescale=0.5
+// ?debug=1&seed=123&battle=3&encounter=e1&wave=2&tutorial=2&folder=basic|field|all&god=1&timescale=0.5
 // ?rscale=300&crtres=160x240&bench=1&hitzones=1
 
 import type { FolderId } from '../data/folders';
@@ -12,6 +12,8 @@ export interface DebugParams {
   encounter: string | null;
   /** 1-based wave to start the debug battle from (GDD §10.4). */
   wave: number;
+  /** Tutorial lesson 1–4 to start from (GDD §10.5); null = no jump. */
+  tutorial: number | null;
   folder: FolderId;
   god: boolean;
   timescale: number;
@@ -38,6 +40,7 @@ export function parseDebugParams(search: string): DebugParams {
   const battle = num('battle');
   const timescale = num('timescale');
   const wave = num('wave');
+  const tutorial = num('tutorial');
   const rscale = num('rscale');
   const crt = /^(\d+)x(\d+)$/.exec(q.get('crtres') ?? '');
   const crtW = crt ? Number(crt[1]) : 0;
@@ -48,6 +51,7 @@ export function parseDebugParams(search: string): DebugParams {
     battle: battle === null ? 1 : Math.min(4, Math.max(1, Math.floor(battle))),
     encounter: q.get('encounter'),
     wave: wave === null ? 1 : Math.max(1, Math.floor(wave)),
+    tutorial: tutorial === null ? null : Math.min(4, Math.max(1, Math.floor(tutorial))),
     folder: (['basic', 'field', 'all'] as const).find((f) => f === q.get('folder')) ?? 'basic',
     god: flag('god'),
     timescale: timescale === null ? 1 : Math.min(4, Math.max(0.05, timescale)),

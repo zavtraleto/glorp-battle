@@ -1,6 +1,6 @@
-// Heavy geometric display face for the "Wave N" banner (TERMINAL.md §8.1):
-// wide cast blocks, chamfers and diagonal cuts, no curves. Only the glyphs
-// the banner needs; y is up, units are arbitrary (cap height 7).
+// Heavy geometric display face for the "Wave N" banner and the tutorial
+// callouts (TERMINAL.md §8.1): wide cast blocks, chamfers and diagonal cuts, no
+// curves. Only the glyphs those words need; y is up, units are arbitrary (cap height 7).
 
 export type Point = readonly [number, number];
 
@@ -35,6 +35,53 @@ const G: Record<string, BannerGlyph> = {
     shapes: [{
       outline: [[0, 0], [5.8, 0], [5.8, 1.9], [2.1, 1.9], [2.1, 2.7], [5, 2.7], [5, 4.3], [2.1, 4.3], [2.1, 5.1], [5.8, 5.1], [5.8, 7], [1.2, 7], [0, 5.8]],
     }],
+  },
+  C: {
+    width: 6,
+    shapes: [{ outline: [[1.2, 0], [6, 0], [6, 1.9], [2.1, 1.9], [2.1, 5.1], [6, 5.1], [6, 7], [1.2, 7], [0, 5.8], [0, 1.2]] }],
+  },
+  G: {
+    width: 6.2,
+    shapes: [{
+      outline: [[1.2, 0], [6.2, 0], [6.2, 3.9], [3.4, 3.9], [3.4, 2.3], [4.1, 2.3], [4.1, 1.9], [2.1, 1.9], [2.1, 5.1], [6.2, 5.1], [6.2, 7], [1.2, 7], [0, 5.8], [0, 1.2]],
+    }],
+  },
+  I: {
+    width: 2.2,
+    shapes: [{ outline: [[0, 0], [2.2, 0], [2.2, 7], [0, 7]] }],
+  },
+  K: {
+    width: 6.6,
+    shapes: [{ outline: [[0, 0], [0, 7], [2.1, 7], [2.1, 4.4], [4.2, 7], [6.6, 7], [3.9, 3.5], [6.6, 0], [4.2, 0], [2.1, 2.6], [2.1, 0]] }],
+  },
+  L: {
+    width: 5.4,
+    shapes: [{ outline: [[0, 0], [5.4, 0], [5.4, 1.9], [2.1, 1.9], [2.1, 7], [0, 7]] }],
+  },
+  M: {
+    width: 8.4,
+    shapes: [{ outline: [[0, 0], [0, 7], [2.2, 7], [4.2, 4.6], [6.2, 7], [8.4, 7], [8.4, 0], [6.3, 0], [6.3, 3.9], [4.2, 1.6], [2.1, 3.9], [2.1, 0]] }],
+  },
+  N: {
+    width: 6.6,
+    shapes: [{ outline: [[0, 0], [0, 7], [2.1, 7], [4.5, 3.2], [4.5, 7], [6.6, 7], [6.6, 0], [4.5, 0], [2.1, 3.8], [2.1, 0]] }],
+  },
+  O: {
+    width: 6.4,
+    shapes: [{
+      outline: [[1.2, 0], [5.2, 0], [6.4, 1.2], [6.4, 5.8], [5.2, 7], [1.2, 7], [0, 5.8], [0, 1.2]],
+      holes: [[[2.1, 1.9], [4.3, 1.9], [4.3, 5.1], [2.1, 5.1]]],
+    }],
+  },
+  S: {
+    width: 6,
+    shapes: [{
+      outline: [[0, 0], [4.8, 0], [6, 1.2], [6, 3.3], [4.9, 4.4], [2.1, 4.4], [2.1, 5.1], [6, 5.1], [6, 7], [1.2, 7], [0, 5.8], [0, 3.7], [1.1, 2.6], [3.9, 2.6], [3.9, 1.9], [0, 1.9]],
+    }],
+  },
+  T: {
+    width: 6.4,
+    shapes: [{ outline: [[2.15, 0], [4.25, 0], [4.25, 5.1], [6.4, 5.1], [6.4, 7], [0, 7], [0, 5.1], [2.15, 5.1]] }],
   },
   '0': {
     width: 6,

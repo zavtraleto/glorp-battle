@@ -4,7 +4,7 @@ import { PALETTE } from '../../render/palette';
 import { blinkPhase } from '../terminalMode';
 import { hudKey, type HpTag, type HudLabel, type HudModel, type HudStatus, type LabelTone } from './hudModel';
 import { HUD_PX_PER_SCALE, menuLayout, type MenuSpec, type MenuTone } from './menuModel';
-import { drawText, GLYPH_GAP, GLYPH_W, measureText, wrapText, type PixelSink } from './pixelFont';
+import { drawText, measureText, type PixelSink } from './pixelFont';
 
 // HUD layer of the CRT (TERMINAL.md §7.1): drawn at the CRT resolution with the
 // pixel font and composited over the battle by the CRT shader.
@@ -43,27 +43,6 @@ const LABEL_COLOR: Record<LabelTone, string> = {
   playerDamage: hex(PALETTE.red),
   heal: hex(PALETTE.phosphor),
 };
-
-/** Character budget that keeps every line of `wrapText` within `maxWidth` at `scale` (fixed-width font, `menuModel.ts`'s own trick). */
-function colsFor(scale: number, maxWidth: number): number {
-  return Math.floor(maxWidth / ((GLYPH_W + GLYPH_GAP) * scale));
-}
-
-/**
- * The tutorial's hint sentences (tutorial spec §5, `i18n/en.ts`) are longer
- * than the CRT is wide at phone scale. Pick the largest pixel-font scale
- * (down from `maxScale`) that lays the text out on at most two lines with
- * neither line wider than `maxWidth`; a smaller scale is tried before a
- * third line, so the text stays as big as the width allows.
- */
-export function fitHint(text: string, maxScale: number, maxWidth: number): { scale: number; lines: string[] } {
-  for (let scale = maxScale; scale >= 1; scale--) {
-    if (measureText(text, scale) <= maxWidth) return { scale, lines: [text] };
-    const lines = wrapText(text, colsFor(scale, maxWidth));
-    if (lines.length <= 2 && lines.every((l) => measureText(l, scale) <= maxWidth)) return { scale, lines };
-  }
-  return { scale: 1, lines: wrapText(text, colsFor(1, maxWidth)) };
-}
 
 export class CrtCanvas {
   readonly texture: THREE.CanvasTexture;
@@ -118,7 +97,6 @@ export class CrtCanvas {
     if (m.status) this.drawStatus(sink, m.status, H, s, M, blinkOn);
     this.drawHp(ctx, sink, m.hp, s);
     this.drawLabels(sink, m.labels);
-    if (m.hint) this.drawHint(sink, m.hint, W, s, M);
     this.texture.needsUpdate = true;
   }
 
@@ -128,28 +106,6 @@ export class CrtCanvas {
     // A hit blinks the number; otherwise low HP just sits amber.
     const hpColor = st.hpHit && blinkOn ? COLOR.red : st.hpLow ? COLOR.hpLow : COLOR.hp;
     drawText(sink, String(st.hp), M, H - M - 7 * big, big, hpColor);
-  }
-
-  /**
-   * Tutorial hint: centred line(s), wrapped and scaled to fit, in the status
-   * band above the field (tutorial spec §5). That band is reserved by the
-   * battle camera fit (`HUD_BAND`, BATTLE_VISUAL.md) so no field row or
-   * sprite ever reaches it — unlike the strip right above the player's HP
-   * number, which the field's own nearest row already crowds at narrow
-   * widths.
-   */
-  private drawHint(sink: PixelSink, text: string, W: number, s: number, M: number): void {
-    const { scale, lines } = fitHint(text, s + 1, W - 2 * M);
-    const lineStep = 7 * scale + s;
-    let y = M;
-    for (const line of lines) {
-      const x = Math.round((W - measureText(line, scale)) / 2);
-      for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
-        drawText(sink, line, x + dx, y + dy, scale, COLOR.outline);
-      }
-      drawText(sink, line, x, y, scale, COLOR.accent);
-      y += lineStep;
-    }
   }
 
   /** Enemy HP as a small red number with a dark outline; level dots above it. */

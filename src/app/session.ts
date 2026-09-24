@@ -6,16 +6,16 @@ import type { SimEvent } from '../sim/events';
 import { folderChips, type FolderChip } from '../sim/chips/chipSystem';
 import { World, type Cheats } from '../sim/world';
 import { Run, RUN_STEPS, type StartFolder } from './run';
-import { TutorialDirector, type TutorialHint } from './tutorial/director';
+import { TutorialDirector, type CalloutView } from './tutorial/director';
 
 // Roguelite run and out-of-battle screens (GDD §10–11). Pure: no DOM.
 //
 // TITLE → PATH → BATTLE → PATH … → BATTLE (boss) → COMPLETE → TITLE
 //                  └→ death / abandon → GAME_OVER → TITLE
 //
-// The tutorial (tutorial spec §2) reuses BATTLE/PAUSED/COMPLETE instead:
-// TITLE → BATTLE → … (4 steps, auto-advancing) → COMPLETE → TITLE
-//                  └→ abandon → TITLE (never GAME_OVER; the player cannot die)
+// The tutorial (GDD §10.5) reuses BATTLE/PAUSED/COMPLETE instead:
+// TITLE → BATTLE (one battle, a lesson per wave) → COMPLETE → TITLE
+//           └→ abandon → TITLE (never GAME_OVER; the player cannot die)
 
 export type Screen = 'TITLE' | 'PATH' | 'BATTLE' | 'PAUSED' | 'GAME_OVER' | 'COMPLETE';
 export type SessionMode = 'run' | 'tutorial';
@@ -134,14 +134,18 @@ export class Session {
     this.screen = 'PATH';
   }
 
-  /** Title → the first tutorial battle (tutorial spec §2). */
+  /** Title → the tutorial battle (GDD §10.5). */
   startTutorial(): void {
     if (this.screen !== 'TITLE') return;
+    this.beginTutorial(0);
+  }
+
+  private beginTutorial(lesson: number): void {
     this.mode = 'tutorial';
     this.run = null;
     this.debugFolder = null;
     this.director = new TutorialDirector();
-    this.replaceWorld(this.director.newWorld(this.options.cheats));
+    this.replaceWorld(this.director.newWorld(this.options.cheats, lesson));
     this.screen = 'BATTLE';
   }
 
@@ -149,9 +153,16 @@ export class Session {
     return this.mode === 'tutorial';
   }
 
-  /** The hint the terminal should show, or null outside the tutorial. */
-  tutorialHint(): TutorialHint | null {
-    return this.director?.hint() ?? null;
+  /** The callout the terminal should draw, or null (none up, or not in the tutorial). */
+  tutorialCallout(): CalloutView | null {
+    if (this.screen !== 'BATTLE') return null;
+    return this.director?.callout(this.world) ?? null;
+  }
+
+  /** Current lesson (0-based) and beat, for the debug overlay; null outside the tutorial. */
+  get tutorialBeat(): string | null {
+    const d = this.director;
+    return d ? `${d.lesson?.id ?? '-'}/${d.beatId ?? '-'}` : null;
   }
 
   private startBattle(encounter: Encounter, startWave = 0): void {
@@ -206,9 +217,9 @@ export class Session {
   }
 
   /** Called every frame: leaves the battle once the end-of-battle signal has played. */
-  update(dt: number, events: readonly SimEvent[]): void {
+  update(events: readonly SimEvent[]): void {
     if (this.mode === 'tutorial') {
-      this.updateTutorial(dt, events);
+      this.updateTutorial(events);
       return;
     }
     if (this.screen !== 'BATTLE' || !this.run) return;
@@ -227,19 +238,13 @@ export class Session {
     }
   }
 
-  /** Runs the director and rolls a won battle into the next step, or COMPLETE. */
-  private updateTutorial(dt: number, events: readonly SimEvent[]): void {
+  /** Runs the director; the won battle ends the tutorial. */
+  private updateTutorial(events: readonly SimEvent[]): void {
     const d = this.director;
     if (!d || this.screen !== 'BATTLE') return;
     const w = this.world;
-    d.update(w, events, dt);
-    if (w.state !== 'BATTLE_WON' || w.stateElapsed < secondsToTicks(tuning.fx.RESULT_DELAY_WIN)) return;
-    d.advanceStep();
-    if (d.done) {
-      this.screen = 'COMPLETE';
-      return;
-    }
-    this.replaceWorld(d.newWorld(this.options.cheats));
+    d.update(w, events);
+    if (w.state === 'BATTLE_WON' && w.stateElapsed >= secondsToTicks(tuning.fx.RESULT_DELAY_WIN)) this.screen = 'COMPLETE';
   }
 
   /** COMPLETE / GAME_OVER → TITLE. */
@@ -277,6 +282,16 @@ export class Session {
     if (!enc) return false;
     this.debugBattle(enc, seed, wave);
     return true;
+  }
+
+  /** Debug: the tutorial from lesson `lesson` (1-based), from anywhere. */
+  debugTutorial(lesson = 1): void {
+    this.beginTutorial(Math.max(0, Math.floor(lesson) - 1));
+  }
+
+  /** Debug: past the current tutorial beat. */
+  debugSkipTutorialBeat(): void {
+    if (this.screen === 'BATTLE') this.director?.skip(this.world);
   }
 
   /** Moves the run to another step (PATH screen). */

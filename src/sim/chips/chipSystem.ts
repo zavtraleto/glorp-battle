@@ -50,7 +50,7 @@ export class ChipSystem {
   /** Every chip of the folder, in folder order. */
   readonly chips: ChipInstance[] = [];
   /** Draw order: shuffled once per battle, then reshuffled from spent chips when it runs dry. */
-  private readonly drawPile: ChipInstance[];
+  private drawPile: ChipInstance[];
   private drawIndex = 0;
   /** Hand slots; null = spent or the folder ran out. Length is HAND_SIZE. */
   hand: (ChipInstance | null)[] = [];
@@ -72,6 +72,8 @@ export class ChipSystem {
   private pendingRefills: (PendingRefill | null)[] = [];
   /** Times the spent chips went back into the draw pile (GDD §7.5). */
   reshuffles = 0;
+  /** Bumped by `replaceFolder`: the old hand was swapped out, not spent. */
+  folderVersion = 0;
   /** Draws so far; each draw stamps its chip with the next serial. */
   private deals = 0;
 
@@ -79,15 +81,33 @@ export class ChipSystem {
     folder: FolderId | readonly FolderChip[],
     private readonly rng: Rng,
   ) {
-    const list = typeof folder === 'string' ? folderChips(folder) : folder;
-    let uid = 1;
-    for (const c of list) {
-      this.chips.push({ uid: uid++, defId: c.defId, code: c.code, state: 'folder', deal: 0 });
-    }
-    this.drawPile = rng.shuffle([...this.chips]);
+    this.drawPile = [];
+    this.fill(typeof folder === 'string' ? folderChips(folder) : folder);
     this.hand = new Array<ChipInstance | null>(tuning.chips.HAND_SIZE).fill(null);
     this.pendingRefills = new Array<PendingRefill | null>(tuning.chips.HAND_SIZE).fill(null);
     this.spentSlots = new Array<boolean>(tuning.chips.HAND_SIZE).fill(false);
+  }
+
+  private fill(list: readonly FolderChip[]): void {
+    const first = (this.chips[this.chips.length - 1]?.uid ?? 0) + 1;
+    this.chips.length = 0;
+    list.forEach((c, i) => this.chips.push({ uid: first + i, defId: c.defId, code: c.code, state: 'folder', deal: 0 }));
+    this.drawPile = this.rng.shuffle([...this.chips]);
+    this.drawIndex = 0;
+  }
+
+  /**
+   * Tutorial (GDD §10.5): every lesson brings its own folder. The hand, the
+   * queue and the cooldown are cleared; uids keep counting so the rail never
+   * mistakes a new cassette for an old one.
+   */
+  replaceFolder(list: readonly FolderChip[]): void {
+    this.folderVersion++;
+    this.fill(list);
+    this.hand = new Array<ChipInstance | null>(tuning.chips.HAND_SIZE).fill(null);
+    this.pendingRefills = new Array<PendingRefill | null>(tuning.chips.HAND_SIZE).fill(null);
+    this.spentSlots = new Array<boolean>(tuning.chips.HAND_SIZE).fill(false);
+    this.resetCycle();
   }
 
   get drawRemaining(): number {
@@ -136,7 +156,7 @@ export class ChipSystem {
     this.resetCycle();
   }
 
-  /** Tutorial (spec §4.4): the exact hand by slot; null leaves the slot empty. */
+  /** Tutorial (GDD §10.5): the exact hand by slot; null leaves the slot empty. */
   dealHandExact(spec: readonly (FolderChip | null)[]): void {
     this.hand = new Array<ChipInstance | null>(tuning.chips.HAND_SIZE).fill(null);
     this.pendingRefills = new Array<PendingRefill | null>(tuning.chips.HAND_SIZE).fill(null);

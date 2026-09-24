@@ -20,7 +20,7 @@ function make(): Session {
 function tick(s: Session, commands: Command[] = []): void {
   s.world.step(DT, { commands, held: null });
   const events = s.world.drainEvents();
-  s.update(DT, events);
+  s.update(events);
 }
 const run = (s: Session, n: number) => {
   for (let i = 0; i < n; i++) tick(s);

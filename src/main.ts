@@ -38,8 +38,9 @@ const ui = byId('ui');
 
 const cheats: Cheats = { god: params.god, aiEnabled: true };
 const session = new Session({ seed: params.seed ?? randomSeed(), cheats, folder: params.folder });
-// ?battle=N / ?encounter=<id>[&wave=N] skip the title and jump straight into a battle (debug).
-if (params.encounter) session.debugEncounter(params.encounter, undefined, params.wave);
+// ?tutorial=N / ?battle=N / ?encounter=<id>[&wave=N] skip the title and jump straight into a battle (debug).
+if (params.tutorial) session.debugTutorial(params.tutorial);
+else if (params.encounter) session.debugEncounter(params.encounter, undefined, params.wave);
 else if (query.has('battle')) session.debugJump(params.battle);
 
 // ?bench=1: autopilot on battle 1 for the frame budget check (TERMINAL.md §10).
@@ -169,7 +170,7 @@ const loop = new GameLoop(
         terminal.onEvent(e, world);
         if (events.logEnabled) console.debug('[sim]', world.tick, e);
       }
-      session.update(dt, drained);
+      session.update(drained);
     },
     render: (alpha, frameSeconds) => {
       syncWorld();
@@ -198,7 +199,8 @@ const loop = new GameLoop(
           `draw ${world.chips.drawRemaining} hand ${world.chips.hand.filter(Boolean).length}/${world.chips.hand.length}` +
           ` attack ${world.chips.attack.length} used ${world.chips.count('used')}` +
           ` chip ${world.activeChip ? world.activeChip.def.id : '-'}\n` +
-          `step ${session.depth}/${session.steps}  folder ${session.folderSize}\n` +
+          `step ${session.depth}/${session.steps}  folder ${session.folderSize}` +
+          (session.tutorialBeat ? `  tut ${session.tutorialBeat}` : '') + '\n' +
           gestureLines(terminal.gestures, p.moves) + '\n' +
           enemyTimingLines(world.enemies, world.tick, tuning.sim.SIM_HZ) +
           `\nattacks ${world.attacks.length}${cheats.god ? '  GOD' : ''}${cheats.aiEnabled ? '' : '  AI OFF'}`,
@@ -240,6 +242,11 @@ const panel = new DebugPanel(loop.clock, {
     else sceneRenderer.field.overrides.set(key, state);
   },
   runDepth: (depth) => session.debugDepth(depth),
+  tutorial: (lesson) => {
+    session.debugTutorial(lesson);
+    syncWorld();
+  },
+  skipTutorialBeat: () => session.debugSkipTutorialBeat(),
   simPanel: (x, y, action) => {
     const w = session.world;
     const occupied = !w.occupancy.isFree(x, y);

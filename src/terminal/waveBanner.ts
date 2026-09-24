@@ -56,9 +56,10 @@ export function bannerGeometry(text: string): THREE.BufferGeometry {
   return geometry;
 }
 
-function faceMaterial(): THREE.ShaderMaterial {
+/** Hatched front cap: every HATCH_PX-th render row is `hatch`. */
+export function faceMaterial(face = FACE, hatch = HATCH): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
-    uniforms: { uFace: { value: new THREE.Color(FACE) }, uHatch: { value: new THREE.Color(HATCH) } },
+    uniforms: { uFace: { value: new THREE.Color(face) }, uHatch: { value: new THREE.Color(hatch) } },
     vertexShader: 'void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
     fragmentShader: `
       uniform vec3 uFace;
@@ -70,9 +71,10 @@ function faceMaterial(): THREE.ShaderMaterial {
   });
 }
 
-function wallMaterial(): THREE.ShaderMaterial {
+/** Extrusion walls: `wall`, and `dark` on the ones facing down. */
+export function wallMaterial(wall = WALL, dark = WALL_DARK): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
-    uniforms: { uWall: { value: new THREE.Color(WALL) }, uDark: { value: new THREE.Color(WALL_DARK) } },
+    uniforms: { uWall: { value: new THREE.Color(wall) }, uDark: { value: new THREE.Color(dark) } },
     vertexShader: `
       varying float vDown;
       void main() {
@@ -87,7 +89,7 @@ function wallMaterial(): THREE.ShaderMaterial {
   });
 }
 
-function smooth(t: number): number {
+export function smooth(t: number): number {
   const k = Math.max(0, Math.min(1, t));
   return k * k * (3 - 2 * k);
 }

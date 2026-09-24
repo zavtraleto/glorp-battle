@@ -32,7 +32,7 @@ const RING_SIDES = 40;
 const ARM_RATE = 18;
 /** While armed the ring breathes: brightness range and rate (synced with the PCB pulses). */
 export const ARM_BREATHE = 0.35;
-/** Tutorial hint level 1: the breathing amplitude is multiplied by this (tutorial spec §5). */
+/** Tutorial callout target: the breathing amplitude is multiplied by this (GDD §10.5). */
 export const HINT_PULSE_GAIN = 2.2;
 /** A tap that fires flares the ring toward white for this long, seconds. */
 const TAP_FLASH_TIME = 0.18;
@@ -62,7 +62,7 @@ const turn = new THREE.Quaternion();
  * (`beat`, 0..1, peaks at 1). A hint pulse gets its own floor along the same
  * phase, so the ring visibly breathes even with an empty Attack Queue
  * (`armed` 0) — the level is never lower than what plain arming would give
- * (tutorial spec §5).
+ * (GDD §10.5).
  */
 export function ringPulseLevel(armed: number, beat: number, hintPulse: boolean): number {
   const breathe = ARM_BREATHE * (hintPulse ? HINT_PULSE_GAIN : 1);
@@ -175,7 +175,7 @@ export class Trackball {
     this.tapLeft = TAP_FLASH_TIME;
   }
 
-  /** Tutorial hint level 1: pulse harder so the eye goes here (tutorial spec §5). */
+  /** A tutorial callout points here: pulse harder (GDD §10.5). */
   setHintPulse(on: boolean): void {
     this.hintPulse = on;
   }

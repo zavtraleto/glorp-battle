@@ -30,6 +30,9 @@ export interface DebugActions {
   demoCellStates(): void;
   /** Run (GDD §10–11). */
   runDepth(depth: number): void;
+  /** Tutorial (GDD §10.5): start from lesson 1–4, get past the current beat. */
+  tutorial(lesson: number): void;
+  skipTutorialBeat(): void;
   /** Changes the real panels (roguelite spec §3). */
   simPanel(x: number, y: number, action: 'crack' | 'break' | 'repair' | 'grab' | 'rock'): void;
 }
@@ -219,6 +222,15 @@ export class DebugPanel {
     cf.add({ set: () => a.setPlayerHp(hp.value) }, 'set').name('set player HP');
     cf.add({ retry: () => a.restart({}) }, 'retry').name('restart battle');
     cf.close();
+
+    const tut = this.gui.addFolder('Tutorial');
+    const lesson = { n: 1 };
+    tut.add(tuning.tutorial, 'TUT_FREE_MOVE', 0, 15, 0.5).name('free move, s').onFinishChange(() => saveTuningOverrides());
+    tut.add(lesson, 'n', { '1 move + cannon': 1, '2 two cannons': 2, '3 grab + sword': 3, '4 final': 4 }).name('lesson');
+    tut.add({ go: () => a.tutorial(lesson.n) }, 'go').name('start from lesson');
+    tut.add({ restart: () => a.tutorial(1) }, 'restart').name('restart tutorial');
+    tut.add({ skip: () => a.skipTutorialBeat() }, 'skip').name('skip current step');
+    tut.close();
 
     const ff = this.gui.addFolder('Field');
     const cell = { x: 1, y: 1, state: 'BROKEN' as DebugCellState | 'NONE' };

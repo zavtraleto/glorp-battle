@@ -115,11 +115,12 @@ export const DEFAULT_TUNING = {
   counter: {
     COUNTER_STAGGER_TIME: 0.5,
   },
-  /** Tutorial hint ladder (tutorial spec §5), seconds of inaction. */
+  /** Tutorial (GDD §10.5). */
   tutorial: {
-    TUT_HINT_PULSE: 2,
-    TUT_HINT_SEG: 4,
-    TUT_HINT_LINE: 8,
+    /** Free movement after the MOVE callout, before the first Cannon arrives. */
+    TUT_FREE_MOVE: 3,
+    /** Least time between one callout closing and the next opening. */
+    TUT_CALLOUT_GAP: 1,
   },
   mettik: {
     ...STANDARD_ENEMY_TIMING,

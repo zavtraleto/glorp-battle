@@ -79,7 +79,7 @@ Comments cite GDD sections (`// GDD §8.2`). Match the surrounding style: short 
 ## Verifying in the browser
 
 - Dev-only handle: `window.__glorp` (`world`, `session`, `input`, `loop`, `sceneRenderer` / `battleView`, `terminal`, `tuning`, `cheats`, `startBattle`).
-- URL params: `?debug=1&seed=123&battle=3&encounter=e1&wave=2&folder=basic|field|all&god=1&timescale=0.5` (`battle=` / `encounter=` skip the title and use the `folder=` folder; `encounter=s1`…`s5` are the multi-wave run stages, `wave=N` starts from wave N; `all` holds one of every chip); terminal: `?hitzones=1&rscale=400&crtres=240x320&bench=1`.
+- URL params: `?debug=1&seed=123&battle=3&encounter=e1&wave=2&tutorial=2&folder=basic|field|all&god=1&timescale=0.5` (`tutorial=N` opens the tutorial at lesson N; `battle=` / `encounter=` skip the title and use the `folder=` folder; `encounter=s1`…`s5` are the multi-wave run stages, `wave=N` starts from wave N; `all` holds one of every chip); terminal: `?hitzones=1&rscale=400&crtres=240x320&bench=1`.
 - Drive the terminal with synthetic `PointerEvent`s on `#terminal-canvas`; zone rects are in `__glorp.terminal.layout.zones` (CSS px).
 - Do not run `?bench=1` or CPU-throttled measurements unless the user asks.
 - The in-app Browser pane does not run `requestAnimationFrame` while hidden, so the game looks frozen there. Use the Chrome DevTools MCP with phone emulation (`390x844x3,mobile,touch`) for anything time-based.

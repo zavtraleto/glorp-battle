@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Session } from '../app/session';
-import type { TutorialHint } from '../app/tutorial/director';
+import type { CalloutView } from '../app/tutorial/director';
 import { secondsToTicks, tuning } from '../config/tuning';
 import type { Dir } from '../core/input/commands';
 import type { PerfProbe } from '../debug/perfProbe';
@@ -41,6 +41,7 @@ import { Mount } from './parts/mount';
 import { mountCorners, screenBounds } from './interaction/project';
 import { Trackball } from './parts/trackball';
 import { WaveBanner } from './waveBanner';
+import { TutorialCallout, type CalloutPoint } from './tutorialCallout';
 import { terminalMode } from './terminalMode';
 import { chipName, t } from '../i18n';
 import { CHIPS } from '../data/chips';
@@ -119,6 +120,10 @@ export class Terminal {
   private readonly chipDisplay = new SegmentDisplay();
   private readonly pcb = new Pcb();
   private readonly waveBanner = new WaveBanner();
+  private readonly callout = new TutorialCallout();
+  private readonly calloutAt = new THREE.Vector3();
+  /** Last `chips.folderVersion` the rail showed; a new one swaps the hand without ejecting. */
+  private folderVersion = 0;
   private readonly crtMount = new Mount();
   /** The control panel: rail, trackball and pause key on one tilted plane. */
   private readonly controlMount = new Mount();
@@ -369,6 +374,7 @@ export class Terminal {
   /** A new World started: cartridges of the old one vanish without animation. */
   resetWorld(): void {
     this.rail.reset();
+    this.folderVersion = this.opts.session.world.chips.folderVersion;
     this.floaters.clear();
     const world = this.opts.session.world;
     if (world.state === 'BATTLE_INTRO') this.showWaveBanner(world, tuning.fx.INTRO_TIME + WAVE1_BANNER_HOLD);
@@ -394,13 +400,13 @@ export class Terminal {
     const screen = this.battle.render(sceneRenderer, world, alpha, dt);
     this.crt.setScreen(screen, this.battle.width, this.battle.height);
     this.crt.update(dt);
-    const hint = this.opts.session.tutorialHint();
-    this.syncRail(world, hint);
+    const callout = this.opts.session.tutorialCallout();
+    this.syncRail(world, callout);
     this.syncMenu();
     const menu = this.menu ? { spec: this.menu, cursor: this.menuCursor } : null;
     const marks = this.fieldMarks(world, alpha);
     const status = menu ? null : this.battleStatus(world);
-    this.hud.draw({ labels: marks.labels, hp: marks.hp, status, menu, hint: hint?.line ?? null }, this.time);
+    this.hud.draw({ labels: marks.labels, hp: marks.hp, status, menu }, this.time);
 
     this.rail.update(dt);
     this.syncIndicators(dt);
@@ -415,23 +421,68 @@ export class Terminal {
     renderer.setRenderTarget(null);
     renderer.setClearColor(TERMINAL_CLEAR_COLOR, 1);
     renderer.render(this.scene, this.camera);
+    this.renderCallout(dt, callout);
     this.renderWaveBanner(dt);
 
     renderer.getSize(this.size);
     perf.setGpu(renderer.info.render.calls, renderer.info.render.triangles, this.battle.bytes, this.size.x, this.size.y);
   }
 
-  /** The banner sits over everything, in the upper part of the CRT. */
-  private renderWaveBanner(dt: number): void {
+  /** Where banners and callouts sit: the upper part of the CRT, in canvas NDC. */
+  private bannerFrame() {
     const { w: vw, h: vh } = this.layout.viewport;
     const crt = this.layout.crt;
-    this.waveBanner.update(dt, {
+    return {
       aspect: vw / vh,
       centerX: (2 * (crt.x + crt.w / 2)) / vw - 1,
       crtTop: 1 - (2 * crt.y) / vh,
       crtHeight: (2 * crt.h) / vh,
       bodyShare: this.layout.body.w / vw,
-    });
+    };
+  }
+
+  /** Tutorial callout (GDD §10.5): over the terminal, under the wave banner. */
+  private renderCallout(dt: number, view: CalloutView | null): void {
+    const { renderer } = this.opts;
+    renderer.getSize(this.size);
+    const targets = view ? view.targets.map((t) => this.calloutPoint(t)) : [];
+    this.callout.update(dt, view?.text ?? null, targets, view?.arrows ?? true, this.bannerFrame(), this.size.x, this.size.y);
+    this.callout.render(renderer);
+  }
+
+  /** A control on the tilted panel, projected to render pixels (y up). */
+  private calloutPoint(target: 'trackball' | number): CalloutPoint {
+    let cx: number;
+    let cy: number;
+    let rx: number;
+    if (target === 'trackball') {
+      const r = this.trackball.ring3;
+      cx = r.x;
+      cy = r.y;
+      rx = r.outer;
+    } else {
+      const slot = railZoneSlots(this.layout)[target];
+      const w = slot ? rectToWorld(this.layout, slot) : { cx: 0, cy: 0, w: 0, h: 0 };
+      cx = w.cx;
+      cy = w.cy;
+      rx = Math.max(w.w, w.h) / 2;
+    }
+    this.controlMount.updateMatrixWorld(true);
+    const at = this.projectPlan(cx, cy);
+    const edge = this.projectPlan(cx + rx, cy);
+    return { x: at.x, y: at.y, r: Math.hypot(edge.x - at.x, edge.y - at.y) };
+  }
+
+  /** Plan point on the control panel → render pixels. */
+  private projectPlan(x: number, y: number): { x: number; y: number } {
+    const v = this.calloutAt.set(x, y, 0);
+    this.controlMount.inner.localToWorld(v).project(this.camera);
+    return { x: ((v.x + 1) / 2) * this.size.x, y: ((v.y + 1) / 2) * this.size.y };
+  }
+
+  /** The banner sits over everything, in the upper part of the CRT. */
+  private renderWaveBanner(dt: number): void {
+    this.waveBanner.update(dt, this.bannerFrame());
     if (!this.waveBanner.visible) return;
     const { renderer } = this.opts;
     const autoClear = renderer.autoClear;
@@ -445,6 +496,7 @@ export class Terminal {
     for (const c of this.cleanups) c();
     this.battle.dispose();
     this.waveBanner.dispose();
+    this.callout.dispose();
   }
 
   private mode() {
@@ -535,13 +587,19 @@ export class Terminal {
   }
 
   /** In battle the rail is the hand: one slot per chip, states from the sim. */
-  private syncRail(world: World, hint: TutorialHint | null): void {
+  private syncRail(world: World, callout: CalloutView | null): void {
     const chips = world.chips;
     // Chips live only inside a battle: when it is won or lost every cartridge
     // flies out at once, and between battles the rail stays empty (2026-09-19).
     const screen = this.opts.session.screen;
     const inBattle = (screen === 'BATTLE' || screen === 'PAUSED') && world.state !== 'BATTLE_WON' && world.state !== 'PLAYER_DEAD';
     const cooldown = inBattle ? chips.handCooldownProgress(world.playerTick) : null;
+    // A tutorial lesson replaced the folder (GDD §10.5): the old cassettes were
+    // not spent, so they vanish instead of ejecting; the new ones load in.
+    if (chips.folderVersion !== this.folderVersion) {
+      this.folderVersion = chips.folderVersion;
+      this.rail.reset();
+    }
     this.rail.setAttract(this.mode() === 'BATTLE');
     this.rail.syncHand(chips.hand.map((chip, i) => {
       const state = inBattle ? chips.slotState(i) : 'empty';
@@ -560,14 +618,13 @@ export class Terminal {
     });
     const queued = !inBattle || this.mode() === 'MENU' ? null : chips.attackChips()[0] ?? null;
     const shown = world.activeChip?.def ?? (queued ? CHIPS[queued.defId] : null);
-    // The segment display prefers a tutorial hint over the usual "select a chip" fallback.
-    const hintSeg = hint?.seg ?? null;
-    const fallback = hintSeg ?? (inBattle ? t('hud.selectChip') : '');
+    const fallback = inBattle ? t('hud.selectChip') : '';
     this.chipDisplay.set(comboDisplayModel(shown ? toEntry(shown) : null, fallback, world.comboDisplayActive));
 
-    const focus = hint?.focus ?? null;
-    this.rail.setHintPulse(focus === 'chip');
-    this.trackball.setHintPulse(focus === 'move' || focus === 'fire');
+    // The control a tutorial callout points at pulses harder (GDD §10.5).
+    const targets = callout?.targets ?? [];
+    this.rail.setHintPulse(targets.some((t) => t !== 'trackball'));
+    this.trackball.setHintPulse(targets.includes('trackball'));
   }
 
   /** HP numbers above each enemy and rising damage numbers, in CRT pixels. */
