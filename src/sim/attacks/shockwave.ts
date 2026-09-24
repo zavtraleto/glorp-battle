@@ -40,7 +40,8 @@ export class Shockwave implements LaneMover {
   readonly stepTicks: number;
   readonly damage: number;
   readonly dir: 1 | -1;
-  private readonly owner: 'enemy' | 'player';
+  readonly owner: 'enemy' | 'player';
+  readonly timeDomain: 'player' | 'world';
 
   constructor(
     readonly id: number,
@@ -54,14 +55,15 @@ export class Shockwave implements LaneMover {
     this.damage = opts.damage;
     this.dir = opts.dir;
     this.owner = opts.owner;
+    this.timeDomain = opts.owner === 'player' ? 'player' : 'world';
     this.kind = opts.owner === 'player' ? 'playerWave' : 'shockwave';
   }
 
-  update(ctx: AttackContext): void {
+  update(ctx: AttackContext, tick = ctx.tick): void {
     if (this.done) return;
-    if (ctx.tick - this.lastStepTick >= this.stepTicks) {
+    if (tick - this.lastStepTick >= this.stepTicks) {
       this.y += this.dir;
-      this.lastStepTick = ctx.tick;
+      this.lastStepTick = tick;
       if (this.y < 0 || this.y >= ROWS) {
         this.done = true;
         return;

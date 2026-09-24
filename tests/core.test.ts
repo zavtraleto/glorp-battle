@@ -110,10 +110,11 @@ describe('tuning', () => {
     expect('UNKNOWN' in dst.player).toBe(false);
   });
 
-  it('matches GDD defaults for key MMBN1 values', () => {
-    expect(DEFAULT_TUNING.player.PLAYER_MAX_HP).toBe(100);
+  it('uses the compact combat-point scale from the GDD', () => {
+    expect(DEFAULT_TUNING.player.PLAYER_MAX_HP).toBe(10);
     expect(DEFAULT_TUNING.chips.HAND_SIZE).toBe(5);
-    expect(DEFAULT_TUNING.mettik.MET_HP).toBe(40);
+    expect(DEFAULT_TUNING.mettik.MET_HP).toBe(4);
+    expect(DEFAULT_TUNING.hopzap.HOP_DMG).toBe(1);
   });
 });
 

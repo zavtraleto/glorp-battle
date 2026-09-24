@@ -35,7 +35,7 @@ import { Housing } from './parts/housing';
 import { DarkLighting } from './parts/lighting';
 import { Pcb, PCB_PULSE_HZ } from './parts/pcb';
 import { SegmentDisplay } from './parts/segmentDisplay';
-import { chipDisplayText } from './chips/segmentFont';
+import { comboDisplayModel, type ChipDisplayEntry } from './chips/segmentFont';
 import { cooldownForSlot } from './chips/railPlan';
 import { Mount } from './parts/mount';
 import { mountCorners, screenBounds } from './interaction/project';
@@ -80,7 +80,6 @@ const CHIP_DISPLAY_SCALE = 0.6;
 
 export interface TerminalHandlers {
   move(dir: Dir): void;
-  holdMove(dir: Dir | null): void;
   /** A session menu item was chosen. */
   menu(action: MenuAction): void;
   /** Tap on a rail slot: build or unbuild the Attack Queue (GDD §7.2). */
@@ -173,7 +172,6 @@ export class Terminal {
         if (this.mode() === 'MENU') this.moveMenu(d);
         else opts.handlers.move(d);
       },
-      hold: (d) => opts.handlers.holdMove(d),
       roll: (dx, dy) => this.trackball.roll(dx, dy),
       action: (z, x, y) => this.act(z, true, x, y),
       accepts: (z) => acceptsPress(this.mode(), z),
@@ -338,7 +336,7 @@ export class Terminal {
       this.shakeCabinet(SHAKE.playerHit);
     }
     const f = floaterFromEvent(e);
-    if (f) this.floaters.add(f, world.tick);
+    if (f) this.floaters.add(f, world.uiTick);
   }
 
   setHitZonesVisible(v: boolean): void {
@@ -486,7 +484,7 @@ export class Terminal {
     // flies out at once, and between battles the rail stays empty (2026-09-19).
     const screen = this.opts.session.screen;
     const inBattle = (screen === 'BATTLE' || screen === 'PAUSED') && world.state !== 'BATTLE_WON' && world.state !== 'PLAYER_DEAD';
-    const cooldown = inBattle ? chips.handCooldownProgress(world.tick) : null;
+    const cooldown = inBattle ? chips.handCooldownProgress(world.playerTick) : null;
     this.rail.setAttract(this.mode() === 'BATTLE');
     this.rail.syncHand(chips.hand.map((chip, i) => {
       const state = inBattle ? chips.slotState(i) : 'empty';
@@ -497,14 +495,18 @@ export class Terminal {
         order: inBattle ? chips.queuePosition(i) : 0,
       };
     }));
-    const queued = !inBattle || this.mode() === 'MENU' ? [] : chips.attackChips().map((c) => {
-      const def = CHIPS[c.defId];
-      return { name: chipName(c.defId), power: def.power, heal: def.heal, hits: def.hits };
+    const toEntry = (def: (typeof CHIPS)[keyof typeof CHIPS]): ChipDisplayEntry => ({
+      name: chipName(def.id),
+      power: def.power,
+      heal: def.heal,
+      hits: def.hits,
     });
+    const queued = !inBattle || this.mode() === 'MENU' ? null : chips.attackChips()[0] ?? null;
+    const shown = world.activeChip?.def ?? (queued ? CHIPS[queued.defId] : null);
     // The segment display prefers a tutorial hint over the usual "select a chip" fallback.
     const hintSeg = hint?.seg ?? null;
     const fallback = hintSeg ?? (inBattle ? t('hud.selectChip') : '');
-    this.chipDisplay.set(chipDisplayText(queued, fallback));
+    this.chipDisplay.set(comboDisplayModel(shown ? toEntry(shown) : null, fallback, world.comboDisplayActive));
 
     const focus = hint?.focus ?? null;
     this.rail.setHintPulse(focus === 'chip');
@@ -525,9 +527,9 @@ export class Terminal {
       hp.push({ x: p.x * W, y: p.y * H - HP_BAR_GAP, hp: Math.max(0, Math.ceil(e.hp)), level: e.level });
     }
     const life = secondsToTicks(tuning.fx.DAMAGE_NUMBER_TIME);
-    for (const { f, k } of this.floaters.live(world.tick, world.simFrozen ? 0 : alpha, life)) {
+    for (const { f, k } of this.floaters.live(world.uiTick, alpha, life)) {
       // The number flickers out at the end instead of fading (flat colours only).
-      if (k > FLOATER_FLICKER && Math.floor(world.tick / 3) % 2 === 1) continue;
+      if (k > FLOATER_FLICKER && Math.floor(world.uiTick / 3) % 2 === 1) continue;
       // Ease-out rise with a small hop at the start: the number is thrown out of the hit.
       const rise = 1 - (1 - k) * (1 - k);
       const hop = Math.sin(Math.min(1, k / 0.3) * Math.PI) * 0.15;
@@ -535,7 +537,7 @@ export class Terminal {
       const base = tuning.battleVisual.DAMAGE_SCALE + (f.kind === 'playerDamage' ? 1 : 0);
       const scale = base + (k < FLOATER_POP ? 1 : 0);
       // Damage to the player trembles for a moment.
-      const shake = f.kind === 'playerDamage' && k < FLOATER_SHAKE ? (Math.floor(world.tick / 2) % 2 === 0 ? 2 : -2) : 0;
+      const shake = f.kind === 'playerDamage' && k < FLOATER_SHAKE ? (Math.floor(world.uiTick / 2) % 2 === 0 ? 2 : -2) : 0;
       labels.push({ text: f.text, x: p.x * W + shake, y: p.y * H, tone: f.kind, scale });
     }
     return { labels, hp };
@@ -633,7 +635,7 @@ export class Terminal {
   /** The segment display is centred in the frontal lower frame of the CRT. */
   private placeChipDisplay(): void {
     const row = rectToWorld(this.layout, this.layout.display);
-    const h = Math.min(row.h * 0.92, (row.w * 0.72) / this.chipDisplay.aspect) * CHIP_DISPLAY_SCALE;
+    const h = Math.min(row.h * 0.92, (row.w * 0.96) / this.chipDisplay.aspect) * CHIP_DISPLAY_SCALE;
     this.chipDisplay.place(row.cx + (h * this.chipDisplay.aspect) / 2, row.cy + row.h * 0.025, h);
     this.chipDisplay.group.position.z = 0.23;
   }

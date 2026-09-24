@@ -23,8 +23,10 @@ export interface AttackContext {
 export interface Attack {
   readonly id: number;
   readonly kind: string;
+  /** Timeline that advances this attack. */
+  readonly timeDomain?: 'player' | 'world';
   /** Targets already damaged by this attack. */
   readonly hitIds: Set<number>;
   done: boolean;
-  update(ctx: AttackContext): void;
+  update(ctx: AttackContext, tick?: number): void;
 }

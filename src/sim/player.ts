@@ -4,7 +4,7 @@ import type { Field } from './field';
 import type { EntityId, Occupancy } from './occupancy';
 
 // Player (GDD §3): one-cell steps inside the player territory, instant logical
-// move, cooldown, one buffered direction, hold-to-repeat; flinch and i-frames (§9).
+// move, cooldown, one buffered direction, keyboard hold-to-repeat; flinch and i-frames (§9).
 
 export const PLAYER_ID: EntityId = 1;
 
@@ -29,7 +29,7 @@ export class Player {
   /** Remaining ticks of Invis: enemy attacks pass through. */
   invisTicks = 0;
   /** One charge that fully absorbs the next damaging hit. */
-  barrier = false;
+  guard = false;
   /** Remaining ticks of paralysis: no movement or chips, no i-frames. */
   paralyzeTicks = 0;
   /** Remaining ticks of a chip animation; movement remains available. */
@@ -95,7 +95,7 @@ export class Player {
     this.occupancy.move(this.id, this.x, this.y, this.x + v.dx, this.y + v.dy);
     this.x += v.dx;
     this.y += v.dy;
-    this.field.onLeave(this.prevX, this.prevY, tick);
+    this.field.onLeave(this.prevX, this.prevY, tick, 'player');
     this.lastMoveTick = tick;
     this.moves++;
     return true;

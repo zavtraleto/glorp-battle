@@ -89,7 +89,7 @@ function inputs(over: Partial<CellInputs> = {}): CellInputs {
     attackTicks: 9,
     afterTicks: 12,
     spawnTicks: 36,
-    panels: Array.from({ length: 18 }, (_, i) => ({ panel: 'NORMAL' as Panel, owner: sideOfRow(Math.floor(i / 3)) as Side })),
+    panels: Array.from({ length: 18 }, (_, i) => ({ panel: 'NORMAL' as Panel, owner: sideOfRow(Math.floor(i / 3)) as Side, armed: false })),
     objects: [],
     ...over,
   };
@@ -102,6 +102,12 @@ describe('cellStates', () => {
     const s = cellStates(inputs());
     expect(s[k(1, 4)]!.state).toBe('ACTIVE');
     expect(s.filter((c) => c.state === 'NORMAL')).toHaveLength(17);
+  });
+
+  it('shows a persistent ARM mark on an otherwise normal cell', () => {
+    const panels = inputs().panels.map((panel) => ({ ...panel }));
+    panels[k(1, 2)] = { ...panels[k(1, 2)]!, armed: true };
+    expect(cellStates(inputs({ panels }))[k(1, 2)]!.state).toBe('ARM');
   });
 
   it('marks living enemy cells ACTIVE like the player cell', () => {

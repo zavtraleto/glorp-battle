@@ -59,7 +59,8 @@ describe('enemy attack timing grammar', () => {
     const w = world('mettik', false);
     const enemy = w.enemies[0]!;
     enemy.hp = 200;
-    const bomb = new PlayerBomb(700, 1, 4, 1, 1, 50, w.tick, CHIPS.minibomb);
+    const delayed = { ...CHIPS.cannon, shape: { t: 'lob', depth: 3, area: [{ x: 0, y: 0 }] } } as const;
+    const bomb = new PlayerBomb(700, 1, 4, 1, 1, 50, w.tick, delayed);
     w.bombs.push(bomb);
     enemy.setTimedState('LOCK', w.tick, bomb.landTick);
 

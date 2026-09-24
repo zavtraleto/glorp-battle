@@ -3,7 +3,7 @@ import type { Cell, Side } from '../sim/grid';
 
 // Visual state of each battle cell (BATTLE_VISUAL.md §4). Pure.
 
-export type CellVisual = 'NORMAL' | 'ACTIVE' | 'DANGER' | 'ATTACK' | 'AFTER' | 'SPAWN' | 'BROKEN' | 'EMPTY' | 'OBJECT';
+export type CellVisual = 'NORMAL' | 'ACTIVE' | 'DANGER' | 'ATTACK' | 'AFTER' | 'SPAWN' | 'BROKEN' | 'EMPTY' | 'OBJECT' | 'ARM';
 export type DebugCellState = 'BROKEN' | 'EMPTY' | 'OBJECT';
 export type AttackTone = 'accent' | 'red';
 
@@ -21,12 +21,14 @@ export interface CellView {
 export interface AttackMark {
   tick: number;
   tone: AttackTone;
+  domain?: 'player' | 'world';
 }
 
 export interface CellInputs {
   cols: number;
   rows: number;
   tick: number;
+  playerTick?: number;
   player: Cell | null;
   enemies: readonly Cell[];
   danger: readonly Cell[];
@@ -36,7 +38,7 @@ export interface CellInputs {
   spawns: ReadonlyMap<number, number>;
   overrides: ReadonlyMap<number, DebugCellState>;
   /** Simulation panels, indexed by `cellKey`. */
-  panels: readonly { panel: Panel; owner: Side }[];
+  panels: readonly { panel: Panel; owner: Side; armed?: boolean }[];
   objects: readonly Cell[];
   attackTicks: number;
   afterTicks: number;
@@ -54,7 +56,7 @@ export function cellStates(i: CellInputs): CellView[] {
   const actors = new Set(i.enemies.map((c) => cellKey(c.x, c.y, i.cols)));
   if (i.player) actors.add(cellKey(i.player.x, i.player.y, i.cols));
   for (let key = 0; key < i.cols * i.rows; key++) {
-    const p = i.panels[key] as { panel: Panel; owner: Side };
+    const p = i.panels[key] as { panel: Panel; owner: Side; armed?: boolean };
     const view = (state: CellVisual, tone: AttackTone | null = null, age = 0): CellView => ({
       state,
       tone,
@@ -64,7 +66,8 @@ export function cellStates(i: CellInputs): CellView[] {
     });
     const override = i.overrides.get(key);
     const attack = i.attacks.get(key);
-    const attackAge = attack ? i.tick - attack.tick : Infinity;
+    const attackNow = attack?.domain === 'player' ? (i.playerTick ?? i.tick) : i.tick;
+    const attackAge = attack ? attackNow - attack.tick : Infinity;
     const spawnAge = i.spawns.get(key) ?? Infinity;
     if (override === 'EMPTY' || override === 'BROKEN') out.push(view(override));
     else if (p.panel === 'BROKEN') out.push(view('BROKEN'));
@@ -73,6 +76,7 @@ export function cellStates(i: CellInputs): CellView[] {
     else if (spawnAge >= 0 && spawnAge < i.spawnTicks) out.push(view('SPAWN', null, spawnAge));
     else if (override === 'OBJECT' || objects.has(key)) out.push(view('OBJECT'));
     else if (actors.has(key)) out.push(view('ACTIVE'));
+    else if (p.armed) out.push(view('ARM'));
     else if (attack && attackAge < i.attackTicks + i.afterTicks) out.push(view('AFTER', attack.tone, attackAge - i.attackTicks));
     else out.push(view('NORMAL'));
   }

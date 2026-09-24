@@ -4,29 +4,57 @@ import { Shockwave } from '../attacks/shockwave';
 import { laneCellsBelow, type Cell } from '../grid';
 import { Enemy, type EnemyContext } from './enemyBase';
 
-// Mettik (Mettaur, MMBN1) — GDD §8.2.
-// Keeps its row, steps sideways toward the player's lane every MOVE_TIME.
-// When aligned and holding the turn token, it follows the common attack grammar.
+type MettikIntent =
+  | { kind: 'move'; destination: Cell; sampledLane: number }
+  | { kind: 'shockwave'; origin: Cell };
+
+// Mettik (Mettaur, MMBN3) — GDD §8.2.
+// Each decision snapshots a move or Shockwave, then finishes it before observing again.
 
 export class Mettik extends Enemy {
   readonly kind = 'mettik';
+  private intent: MettikIntent | null = null;
+
   constructor(id: number, x: number, y: number, spawnTick: number, level: EnemyLevel = 1) {
     super(id, x, y, tuning.mettik.MET_HP, spawnTick, level);
   }
 
   override dangerCells(): Cell[] {
     if (this.state !== 'LOCK' && this.state !== 'COUNTER') return [];
-    return laneCellsBelow(this.x, this.y + 1);
+    const origin = this.intent?.kind === 'shockwave' ? this.intent.origin : null;
+    return origin ? laneCellsBelow(origin.x, origin.y) : [];
   }
 
-  protected override finishCounterStagger(ctx: EnemyContext): void {
-    ctx.passTurn(this);
+  protected override onCountered(): void {
+    this.intent = null;
   }
 
   /** Starts the attack now if possible (debug "force attack"). */
   override forceAttack(tick: number): void {
     if (this.alive && (this.state === 'IDLE' || this.state === 'MOVE')) {
-      this.setTimedState('INTENTION', tick, this.ticks(tuning.mettik.INTENTION_TIME));
+      this.commitShockwave(tick);
+    }
+  }
+
+  private commitShockwave(tick: number, lane = this.x): void {
+    this.intent = { kind: 'shockwave', origin: { x: lane, y: this.y + 1 } };
+    this.setTimedState('INTENTION', tick, this.ticks(tuning.mettik.INTENTION_TIME));
+  }
+
+  private decide(ctx: EnemyContext): void {
+    const sampledLane = ctx.player.x;
+    if (this.x === sampledLane) {
+      this.commitShockwave(ctx.tick, sampledLane);
+      return;
+    }
+
+    const destination = { x: this.x + Math.sign(sampledLane - this.x), y: this.y };
+    this.intent = { kind: 'move', destination, sampledLane };
+    if (this.tryStep(ctx, destination.x, destination.y)) {
+      this.setTimedState('MOVE', ctx.tick, this.ticks(tuning.mettik.MOVE_TIME));
+    } else {
+      this.intent = null;
+      this.setState('IDLE', ctx.tick);
     }
   }
 
@@ -34,17 +62,17 @@ export class Mettik extends Enemy {
     const m = tuning.mettik;
     const t = ctx.tick;
     switch (this.state) {
-      case 'IDLE':
-      case 'MOVE': {
+      case 'IDLE': {
         if (this.elapsed(t) < this.ticks(m.MOVE_TIME)) return;
-        this.stateTick = t;
-        const px = ctx.player.x;
-        if (this.x === px) {
-          if (ctx.hasTurn(this)) this.setTimedState('INTENTION', t, this.ticks(m.INTENTION_TIME));
-          return;
-        }
-        const nx = this.x + Math.sign(px - this.x);
-        this.state = this.tryStep(ctx, nx, this.y) ? 'MOVE' : 'IDLE';
+        this.decide(ctx);
+        return;
+      }
+      case 'MOVE': {
+        if (!this.phaseDone(t)) return;
+        const completed = this.intent?.kind === 'move' ? this.intent : null;
+        this.intent = null;
+        if (completed && this.x === completed.sampledLane) this.commitShockwave(t, completed.sampledLane);
+        else this.decide(ctx);
         return;
       }
       case 'INTENTION':
@@ -55,8 +83,12 @@ export class Mettik extends Enemy {
         return;
       case 'COUNTER':
         if (!this.phaseDone(t)) return;
+        if (this.intent?.kind !== 'shockwave') {
+          this.setState('IDLE', t);
+          return;
+        }
         ctx.spawnAttack(
-          new Shockwave(ctx.nextAttackId(), this.x, this.y + 1, t, {
+          new Shockwave(ctx.nextAttackId(), this.intent.origin.x, this.intent.origin.y, t, {
             dir: 1,
             damage: this.dmg(m.MET_DMG),
             stepTicks: this.ticks(tuning.projectile.CELL_TRAVEL_TIME),
@@ -70,7 +102,7 @@ export class Mettik extends Enemy {
         return;
       case 'RECOVERY':
         if (!this.phaseDone(t)) return;
-        ctx.passTurn(this);
+        this.intent = null;
         this.setState('IDLE', t);
         return;
       case 'STAGGER':

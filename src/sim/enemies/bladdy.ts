@@ -1,40 +1,110 @@
 import { tuning } from '../../config/tuning';
 import type { EnemyLevel } from '../../data/enemies';
 import type { Attack } from '../attacks/attack';
-import { inField, type Cell } from '../grid';
+import { COLS, ROWS, inField, type Cell } from '../grid';
 import { Enemy, type EnemyContext } from './enemyBase';
 
-// Bladdy (Swordy, MMBN1) — roguelite spec §5.2.
-// Walks to the front edge of its area in the player's lane, telegraphs and
-// swings a long blade over the two panels in front of it.
+type BladdyIntent =
+  | { kind: 'move'; destination: Cell }
+  | { kind: 'wideSword' | 'longSword'; cells: Cell[] }
+  | { kind: 'areaGrab'; cells: Cell[] };
+
+// Bladdy (Swordy, MMBN3) — GDD §8.6.
+// Commits one positional step or one fixed sword/AreaGrab action per decision.
 
 export class Bladdy extends Enemy {
   readonly kind = 'bladdy';
+  private intent: BladdyIntent | null = null;
+  private outOfRangeDecisions = 0;
 
   constructor(id: number, x: number, y: number, spawnTick: number, level: EnemyLevel = 1) {
     super(id, x, y, tuning.bladdy.BLD_HP, spawnTick, level);
   }
 
-  private reach(): Cell[] {
+  private longSwordCells(): Cell[] {
     return [
       { x: this.x, y: this.y + 1 },
       { x: this.x, y: this.y + 2 },
     ].filter((c) => inField(c.x, c.y));
   }
 
+  private wideSwordCells(): Cell[] {
+    return [-1, 0, 1]
+      .map((dx) => ({ x: this.x + dx, y: this.y + 1 }))
+      .filter((c) => inField(c.x, c.y));
+  }
+
   override dangerCells(): Cell[] {
-    return this.state === 'LOCK' || this.state === 'COUNTER' ? this.reach() : [];
+    if (this.state !== 'LOCK' && this.state !== 'COUNTER') return [];
+    return this.intent?.kind === 'move' ? [] : [...(this.intent?.cells ?? [])];
   }
 
   override forceAttack(tick: number): void {
     if (this.alive && (this.state === 'IDLE' || this.state === 'MOVE')) {
-      this.setTimedState('INTENTION', tick, this.ticks(tuning.bladdy.INTENTION_TIME));
+      this.commitAttack({ kind: 'longSword', cells: this.longSwordCells() }, tick);
     }
   }
 
-  /** At the front edge: the panel in front belongs to someone else. */
-  private atFront(ctx: EnemyContext): boolean {
-    return ctx.field.owner(this.x, this.y + 1) !== 'enemy';
+  protected override onCountered(): void {
+    this.intent = null;
+    this.outOfRangeDecisions = 0;
+  }
+
+  private commitAttack(intent: Exclude<BladdyIntent, { kind: 'move' }>, tick: number): void {
+    this.intent = intent;
+    this.outOfRangeDecisions = 0;
+    this.setTimedState('INTENTION', tick, this.ticks(tuning.bladdy.INTENTION_TIME));
+  }
+
+  private selectSword(ctx: EnemyContext): Exclude<BladdyIntent, { kind: 'move' | 'areaGrab' }> | null {
+    const dx = ctx.player.x - this.x;
+    const dy = ctx.player.y - this.y;
+    if (dy === 1 && Math.abs(dx) <= 1) return { kind: 'wideSword', cells: this.wideSwordCells() };
+    if (dx === 0 && dy >= 1 && dy <= 2) return { kind: 'longSword', cells: this.longSwordCells() };
+    return null;
+  }
+
+  private areaGrabCells(ctx: EnemyContext): Cell[] {
+    for (let y = this.y + 1; y < ROWS; y++) {
+      const cells: Cell[] = [];
+      for (let x = 0; x < COLS; x++) {
+        if (ctx.field.owner(x, y) === 'player' && ctx.occupancy.isFree(x, y)) cells.push({ x, y });
+      }
+      if (cells.length > 0) return cells;
+    }
+    return [];
+  }
+
+  private commitMove(ctx: EnemyContext, destination: Cell): boolean {
+    if (!this.tryStep(ctx, destination.x, destination.y)) return false;
+    this.intent = { kind: 'move', destination };
+    this.outOfRangeDecisions = 0;
+    this.setTimedState('MOVE', ctx.tick, this.ticks(tuning.bladdy.MOVE_TIME));
+    return true;
+  }
+
+  private decide(ctx: EnemyContext): void {
+    const sword = this.selectSword(ctx);
+    if (sword) {
+      this.commitAttack(sword, ctx.tick);
+      return;
+    }
+
+    if (this.commitMove(ctx, { x: this.x, y: this.y + 1 })) return;
+    if (this.x !== ctx.player.x) {
+      const horizontal = { x: this.x + Math.sign(ctx.player.x - this.x), y: this.y };
+      if (this.commitMove(ctx, horizontal)) return;
+    }
+
+    this.outOfRangeDecisions++;
+    if (this.outOfRangeDecisions >= tuning.bladdy.BLD_AREA_GRAB_DECISIONS) {
+      const cells = this.areaGrabCells(ctx);
+      if (cells.length > 0) {
+        this.commitAttack({ kind: 'areaGrab', cells }, ctx.tick);
+        return;
+      }
+    }
+    this.setState('IDLE', ctx.tick);
   }
 
   update(ctx: EnemyContext): void {
@@ -42,21 +112,14 @@ export class Bladdy extends Enemy {
     const t = ctx.tick;
     switch (this.state) {
       case 'IDLE':
-      case 'MOVE': {
-        if (this.elapsed(t) < this.ticks(b.MOVE_TIME)) return;
-        this.stateTick = t;
-        const px = ctx.player.x;
-        if (this.x === px && this.atFront(ctx)) {
-          this.setTimedState('INTENTION', t, this.ticks(b.INTENTION_TIME));
-          return;
-        }
-        const moved =
-          this.x !== px
-            ? this.tryStep(ctx, this.x + Math.sign(px - this.x), this.y)
-            : this.tryStep(ctx, this.x, this.y + 1);
-        this.state = moved ? 'MOVE' : 'IDLE';
+        if (this.elapsed(t) < this.ticks(b.BLD_SETTLE_TIME)) return;
+        this.decide(ctx);
         return;
-      }
+      case 'MOVE':
+        if (!this.phaseDone(t)) return;
+        this.intent = null;
+        this.setState('IDLE', t);
+        return;
       case 'INTENTION':
         if (this.phaseDone(t)) this.setTimedState('LOCK', t, this.ticks(b.LOCK_TIME));
         return;
@@ -65,8 +128,21 @@ export class Bladdy extends Enemy {
         return;
       case 'COUNTER': {
         if (!this.phaseDone(t)) return;
+        if (!this.intent || this.intent.kind === 'move') {
+          this.setState('IDLE', t);
+          return;
+        }
+        if (this.intent.kind === 'areaGrab') {
+          for (const cell of this.intent.cells) {
+            if (ctx.occupancy.isFree(cell.x, cell.y) && ctx.field.owner(cell.x, cell.y) === 'player') {
+              ctx.field.setOwner(cell.x, cell.y, 'enemy', t, 'world');
+            }
+          }
+          this.setTimedState('STRIKE', t, this.ticks(b.STRIKE_TIME));
+          return;
+        }
         const swing: Attack = { id: ctx.nextAttackId(), kind: 'slash', hitIds: new Set(), done: true, update: () => undefined };
-        const cells = this.reach();
+        const cells = this.intent.cells;
         for (const c of cells) ctx.hitPlayerAt(swing, c.x, c.y, this.dmg(b.BLD_DMG));
         ctx.emit({ type: 'enemySlash', cells });
         this.setTimedState('STRIKE', t, this.ticks(b.STRIKE_TIME));
@@ -76,7 +152,9 @@ export class Bladdy extends Enemy {
         if (this.phaseDone(t)) this.setTimedState('RECOVERY', t, this.ticks(b.RECOVERY_TIME));
         return;
       case 'RECOVERY':
-        if (this.phaseDone(t)) this.setState('IDLE', t);
+        if (!this.phaseDone(t)) return;
+        this.intent = null;
+        this.setState('IDLE', t);
         return;
       case 'STAGGER':
       case 'DEAD':

@@ -3,17 +3,24 @@ import type { EnemyLevel } from '../../data/enemies';
 import { ROWS, laneCellsBelow, type Cell } from '../grid';
 import { Enemy, type EnemyContext } from './enemyBase';
 
-// Canodron (Canodumb, MMBN1) — GDD §8.3.
+interface CanodronIntent {
+  kind: 'laneShot';
+  lane: number;
+  fromY: number;
+  targetY: number;
+}
+
+// Canodron (Canodumb, MMBN3) — GDD §8.3.
 // Stationary. While the player stands in its lane it sends a cursor down the
 // lane; when the cursor reaches the player's panel it locks, and after
-// CANO_FIRE_DELAY fires an instant shot down the lane. Leaving the lane before
+// the common telegraph fires an instant shot down the committed lane. Leaving the lane before
 // the lock cancels the cursor without a cooldown.
 
 export class Canodron extends Enemy {
   readonly kind = 'canodron';
   private cursorY = -1;
   private cursorStepTick = 0;
-  private locked = false;
+  private intent: CanodronIntent | null = null;
 
   constructor(id: number, x: number, y: number, spawnTick: number, level: EnemyLevel = 1) {
     super(id, x, y, tuning.canodron.CANO_HP, spawnTick, level);
@@ -21,16 +28,18 @@ export class Canodron extends Enemy {
 
   override cursorCell(): { x: number; y: number; locked: boolean } | null {
     if (!['INTENTION', 'LOCK', 'COUNTER'].includes(this.state) || this.cursorY < 0) return null;
-    return { x: this.x, y: this.cursorY, locked: this.locked };
+    if (this.intent) return { x: this.intent.lane, y: this.intent.targetY, locked: true };
+    return { x: this.x, y: this.cursorY, locked: false };
   }
 
   override dangerCells(): Cell[] {
-    return this.state === 'LOCK' || this.state === 'COUNTER' ? laneCellsBelow(this.x, this.y + 1) : [];
+    if ((this.state !== 'LOCK' && this.state !== 'COUNTER') || !this.intent) return [];
+    return laneCellsBelow(this.intent.lane, this.intent.fromY);
   }
 
   protected override onCountered(): void {
     this.cursorY = -1;
-    this.locked = false;
+    this.intent = null;
   }
 
   override forceAttack(tick: number): void {
@@ -43,34 +52,44 @@ export class Canodron extends Enemy {
     this.cursorStepTick += ticks;
   }
 
+  override updateStagger(ctx: EnemyContext): void {
+    if (this.cursorY >= 0 && !this.intent) this.cursorStepTick++;
+    super.updateStagger(ctx);
+  }
+
   private startCursor(tick: number): void {
     this.setState('INTENTION', tick);
     this.cursorY = this.y + 1;
     this.cursorStepTick = tick;
-    this.locked = false;
+    this.intent = null;
   }
 
   private lock(tick: number): void {
-    this.locked = true;
+    this.intent = {
+      kind: 'laneShot',
+      lane: this.x,
+      fromY: this.y + 1,
+      targetY: this.cursorY,
+    };
     this.setTimedState('LOCK', tick, this.ticks(tuning.canodron.LOCK_TIME));
   }
 
   private resetCursor(tick: number): void {
     this.cursorY = -1;
-    this.locked = false;
+    this.intent = null;
     this.setState('IDLE', tick);
   }
 
   update(ctx: EnemyContext): void {
     const c = tuning.canodron;
     const t = ctx.tick;
-    const p = ctx.player;
     switch (this.state) {
       case 'IDLE':
       case 'MOVE':
-        if (p.x === this.x) this.startCursor(t);
+        if (ctx.player.x === this.x) this.startCursor(t);
         return;
       case 'INTENTION': {
+        const p = ctx.player;
         if (p.x !== this.x) {
           this.resetCursor(t);
           return;
@@ -97,16 +116,21 @@ export class Canodron extends Enemy {
         return;
       case 'COUNTER':
         if (!this.phaseDone(t)) return;
-        ctx.shootLane(this.x, this.y + 1, this.dmg(c.CANO_DMG));
+        if (!this.intent) {
+          this.resetCursor(t);
+          return;
+        }
+        ctx.shootLane(this.intent.lane, this.intent.fromY, this.dmg(c.CANO_DMG));
         this.cursorY = -1;
-        this.locked = false;
         this.setTimedState('STRIKE', t, this.ticks(c.STRIKE_TIME));
         return;
       case 'STRIKE':
         if (this.phaseDone(t)) this.setTimedState('RECOVERY', t, this.ticks(c.RECOVERY_TIME));
         return;
       case 'RECOVERY':
-        if (this.phaseDone(t)) this.setState('IDLE', t);
+        if (!this.phaseDone(t)) return;
+        this.intent = null;
+        this.setState('IDLE', t);
         return;
       case 'STAGGER':
       case 'DEAD':

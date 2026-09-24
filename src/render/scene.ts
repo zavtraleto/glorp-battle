@@ -104,12 +104,11 @@ export class SceneRenderer {
 
   handleEvent(e: SimEvent, world: World): void {
     this.fx.handleEvent(e, world);
-    const tick = world.tick;
-    if (e.type === 'chipEffect') this.field.markAttack(e.cells, tick, 'accent');
-    else if (e.type === 'enemyShot') this.field.markAttack([{ x: e.x, y: e.toY }], tick, 'red');
-    else if (e.type === 'bombLanded') this.field.markAttack(e.cells, tick, 'accent');
-    else if (e.type === 'enemySlash') this.field.markAttack(e.cells, tick, 'red');
-    else if (e.type === 'objectBroken') this.field.markAttack([{ x: e.x, y: e.y }], tick, 'red');
+    if (e.type === 'chipEffect') this.field.markAttack(e.cells, world.playerTick, 'accent', 'player');
+    else if (e.type === 'enemyShot') this.field.markAttack([{ x: e.x, y: e.toY }], world.tick, 'red');
+    else if (e.type === 'bombLanded') this.field.markAttack(e.cells, world.playerTick, 'accent', 'player');
+    else if (e.type === 'enemySlash') this.field.markAttack(e.cells, world.tick, 'red');
+    else if (e.type === 'objectBroken') this.field.markAttack([{ x: e.x, y: e.y }], world.tick, 'red');
   }
 
   /** Sprite art arrived: rebuild the views so they pick it up. */
@@ -153,14 +152,21 @@ export class SceneRenderer {
 
   private prepare(world: World, alpha: number, dt: number, w: number, h: number): void {
     const frame: SpriteFrame = { camera: this.camera, width: w, height: h };
-    this.playerView.update(world.player, world.tick, alpha, dt, world.activeChip !== null, frame);
-    this.syncEnemies(world, alpha, dt, frame);
+    const worldAlpha = world.worldRenderAlpha(alpha);
+    this.playerView.update(world.player, world.playerTick, alpha, dt, world.activeChip !== null, frame);
+    this.syncEnemies(world, worldAlpha, dt, frame);
     this.fx.update(world, alpha);
     // Moving enemy attacks light up the cell they are in.
     for (const a of world.attacks) {
-      if (a.kind === 'shockwave') {
+      if (a.kind === 'shockwave' || a.kind === 'playerWave') {
         const m = a as unknown as { x: number; y: number };
-        this.field.markAttack([{ x: m.x, y: m.y }], world.tick, 'red');
+        const playerOwned = a.timeDomain === 'player';
+        this.field.markAttack(
+          [{ x: m.x, y: m.y }],
+          playerOwned ? world.playerTick : world.tick,
+          playerOwned ? 'accent' : 'red',
+          playerOwned ? 'player' : 'world',
+        );
       }
     }
     // Spawn markers under enemies during the battle intro (clock: ui ticks).
@@ -177,7 +183,7 @@ export class SceneRenderer {
       wonTicks: secondsToTicks(fx.RESULT_DELAY_WIN),
       deadTicks: secondsToTicks(fx.RESULT_DELAY_LOSE),
     });
-    this.field.update(world, alpha, this.spawns, signal, world.aimPreview());
+    this.field.update(world, worldAlpha, this.spawns, signal, world.aimPreview());
   }
 
   /** Renders the battle into a render target (the CRT), field fitted to the whole target. */

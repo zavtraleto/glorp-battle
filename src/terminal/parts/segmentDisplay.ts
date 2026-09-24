@@ -1,5 +1,13 @@
 import * as THREE from 'three';
-import { DISPLAY_CHARS, glyph, SEGMENTS, type Segment } from '../chips/segmentFont';
+import {
+  DISPLAY_CHARS,
+  DISPLAY_TOTAL_CHARS,
+  glyph,
+  SEGMENTS,
+  TIMER_BANK_CHARS,
+  type Segment,
+  type SegmentDisplayModel,
+} from '../chips/segmentFont';
 
 // Amber 14-segment display under the rail, right side (TERMINAL.md §3.1): the
 // loaded chip's name or NO CHIP. Unlit segments stay faintly visible, like a
@@ -59,7 +67,7 @@ export class SegmentDisplay {
   private shown: string | null = null;
 
   constructor() {
-    this.canvas.width = DISPLAY_CHARS * CELL_W + PAD * 2;
+    this.canvas.width = DISPLAY_TOTAL_CHARS * CELL_W + PAD * 2;
     this.canvas.height = CELL_H + PAD * 2;
     const ctx = this.canvas.getContext('2d');
     if (!ctx) throw new Error('2D canvas unavailable');
@@ -94,17 +102,26 @@ export class SegmentDisplay {
     this.bezel.position.set(right - w / 2, cy, 0.02);
   }
 
-  /** Shows `text`, left-aligned; redraws only when it changes. */
-  set(text: string): void {
-    if (text === this.shown) return;
-    this.shown = text;
+  /** Shows the fixed label and optional timer-cell banks; redraws only on change. */
+  set(value: string | SegmentDisplayModel): void {
+    const model: SegmentDisplayModel = typeof value === 'string'
+      ? { text: value, leftLit: 0, rightLit: 0 }
+      : value;
+    const key = `${model.text}|${model.leftLit}|${model.rightLit}`;
+    if (key === this.shown) return;
+    this.shown = key;
     const ctx = this.ctx;
     ctx.fillStyle = COLOR.back;
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     ctx.lineWidth = STROKE;
     ctx.lineCap = 'round';
-    for (let i = 0; i < DISPLAY_CHARS; i++) {
-      const on = new Set(glyph(text[i] ?? ' '));
+    for (let i = 0; i < DISPLAY_TOTAL_CHARS; i++) {
+      const inLeftBank = i < TIMER_BANK_CHARS;
+      const inRightBank = i >= TIMER_BANK_CHARS + DISPLAY_CHARS;
+      const timerOn = (inLeftBank && i < model.leftLit)
+        || (inRightBank && i >= DISPLAY_TOTAL_CHARS - model.rightLit);
+      const labelIndex = i - TIMER_BANK_CHARS;
+      const on = new Set(timerOn ? SEGMENTS : glyph(model.text[labelIndex] ?? ' '));
       const x0 = PAD + i * CELL_W;
       // A slight italic slant, as on real segment displays.
       const slant = (y: number) => (CELL_H - y) * 0.12;

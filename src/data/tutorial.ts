@@ -55,7 +55,7 @@ const WIN: TutorialBeat['done'] = (c) => c.world.enemies.every((e) => !e.alive);
 const step1: TutorialStep = {
   id: 'move',
   encounter: { id: 'tut1', tier: 'normal', minDepth: 1, maxDepth: 1, enemies: [{ kind: 'mettik', x: 1, y: 1, level: 1 }] },
-  folder: [chip('cannon', 'A')],
+  folder: [chip('cannon', '*')],
   hand: [null, null, null, null, null],
   beats: [
     {
@@ -72,7 +72,7 @@ const step1: TutorialStep = {
       seg: 'tutorial.seg.chip',
       line: 'tutorial.line.chip',
       // The first cassette flies into the middle slot.
-      enter: (w) => void w.dealChip(2, chip('cannon', 'A')),
+      enter: (w) => void w.dealChip(2, chip('cannon', '*')),
       done: (c) => c.selected >= 1,
     },
     {
@@ -91,10 +91,9 @@ const step2: TutorialStep = {
     id: 'tut2', tier: 'normal', minDepth: 1, maxDepth: 1,
     enemies: [{ kind: 'mettik', x: 0, y: 1, level: 1 }, { kind: 'mettik', x: 2, y: 1, level: 1 }],
   },
-  // Shotgun B shares neither name nor code with Cannon A: it goes dark as soon
-  // as the first Cannon is queued (GDD §7.3) and teaches the rule by itself.
-  folder: [chip('cannon', 'A'), chip('cannon', 'A'), chip('shotgun', 'B')],
-  hand: [chip('cannon', 'A'), chip('cannon', 'A'), chip('shotgun', 'B'), null, null],
+  // Two identical chips teach queueing without introducing code rules in v0.1.
+  folder: [chip('cannon', '*'), chip('cannon', '*')],
+  hand: [chip('cannon', '*'), chip('cannon', '*'), null, null, null],
   beats: [{ id: 'two', focus: 'chip', seg: 'tutorial.seg.queue', line: 'tutorial.line.queue', done: WIN }],
 };
 
@@ -102,8 +101,8 @@ const step3: TutorialStep = {
   id: 'panel',
   // Row 1 is out of sword reach from the player's own area: the panel has to move.
   encounter: { id: 'tut3', tier: 'normal', minDepth: 1, maxDepth: 1, enemies: [{ kind: 'mettik', x: 1, y: 1, level: 1 }] },
-  folder: [chip('panlgrab', 'L'), chip('sword', 'L')],
-  hand: [chip('panlgrab', 'L'), chip('sword', 'L'), null, null, null],
+  folder: [chip('areagrab', '*'), chip('sword', '*')],
+  hand: [chip('areagrab', '*'), chip('sword', '*'), null, null, null],
   beats: [{ id: 'grab', focus: 'chip', seg: 'tutorial.seg.panel', line: 'tutorial.line.panel', done: WIN }],
 };
 
@@ -113,13 +112,13 @@ const step4: TutorialStep = {
     id: 'tut4', tier: 'normal', minDepth: 1, maxDepth: 1,
     enemies: [{ kind: 'canodron', x: 1, y: 0, level: 1 }, { kind: 'mettik', x: 0, y: 2, level: 1 }],
   },
-  // Cannon (40) does not drop Canodron (60) in one shot, so the hand runs out
+  // Cannon (4) does not drop Canodron (6) in one shot, so the hand runs out
   // and spent slots refill on their own — no lesson needed for it.
   folder: [
-    chip('cannon', 'A'), chip('cannon', 'A'), chip('sword', 'E'), chip('panlgrab', 'A'), chip('shotgun', 'B'),
-    chip('cannon', 'A'), chip('shotgun', 'B'),
+    chip('cannon', '*'), chip('cannon', '*'), chip('sword', '*'), chip('areagrab', '*'), chip('spreader', '*'),
+    chip('cannon', '*'), chip('spreader', '*'),
   ],
-  hand: [chip('cannon', 'A'), chip('cannon', 'A'), chip('sword', 'E'), chip('panlgrab', 'A'), chip('shotgun', 'B')],
+  hand: [chip('cannon', '*'), chip('cannon', '*'), chip('sword', '*'), chip('areagrab', '*'), chip('spreader', '*')],
   // The exam: no hints at all.
   beats: [{ id: 'exam', focus: 'fire', seg: null, line: null, done: WIN }],
 };

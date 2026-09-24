@@ -90,10 +90,10 @@ export class FieldView {
   }
 
   /** Records a hit passing through cells (ATTACK then AFTER). */
-  markAttack(cells: readonly Cell[], tick: number, tone: AttackTone): void {
+  markAttack(cells: readonly Cell[], tick: number, tone: AttackTone, domain: 'player' | 'world' = 'world'): void {
     for (const c of cells) {
       if (c.x < 0 || c.x >= COLS || c.y < 0 || c.y >= ROWS) continue;
-      this.marks.set(cellKey(c.x, c.y, COLS), { tick, tone });
+      this.marks.set(cellKey(c.x, c.y, COLS), { tick, tone, domain });
     }
   }
 
@@ -112,6 +112,7 @@ export class FieldView {
       cols: COLS,
       rows: ROWS,
       tick: world.tick,
+      playerTick: world.playerTick,
       player: world.player.alive ? { x: world.player.x, y: world.player.y } : null,
       enemies: world.enemies.filter((enemy) => enemy.alive).map((enemy) => ({ x: enemy.x, y: enemy.y })),
       danger: world.state === 'ACTION' ? world.dangerCells() : [],
@@ -196,6 +197,11 @@ export class FieldView {
           case 'OBJECT':
             this.outline(c, cellHw, cellHd, base);
             this.box(c, cellHw * 0.55, OBJECT_HEIGHT, cellHd * 0.55, col.blue);
+            break;
+          case 'ARM':
+            this.outline(c, cellHw, cellHd, col.red);
+            this.lines.line(c.x - cellHw * 0.45, LINE_Y, c.z - cellHd * 0.45, c.x + cellHw * 0.45, LINE_Y, c.z + cellHd * 0.45, col.red);
+            this.lines.line(c.x - cellHw * 0.45, LINE_Y, c.z + cellHd * 0.45, c.x + cellHw * 0.45, LINE_Y, c.z - cellHd * 0.45, col.red);
             break;
           case 'ACTIVE':
             this.outline(c, cellHw, cellHd, base);

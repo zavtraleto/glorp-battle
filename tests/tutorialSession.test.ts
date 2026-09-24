@@ -134,23 +134,23 @@ describe('tutorial mode', () => {
     tick(s, [{ type: 'useChip' }]);
     run(s, useTicks(CHIPS.cannon) + 2);
     expect(enemy?.alive).toBe(false);
-    // The win rolls straight into battle 2 with three cassettes in the rail.
+    // The win rolls straight into battle 2 with two cassettes in the rail.
     run(s, T(tuning.fx.RESULT_DELAY_WIN) + T(tuning.fx.INTRO_TIME) + 2);
     expect(s.screen).toBe('BATTLE');
-    expect(s.world.chips.hand.filter((c) => c !== null)).toHaveLength(3);
+    expect(s.world.chips.hand.filter((c) => c !== null)).toHaveLength(2);
   });
 
-  it('blocks the odd chip once a Cannon is queued in battle 2', () => {
+  it('allows both neutral-code Cannons to queue in battle 2', () => {
     const s = make();
     s.startTutorial();
     enterAction(s);
     win(s);
     enterAction(s);
-    expect(s.world.chips.hand[2]?.defId).toBe('shotgun');
-    expect(s.world.chips.slotState(2)).toBe('ready');
+    expect(s.world.chips.hand[2]).toBeNull();
     tick(s, [{ type: 'selectChip', slot: 0 }]);
     expect(s.world.chips.slotState(0)).toBe('queued');
     expect(s.world.chips.slotState(1)).toBe('ready');
-    expect(s.world.chips.slotState(2)).toBe('blocked');
+    tick(s, [{ type: 'selectChip', slot: 1 }]);
+    expect(s.world.chips.slotState(1)).toBe('queued');
   });
 });

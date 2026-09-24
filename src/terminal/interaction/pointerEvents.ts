@@ -42,14 +42,14 @@ export function attachPointers(el: HTMLElement, sink: PointerSink): () => void {
   el.addEventListener('pointerdown', onDown);
   el.addEventListener('pointermove', onMove);
   el.addEventListener('pointerup', onUp);
-  el.addEventListener('pointercancel', onUp);
+  el.addEventListener('pointercancel', onBlur);
   el.addEventListener('pointerleave', onLeave);
   window.addEventListener('blur', onBlur);
   return () => {
     el.removeEventListener('pointerdown', onDown);
     el.removeEventListener('pointermove', onMove);
     el.removeEventListener('pointerup', onUp);
-    el.removeEventListener('pointercancel', onUp);
+    el.removeEventListener('pointercancel', onBlur);
     el.removeEventListener('pointerleave', onLeave);
     window.removeEventListener('blur', onBlur);
   };

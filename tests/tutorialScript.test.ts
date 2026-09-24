@@ -99,18 +99,11 @@ describe('tutorial script', () => {
       expect(reachFromStolenRow).toContain(enemy!.y);
     });
 
-    it("battle 2: the third chip shares neither name nor code with the first two", () => {
+    it('battle 2 contains exactly two neutral-code Cannons for the queue lesson', () => {
       const [first, second, third] = TUTORIAL[1]!.hand;
-      expect(first).toBeDefined();
-      expect(second).toBeDefined();
-      expect(third).toBeDefined();
-      // Same lesson the queue beat relies on: adding the third chip to a
-      // selection already holding the first two must be rejected outright.
-      expect(canAddToSelection([first!, second!], third!, tuning.chips.HAND_SIZE)).toBe(false);
-      expect(third!.defId).not.toBe(first!.defId);
-      expect(third!.code).not.toBe(first!.code);
-      expect(third!.code).not.toBe('*');
-      expect(first!.code).not.toBe('*');
+      expect([first?.defId, second?.defId, third]).toEqual(['cannon', 'cannon', null]);
+      expect([first?.code, second?.code]).toEqual(['*', '*']);
+      expect(canAddToSelection([first!], second!, tuning.chips.HAND_SIZE)).toBe(true);
     });
   });
 });

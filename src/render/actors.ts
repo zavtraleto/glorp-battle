@@ -101,7 +101,7 @@ export class PlayerView {
     const blinkTicks = Math.max(1, Math.round(tuning.sim.SIM_HZ / Math.max(1, tuning.fx.IFRAME_BLINK_HZ) / 2));
     this.sprite.visible = !player.invulnerable || Math.floor(tick / blinkTicks) % 2 === 0;
     this.pixels.setDissolve(!player.alive ? 0.6 : player.invisTicks > 0 ? 0.5 : 0);
-    this.pixels.setRipple(player.barrier ? 0.2 : 0, time);
+    this.pixels.setRipple(player.guard ? 0.2 : 0, time);
   }
 }
 

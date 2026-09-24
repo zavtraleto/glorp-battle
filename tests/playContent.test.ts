@@ -22,24 +22,25 @@ const api = runModule as PlayApi;
 const createFolder = (rng: Pick<Rng, 'pick'>): FolderChip[] => api.createPlayFolder?.(rng) ?? [];
 
 describe('Play content profile', () => {
-  it('contains only the nine approved chips and four approved enemies', () => {
+  it('contains only the ten approved chips and four approved enemies', () => {
     expect(api.PLAY_CONTENT).toEqual({
       chips: [
-        { defId: 'cannon', code: 'A' },
-        { defId: 'vulcan', code: 'A' },
-        { defId: 'barrier', code: 'A' },
-        { defId: 'panlgrab', code: 'A' },
-        { defId: 'sword', code: 'L' },
-        { defId: 'widesword', code: 'L' },
-        { defId: 'minibomb', code: 'L' },
-        { defId: 'areagrab', code: 'L' },
-        { defId: 'recover50', code: '*' },
+        { defId: 'cannon', code: '*' },
+        { defId: 'sword', code: '*' },
+        { defId: 'areagrab', code: '*' },
+        { defId: 'mine', code: '*' },
+        { defId: 'block', code: '*' },
+        { defId: 'break', code: '*' },
+        { defId: 'airshot', code: '*' },
+        { defId: 'spreader', code: '*' },
+        { defId: 'widesword', code: '*' },
+        { defId: 'guard', code: '*' },
       ],
       enemies: ['mettik', 'canodron', 'bladdy', 'hopzap'],
     });
   });
 
-  it('builds 18 guaranteed cards plus two seeded bonus cards', () => {
+  it('builds a deterministic pair of every approved chip', () => {
     const a = createFolder(new Rng(123));
     const b = createFolder(new Rng(123));
     expect(a).toHaveLength(20);
@@ -51,13 +52,13 @@ describe('Play content profile', () => {
       expect(counts.get(entry.defId), entry.defId).toBeGreaterThanOrEqual(2);
       expect(a.filter((chip) => chip.defId === entry.defId).every((chip) => chip.code === entry.code)).toBe(true);
     }
-    expect([...counts.values()].reduce((sum, count) => sum + Math.max(0, count - 2), 0)).toBe(2);
+    expect([...counts.values()].every((count) => count === 2)).toBe(true);
   });
 
-  it('allows both bonus draws to select the same chip', () => {
+  it('does not let the RNG alter the prototype folder', () => {
     const firstEveryTime = { pick: <T>(items: readonly T[]) => items[0] as T };
     const folder = createFolder(firstEveryTime);
-    expect(folder.filter((chip) => chip.defId === 'cannon')).toHaveLength(4);
+    expect(folder.filter((chip) => chip.defId === 'cannon')).toHaveLength(2);
     expect(folder).toHaveLength(20);
   });
 });

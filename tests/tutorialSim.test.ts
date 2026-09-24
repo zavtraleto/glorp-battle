@@ -9,7 +9,7 @@ const FOLDER: FolderChip[] = [
   { defId: 'cannon', code: 'A' },
   { defId: 'cannon', code: 'A' },
   { defId: 'sword', code: 'L' },
-  { defId: 'panlgrab', code: 'L' },
+  { defId: 'areagrab', code: 'L' },
 ];
 
 function world(hand?: (FolderChip | null)[]): World {

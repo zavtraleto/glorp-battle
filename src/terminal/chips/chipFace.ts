@@ -17,18 +17,15 @@ import { CHIP_ICONS, ICON_PALETTE } from './chipIcons';
 export const FACE_W = 60;
 export const FACE_H = 74;
 /** Bumped whenever the face design changes, so cached textures are not reused. */
-const FACE_GEN = 5;
+const FACE_GEN = 6;
 
 /**
  * Top panel colour per chip family: dark enough for light glyphs to read on it
  * without an outline, and clear of the red (damage) and yellow (action) roles.
  */
 const GROUP_COLOR: Record<UseTimeGroup, string> = {
-  VULCAN: '#315b75',
   CANNON: '#2f4e93',
   SWORD: '#8f4a1c',
-  BOMB: '#4c3178',
-  RECOVER: '#22643a',
   FIELD: '#5c5438',
 };
 

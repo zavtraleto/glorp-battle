@@ -38,8 +38,15 @@ export const DEFAULT_TUNING = {
     MAX_FRAME_TIME: 0.25,
     TIME_SCALE: 1,
   },
+  combo: {
+    WORLD_TIME_SCALE: 0.7,
+    SLOW_MO_ENTER: 0.1,
+    SLOW_MO_EXIT: 0.15,
+    COMBO_BREAK_EXIT: 0.08,
+    CHIP_INPUT_BUFFER: 0.1,
+  },
   player: {
-    PLAYER_MAX_HP: 100,
+    PLAYER_MAX_HP: 10,
     PLAYER_START_X: 1,
     PLAYER_START_Y: 4,
     CELL_MOVE_TIME: 0.2,
@@ -50,7 +57,10 @@ export const DEFAULT_TUNING = {
   field: {
     PANEL_RESTORE_TIME: 10,
     STEAL_RESTORE_TIME: 15,
-    ROCK_HP: 100,
+    ROCK_HP: 10,
+    STAGGER_TIME: 0.25,
+    BLOCK_HP: 2,
+    BLOCK_DURATION: 6,
   },
   gauge: {
     GAUGE_FILL_TIME: 8.0,
@@ -78,6 +88,16 @@ export const DEFAULT_TUNING = {
     /** ZapRing paralysis (roguelite spec §4.3). */
     PARALYZE_TIME: 1.5,
     INVIS_TIME: 3.0,
+    CHIP_DAMAGE_CANNON: 4,
+    CHIP_DAMAGE_SWORD: 6,
+    CHIP_DAMAGE_MINE: 6,
+    CHIP_DAMAGE_AIRSHOT: 2,
+    CHIP_DAMAGE_SPREADER_MAIN: 3,
+    CHIP_DAMAGE_SPREADER_SPLASH: 1,
+    CHIP_DAMAGE_WIDESWORD: 4,
+    FIELD_TARGET_DISTANCE: 2,
+    BREAK_DURATION: 5,
+    AREA_GRAB_DURATION: 8,
   },
   /** Projectile speed in designer-facing seconds per cell. */
   projectile: {
@@ -96,25 +116,29 @@ export const DEFAULT_TUNING = {
   },
   mettik: {
     ...STANDARD_ENEMY_TIMING,
-    MET_HP: 40,
-    MET_DMG: 10,
+    MET_HP: 4,
+    MET_DMG: 1,
   },
   canodron: {
     ...STANDARD_ENEMY_TIMING,
-    CANO_HP: 60,
-    CANO_DMG: 10,
+    CANO_HP: 6,
+    CANO_DMG: 1,
     CANO_CURSOR_STEP: 0.15,
   },
   hopzap: {
     ...FAST_ENEMY_TIMING,
-    HOP_HP: 40,
-    HOP_DMG: 15,
+    HOP_HP: 4,
+    HOP_DMG: 1,
     HOP_PARALYZE: 1.0,
+    HOP_SETTLE_TIME: 0.15,
+    HOP_ALIGN_CHANCE: 0.6,
   },
   bladdy: {
     ...HEAVY_ENEMY_TIMING,
-    BLD_HP: 90,
-    BLD_DMG: 30,
+    BLD_HP: 9,
+    BLD_DMG: 3,
+    BLD_SETTLE_TIME: 0.15,
+    BLD_AREA_GRAB_DECISIONS: 3,
   },
   fx: {
     HIT_FLASH: 0.1,
@@ -139,8 +163,6 @@ export const DEFAULT_TUNING = {
     HOLD_REPEAT_DELAY: 0.35,
     /** Interval between further repeated steps while the direction stays held. */
     HOLD_REPEAT: 0.2,
-    /** One early Attack press retained until the current chip lock ends. */
-    ACTION_BUFFER_TIME: 0.1,
   },
   /** Battle field look, "CRT Occult Vector" (docs/BATTLE_VISUAL.md §9). */
   battleVisual: {
@@ -152,7 +174,7 @@ export const DEFAULT_TUNING = {
     /** Field centre in NDC, applied to the field, sprites and effects together. */
     VIEW_OFFSET_X: 0,
     /** Extra vertical shift after reserving the HUD band; negative moves down. */
-    VIEW_OFFSET_Y: -0.06,
+    VIEW_OFFSET_Y: 0.01,
     /** Gap between cell outlines (share of a cell). */
     CELL_GAP: 0.08,
     /** Brightness of idle grid lines. */

@@ -9,6 +9,9 @@ import type { EntityId } from './occupancy';
 
 export type SimEvent =
   | { type: 'damaged'; targetId: EntityId; amount: number; x: number; y: number; hpLeft: number }
+  | { type: 'comboStarted'; size: number }
+  | { type: 'comboEnded'; reason: 'complete' }
+  | { type: 'comboBroken' }
   | { type: 'enemyKilled'; id: EntityId; x: number; y: number }
   | { type: 'enemyCountered'; id: EntityId; x: number; y: number }
   | { type: 'enemyRemoved'; id: EntityId }
@@ -28,6 +31,8 @@ export type SimEvent =
   /** Instant enemy shot along a lane (Canodron); toY = row where it stopped, or ROWS if it left the field. */
   | { type: 'enemyShot'; x: number; fromY: number; toY: number }
   | { type: 'panelChanged'; x: number; y: number; panel: Panel; owner: Side }
+  | { type: 'hazardChanged'; x: number; y: number; armed: boolean }
+  | { type: 'claimChanged'; row: number; claimed: boolean }
   | { type: 'objectPlaced'; id: EntityId; kind: ObjectKind; x: number; y: number }
   | { type: 'objectBroken'; id: EntityId; x: number; y: number }
   /** Enemy melee swing over these panels (Bladdy). */

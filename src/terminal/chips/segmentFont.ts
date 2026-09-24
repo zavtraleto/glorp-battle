@@ -59,6 +59,17 @@ const GLYPHS: Record<string, readonly Segment[]> = {
 
 /** Character cells on the wider display in the CRT's lower frame. */
 export const DISPLAY_CHARS = 14;
+/** Extra character cells on each side of the fixed centre label. */
+export const TIMER_BANK_CHARS = 8;
+export const DISPLAY_TOTAL_CHARS = DISPLAY_CHARS + TIMER_BANK_CHARS * 2;
+
+export interface SegmentDisplayModel {
+  /** Fixed-width centre label. */
+  text: string;
+  /** Lit cells, counted from the outside edge toward the label. */
+  leftLit: number;
+  rightLit: number;
+}
 
 export function hasGlyph(ch: string): boolean {
   return ch.toUpperCase() in GLYPHS;
@@ -93,4 +104,15 @@ export function chipDisplayText(queued: readonly ChipDisplayEntry[], noChip: str
     value = String(first.heal);
   }
   return centre(value ? `${first.name} ${value}` : first.name, width);
+}
+
+/** Fixed centre label plus symmetric character-cell banks for Combo Time. */
+export function comboDisplayModel(
+  entry: ChipDisplayEntry | null,
+  noChip: string,
+  active: boolean,
+): SegmentDisplayModel {
+  const text = chipDisplayText(entry ? [entry] : [], noChip);
+  const lit = active ? TIMER_BANK_CHARS : 0;
+  return { text, leftLit: lit, rightLit: lit };
 }

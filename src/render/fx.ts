@@ -19,6 +19,7 @@ type TimedKind = 'tracer' | 'enemyTracer' | 'slash' | 'enemySlash' | 'heal' | 'b
 
 interface Timed {
   kind: TimedKind;
+  domain: 'player' | 'world';
   startTick: number;
   life: number;
   x: number;
@@ -77,36 +78,37 @@ export class FxView {
   }
 
   handleEvent(e: SimEvent, world: World): void {
-    const tick = world.tick;
+    const playerTick = world.playerTick;
+    const worldTick = world.tick;
     const fx = tuning.fx;
     switch (e.type) {
       case 'chipEffect':
         if (e.shape === 'lane') {
-          this.push('tracer', tick, fx.CANNON_TRACER_TIME, e.x, e.fromY, e.toY);
+          this.push('tracer', 'player', playerTick, fx.CANNON_TRACER_TIME, e.x, e.fromY, e.toY);
         } else if (e.shape === 'near') {
-          for (const c of e.cells) this.push('slash', tick, fx.SLASH_TIME, c.x, c.y);
+          for (const c of e.cells) this.push('slash', 'player', playerTick, fx.SLASH_TIME, c.x, c.y);
         } else if (CHIPS[e.defId].heal) {
-          this.push('heal', tick, fx.HEAL_FX_TIME, e.x, e.fromY);
+          this.push('heal', 'player', playerTick, fx.HEAL_FX_TIME, e.x, e.fromY);
         }
         break;
       case 'bombLanded':
-        for (const c of e.cells) this.push('blast', tick, fx.EXPLOSION_TIME, c.x, c.y);
+        for (const c of e.cells) this.push('blast', 'player', playerTick, fx.EXPLOSION_TIME, c.x, c.y);
         break;
       case 'enemySlash':
-        for (const c of e.cells) this.push('enemySlash', tick, fx.SLASH_TIME, c.x, c.y);
+        for (const c of e.cells) this.push('enemySlash', 'world', worldTick, fx.SLASH_TIME, c.x, c.y);
         break;
       case 'enemyShot':
-        this.push('enemyTracer', tick, fx.CANNON_TRACER_TIME, e.x, e.fromY, e.toY);
+        this.push('enemyTracer', 'world', worldTick, fx.CANNON_TRACER_TIME, e.x, e.fromY, e.toY);
         break;
       case 'damaged':
-        if (e.targetId !== PLAYER_ID && e.amount > 0) this.push('spark', tick, SPARK_TIME, e.x, e.y, tick % 7);
+        if (e.targetId !== PLAYER_ID && e.amount > 0) this.push('spark', 'player', playerTick, SPARK_TIME, e.x, e.y, playerTick % 7);
         break;
       case 'enemyKilled':
-        this.push('kill', tick, KILL_TIME, e.x, e.y, tick % 5);
+        this.push('kill', 'player', playerTick, KILL_TIME, e.x, e.y, playerTick % 5);
         break;
       case 'enemyWarped':
-        this.push('warp', tick, fx.WARP_FX_TIME, e.fromX, e.fromY);
-        this.push('warp', tick, fx.WARP_FX_TIME, e.x, e.y);
+        this.push('warp', 'world', worldTick, fx.WARP_FX_TIME, e.fromX, e.fromY);
+        this.push('warp', 'world', worldTick, fx.WARP_FX_TIME, e.x, e.y);
         break;
     }
   }
@@ -116,29 +118,36 @@ export class FxView {
     signal('red', 1, col.red);
     signal('phosphor', 1, col.phosphor);
     signal('purple', 1, col.purple);
-    const tick = world.tick;
+    const worldTick = world.tick;
+    const worldAlpha = world.worldRenderAlpha(alpha);
+    const playerTick = world.playerTick;
     this.floor.begin();
     this.floorFill.begin();
     this.air.begin();
     this.airFill.begin();
 
     for (const a of world.attacks) {
+      const playerOwned = a.timeDomain === 'player';
+      const tick = playerOwned ? playerTick : worldTick;
+      const attackAlpha = playerOwned ? alpha : worldAlpha;
       if (a.kind === 'shockwave' || a.kind === 'playerWave')
-        this.wave(a as unknown as LaneMover, tick, alpha, a.kind === 'playerWave' ? col.accent : col.red);
-      else if (a.kind === 'zapring') this.ring(a as unknown as LaneMover, tick, alpha);
+        this.wave(a as unknown as LaneMover, tick, attackAlpha, a.kind === 'playerWave' ? col.accent : col.red);
+      else if (a.kind === 'zapring') this.ring(a as unknown as LaneMover, tick, attackAlpha);
     }
-    for (const b of world.bombs) this.bomb(b, tick, alpha);
+    for (const b of world.bombs) this.bomb(b, playerTick, alpha);
     if (world.state === 'ACTION') {
       for (const e of world.enemies) {
         const c = e.alive ? e.cursorCell() : null;
-        if (c) this.cursor(c, c.locked, tick);
+        if (c) this.cursor(c, c.locked, worldTick);
       }
     }
-    this.trail(world, tick, alpha);
-    this.aura(world, (tick + alpha) / tuning.sim.SIM_HZ);
+    this.trail(world, playerTick, alpha);
+    this.aura(world, (playerTick + alpha) / tuning.sim.SIM_HZ);
 
     this.timed = this.timed.filter((t) => {
-      const age = tick - t.startTick + alpha;
+      const tick = t.domain === 'player' ? playerTick : worldTick;
+      const timedAlpha = t.domain === 'player' ? alpha : worldAlpha;
+      const age = tick - t.startTick + timedAlpha;
       if (age >= t.life || age < -1) return false;
       this.drawTimed(t, Math.max(0, age) / t.life, tick);
       return true;
@@ -154,8 +163,8 @@ export class FxView {
     this.timed = [];
   }
 
-  private push(kind: TimedKind, tick: number, seconds: number, x: number, y: number, toY = y): void {
-    this.timed.push({ kind, startTick: tick, life: Math.max(1, secondsToTicks(seconds)), x, y, toY });
+  private push(kind: TimedKind, domain: 'player' | 'world', tick: number, seconds: number, x: number, y: number, toY = y): void {
+    this.timed.push({ kind, domain, startTick: tick, life: Math.max(1, secondsToTicks(seconds)), x, y, toY });
   }
 
   private drawTimed(t: Timed, k: number, tick: number): void {

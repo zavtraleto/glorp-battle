@@ -2,7 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { CHIPS, type ChipId } from '../src/data/chips';
 import { chipName, t } from '../src/i18n';
 import { trackballArmed } from '../src/terminal/controlRules';
-import { chipDisplayText, DISPLAY_CHARS, glyph, hasGlyph } from '../src/terminal/chips/segmentFont';
+import {
+  chipDisplayText,
+  comboDisplayModel,
+  DISPLAY_CHARS,
+  DISPLAY_TOTAL_CHARS,
+  glyph,
+  hasGlyph,
+  TIMER_BANK_CHARS,
+} from '../src/terminal/chips/segmentFont';
 
 // The amber chip display under the rail and the trackball ring (TERMINAL.md §3.1).
 describe('14-segment display', () => {
@@ -27,17 +35,17 @@ describe('14-segment display', () => {
   });
 
   it('centres the first loaded chip with its damage and never shows the queue count', () => {
-    expect(chipDisplayText([{ name: 'Cannon', power: 40 }], 'NO CHIP')).toBe('  CANNON 40   ');
+    expect(chipDisplayText([{ name: 'Cannon', power: 4 }], 'NO CHIP')).toBe('   CANNON 4   ');
     expect(chipDisplayText([
-      { name: 'Cannon', power: 40 },
-      { name: 'Sword', power: 80 },
-      { name: 'Sword', power: 80 },
-    ], 'NO CHIP')).toBe('  CANNON 40   ');
+      { name: 'Cannon', power: 4 },
+      { name: 'Sword', power: 8 },
+      { name: 'Sword', power: 8 },
+    ], 'NO CHIP')).toBe('   CANNON 4   ');
   });
 
   it('shows multi-hit damage and healing values', () => {
-    expect(chipDisplayText([{ name: 'Vulcan', power: 10, hits: 3 }], 'NO CHIP')).toBe(' VULCAN 10X3  ');
-    expect(chipDisplayText([{ name: 'Recov30', power: null, heal: 30 }], 'NO CHIP')).toBe('  RECOV30 30  ');
+    expect(chipDisplayText([{ name: 'Vulcan', power: 1, hits: 3 }], 'NO CHIP')).toBe('  VULCAN 1X3  ');
+    expect(chipDisplayText([{ name: 'Recov3', power: null, heal: 3 }], 'NO CHIP')).toBe('   RECOV3 3   ');
     expect(chipDisplayText([{ name: 'Barrier', power: null }], 'NO CHIP')).toBe('   BARRIER    ');
   });
 
@@ -49,6 +57,27 @@ describe('14-segment display', () => {
       expect(text).toHaveLength(DISPLAY_CHARS);
       expect(text).not.toContain('+');
     }
+  });
+
+  it('keeps full symmetric side banks while Combo State is active', () => {
+    const entry = { name: 'Sword', power: 6 };
+    const active = comboDisplayModel(entry, 'NO CHIP', true);
+
+    expect(active).toEqual({
+      text: '   SWORD 6    ',
+      leftLit: TIMER_BANK_CHARS,
+      rightLit: TIMER_BANK_CHARS,
+    });
+    expect(active.text).toHaveLength(DISPLAY_CHARS);
+    expect(DISPLAY_TOTAL_CHARS).toBe(DISPLAY_CHARS + TIMER_BANK_CHARS * 2);
+  });
+
+  it('turns both side banks off outside Combo State', () => {
+    expect(comboDisplayModel({ name: 'Cannon', power: 4 }, 'NO CHIP', false)).toEqual({
+      text: '   CANNON 4   ',
+      leftLit: 0,
+      rightLit: 0,
+    });
   });
 });
 

@@ -18,24 +18,23 @@ interface PlayChip {
 /** Content exposed by the player-facing Play mode. Tutorial and debug do not use this filter. */
 export const PLAY_CONTENT = {
   chips: [
-    { defId: 'cannon', code: 'A' },
-    { defId: 'vulcan', code: 'A' },
-    { defId: 'barrier', code: 'A' },
-    { defId: 'panlgrab', code: 'A' },
-    { defId: 'sword', code: 'L' },
-    { defId: 'widesword', code: 'L' },
-    { defId: 'minibomb', code: 'L' },
-    { defId: 'areagrab', code: 'L' },
-    { defId: 'recover50', code: '*' },
+    { defId: 'cannon', code: '*' },
+    { defId: 'sword', code: '*' },
+    { defId: 'areagrab', code: '*' },
+    { defId: 'mine', code: '*' },
+    { defId: 'block', code: '*' },
+    { defId: 'break', code: '*' },
+    { defId: 'airshot', code: '*' },
+    { defId: 'spreader', code: '*' },
+    { defId: 'widesword', code: '*' },
+    { defId: 'guard', code: '*' },
   ] satisfies readonly PlayChip[],
   enemies: ['mettik', 'canodron', 'bladdy', 'hopzap'] satisfies readonly EnemyKind[],
 } as const;
 
-/** Two of every Play chip plus two independent seeded bonus draws. */
-export function createPlayFolder(rng: Pick<Rng, 'pick'>): FolderChip[] {
-  const folder = PLAY_CONTENT.chips.flatMap((chip) => [{ ...chip }, { ...chip }]);
-  for (let i = 0; i < 2; i++) folder.push({ ...rng.pick(PLAY_CONTENT.chips) });
-  return folder;
+/** Two of every Play chip: a deterministic 20-chip prototype folder. */
+export function createPlayFolder(_rng: Pick<Rng, 'pick'>): FolderChip[] {
+  return PLAY_CONTENT.chips.flatMap((chip) => [{ ...chip }, { ...chip }]);
 }
 
 const spawn = (kind: EnemyKind, x: number, y: number): EnemySpawn => ({ kind, x, y, level: 1 });

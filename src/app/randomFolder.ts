@@ -8,8 +8,8 @@ import type { FolderChip } from '../sim/chips/chipSystem';
 // multi-selections sometimes line up. Pure and seeded.
 
 export const RANDOM_MAX_COPIES = 4;
-export const RANDOM_MIN_HEALS = 3;
-export const RANDOM_MAX_FIELD = 4;
+export const RANDOM_MIN_HEALS = 0;
+export const RANDOM_MAX_FIELD = 12;
 /** Chance a chip takes a core code when it has one. [оценка] */
 const CORE_CODE_CHANCE = 0.7;
 const CORE_CODES = 3;

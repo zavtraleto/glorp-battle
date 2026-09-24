@@ -32,11 +32,20 @@ describe('folders', () => {
   });
 });
 
-describe('chip catalogue (MMBN3)', () => {
-  it.each([
-    ['cannon', 40], ['hicannon', 60], ['mcannon', 80], ['longsword', 80], ['minibomb', 50], ['shockwave', 60], ['zapring', 20],
-  ] as const)('%s deals %i (MMBN3)', (id, power) => {
-    expect(CHIPS[id].power).toBe(power);
+describe('chip catalogue (compact MMBN3 scale)', () => {
+  it('contains exactly the ten v0.1 playtest chips', () => {
+    expect(Object.keys(CHIPS)).toEqual([
+      'cannon', 'sword', 'areagrab', 'mine', 'block',
+      'break', 'airshot', 'spreader', 'widesword', 'guard',
+    ]);
+  });
+
+  it('keeps the required relative power relationships', () => {
+    expect(CHIPS.sword.power).toBeGreaterThan(CHIPS.cannon.power!);
+    expect(CHIPS.mine.power).toBeGreaterThan(CHIPS.cannon.power!);
+    expect(CHIPS.airshot.power).toBeLessThan(CHIPS.cannon.power!);
+    expect(CHIPS.widesword.power).toBeLessThan(CHIPS.sword.power!);
+    expect(CHIPS.spreader.splashPower).toBeLessThan(CHIPS.spreader.power!);
   });
 
   it('every chip has a name, a description and an icon', () => {
@@ -47,51 +56,39 @@ describe('chip catalogue (MMBN3)', () => {
     }
   });
 
-  it('defines Vulcan as a three-hit lane attack', () => {
-    const vulcan = (CHIPS as Record<string, unknown>).vulcan;
-    expect(vulcan).toMatchObject({
-      id: 'vulcan',
-      power: 10,
-      kind: 'attack',
-      useTime: 'VULCAN',
-      hits: 3,
-      hitStep: 'VULCAN_HIT_STEP',
-      shape: { t: 'lane' },
+  it('uses the approved full player-facing names', () => {
+    expect(Object.fromEntries((Object.keys(CHIPS) as ChipId[]).map((id) => [id, chipName(id)]))).toEqual({
+      cannon: 'Cannon',
+      sword: 'Sword',
+      areagrab: 'Area Grab',
+      mine: 'Mine',
+      block: 'Block',
+      break: 'Break',
+      airshot: 'AirShot',
+      spreader: 'Spreader',
+      widesword: 'WideSword',
+      guard: 'Guard',
     });
+    expect(chipDesc('mine')).toContain('two cells ahead');
+    expect(chipDesc('break')).toContain('two cells ahead');
   });
 
-  it('defines Barrier as a one-charge support chip', () => {
-    const barrier = (CHIPS as Record<string, unknown>).barrier;
-    expect(barrier).toMatchObject({
-      id: 'barrier',
+  it('defines Guard as a one-charge support chip', () => {
+    expect(CHIPS.guard).toMatchObject({
+      id: 'guard',
       power: null,
       kind: 'support',
-      useTime: 'RECOVER',
-      barrier: true,
+      useTime: 'FIELD',
+      guard: true,
       shape: { t: 'self' },
     });
   });
 });
 
 describe('selection rule', () => {
-  it('accepts same name with different codes', () => {
-    expect(isValidSelection([k('cannon', 'A'), k('cannon', 'B'), k('cannon', 'C')])).toBe(true);
-  });
-
-  it('accepts same code with different names', () => {
-    expect(isValidSelection([k('cannon', 'A'), k('recover50', 'A')])).toBe(true);
-    expect(isValidSelection([k('sword', 'S'), k('widesword', 'S'), k('longsword', 'S')])).toBe(true);
-  });
-
-  it('does not mix the two rules', () => {
-    expect(isValidSelection([k('cannon', 'A'), k('cannon', 'F'), k('recover50', 'A')])).toBe(false);
-    expect(isValidSelection([k('cannon', 'A'), k('sword', 'S')])).toBe(false);
-  });
-
-  it('treats * as a wildcard code', () => {
-    expect(isValidSelection([k('cannon', '*'), k('sword', 'S')])).toBe(true);
-    expect(isValidSelection([k('cannon', 'A'), k('sword', '*'), k('recover50', 'A')])).toBe(true);
-    expect(isValidSelection([k('cannon', 'A'), k('sword', '*'), k('widesword', 'S')])).toBe(false);
+  it('allows the neutral playtest code to combine any of the ten chips', () => {
+    expect(isValidSelection([k('cannon', '*'), k('mine', '*'), k('airshot', '*')])).toBe(true);
+    expect(isValidSelection([k('areagrab', '*'), k('break', '*'), k('sword', '*')])).toBe(true);
   });
 });
 
@@ -145,7 +142,9 @@ describe('battle flow', () => {
   });
 
   it('refills a spent slot after its cooldown without leaving ACTION', () => {
-    const w = new World({ seed: 1, battleIndex: 1, skipIntro: true, cheats: { god: true, aiEnabled: false } });
+    const folder = Array.from({ length: 8 }, () => ({ defId: 'cannon' as const, code: '*' as const }));
+    const w = new World({ seed: 1, battleIndex: 1, folder, skipIntro: true, cheats: { god: true, aiEnabled: false } });
+    for (const enemy of w.enemies) enemy.hp = 100_000;
     const slot = w.chips.hand.findIndex((c) => c !== null);
     step(w, [{ type: 'selectChip', slot }, { type: 'useChip' }]);
     expect(w.chips.hand[slot]).toBeNull();

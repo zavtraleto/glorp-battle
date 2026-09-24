@@ -38,6 +38,13 @@ export interface DebugActions {
 const RANGES: Record<string, [number, number, number]> = {
   SIM_HZ: [30, 240, 1],
   TIME_SCALE: [0.05, 4, 0.05],
+  WORLD_TIME_SCALE: [0.1, 1, 0.05],
+  SLOW_MO_ENTER: [0, 1, 0.01],
+  SLOW_MO_EXIT: [0, 1, 0.01],
+  COMBO_BREAK_EXIT: [0, 0.5, 0.01],
+  CHIP_INPUT_BUFFER: [0, 0.5, 0.01],
+  HOP_ALIGN_CHANCE: [0, 1, 0.05],
+  BLD_AREA_GRAB_DECISIONS: [1, 10, 1],
   VIEW_PITCH: [5, 80, 1],
   VIEW_FOV: [15, 90, 1],
   VIEW_FILL: [0.5, 1.5, 0.01],
@@ -191,7 +198,7 @@ export class DebugPanel {
     // More cheats arrive with their systems (fill gauge, give chip...).
     const cf = this.gui.addFolder('Cheats');
     const a = this.actions;
-    const hp = { value: 100 };
+    const hp = { value: tuning.player.PLAYER_MAX_HP };
     cf.add(a.cheats, 'god').name('god mode (no damage)');
     cf.add(a.cheats, 'aiEnabled').name('enemy AI');
     cf.add({ kill: () => a.killAll() }, 'kill').name('kill all enemies');
@@ -199,7 +206,7 @@ export class DebugPanel {
     const give = { chip: 'cannon' as ChipId };
     cf.add(give, 'chip', Object.keys(CHIPS)).name('chip to give');
     cf.add({ give: () => a.giveChip(give.chip) }, 'give').name('add chip to queue');
-    cf.add(hp, 'value', 0, 100, 1).name('player HP');
+    cf.add(hp, 'value', 0, tuning.player.PLAYER_MAX_HP, 1).name('player HP');
     cf.add({ set: () => a.setPlayerHp(hp.value) }, 'set').name('set player HP');
     cf.add({ retry: () => a.restart({}) }, 'retry').name('restart battle');
     cf.close();
