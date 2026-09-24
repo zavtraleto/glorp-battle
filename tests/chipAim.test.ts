@@ -27,6 +27,13 @@ function give(w: World, id: ChipId): void {
 }
 
 describe('chip aim preview', () => {
+  it('aims Area Grab at the free cells of the nearest enemy row', () => {
+    const w = world();
+    addEnemy(w, 1, 2);
+    give(w, 'areagrab');
+    expect(w.aimPreview()?.cells).toEqual([{ x: 0, y: 2 }, { x: 2, y: 2 }]);
+  });
+
   it('aims Cannon at the first lane target', () => {
     const w = world();
     addEnemy(w, 1, 1);
@@ -41,11 +48,11 @@ describe('chip aim preview', () => {
     expect(w.aimPreview()?.cells).toEqual([{ x: 1, y: 1 }, { x: 0, y: 1 }, { x: 2, y: 1 }]);
   });
 
-  it('shows Mine fixed two cells ahead', () => {
+  it('shows Mine fixed MINE_TARGET_DISTANCE cells ahead', () => {
     const w = world();
     addEnemy(w, 2, 0);
     give(w, 'mine');
-    expect(w.aimPreview()?.cells).toEqual([{ x: 1, y: 2 }]);
+    expect(w.aimPreview()?.cells).toEqual([{ x: 1, y: w.player.y - tuning.chips.MINE_TARGET_DISTANCE }]);
     expect(w.aimPreview()?.beam).toBeNull();
   });
 });

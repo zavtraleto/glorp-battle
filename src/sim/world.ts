@@ -16,7 +16,7 @@ import { ChipSystem, type ChipInstance } from './chips/chipSystem';
 import { ComboState } from './chips/comboState';
 import { startChip, type ActiveChip } from './chips/executor';
 import { lobArea, lobTarget, shapeCells } from './chips/patterns';
-import { chipAim, type Aim } from './chips/aim';
+import { chipAim, fieldTargetDistance, type Aim } from './chips/aim';
 import type { Enemy, EnemyContext } from './enemies/enemyBase';
 import { createEnemy } from './enemies/factory';
 import type { SimEvent } from './events';
@@ -274,7 +274,7 @@ export class World implements EnemyContext, AttackContext {
   /** All cells currently telegraphed by enemies. */
   dangerCells(): Cell[] {
     const cells: Cell[] = [];
-    for (const e of this.enemies) cells.push(...e.dangerCells());
+    for (const e of this.enemies) cells.push(...e.dangerCells(this.field));
     return cells;
   }
 
@@ -759,7 +759,7 @@ export class World implements EnemyContext, AttackContext {
         break;
       case 'self':
         if (def.field === 'arm' || def.field === 'break') {
-          const target = { x: px, y: py - tuning.chips.FIELD_TARGET_DISTANCE };
+          const target = { x: px, y: py - fieldTargetDistance(def.field) };
           effect(target.y >= 0 ? [target] : []);
         } else effect([]);
         break;
@@ -781,21 +781,28 @@ export class World implements EnemyContext, AttackContext {
   private applyFieldAction(action: FieldAction, px: number, py: number): void {
     const f = this.field;
     switch (action) {
-      case 'claim':
-        f.claimNextRow(this.playerTick, secondsToTicks(tuning.chips.AREA_GRAB_DURATION), 'player');
+      case 'claim': {
+        const free = (x: number, y: number) => this.occupancy.isFree(x, y);
+        const claim = f.claimNextRow(this.playerTick, secondsToTicks(tuning.chips.AREA_GRAB_DURATION), 'player', free);
+        // Enemies keep the panel they stand on and take a small hit (GDD §6.2).
+        for (const c of claim?.held ?? []) {
+          const enemy = this.enemyAt(c.x, c.y);
+          if (enemy?.alive) this.resolveHit({ target: enemy, damage: tuning.chips.AREA_GRAB_OCCUPANT_DMG });
+        }
         return;
+      }
       case 'occupy':
         this.placeBlock(px, py - 1);
         return;
       case 'arm':
-        if (this.occupancy.isFree(px, py - tuning.chips.FIELD_TARGET_DISTANCE)) {
-          f.arm(px, py - tuning.chips.FIELD_TARGET_DISTANCE, {
+        if (this.occupancy.isFree(px, py - fieldTargetDistance('arm'))) {
+          f.arm(px, py - fieldTargetDistance('arm'), {
             kind: 'mine', side: 'player', damage: CHIPS.mine.power ?? 0,
           });
         }
         return;
       case 'break':
-        this.breakCell(px, py - tuning.chips.FIELD_TARGET_DISTANCE, secondsToTicks(tuning.chips.BREAK_DURATION));
+        this.breakCell(px, py - fieldTargetDistance('break'), secondsToTicks(tuning.chips.BREAK_DURATION));
         return;
     }
   }
@@ -861,8 +868,10 @@ export class World implements EnemyContext, AttackContext {
         return;
       case 'BATTLE_WON':
       case 'PLAYER_DEAD':
-        // Deletion animations keep playing after the battle ends.
+        // Both clocks keep running after the battle ends so every animation on
+        // them (deletions, player-clock hit and kill FX) plays out.
         this.tick++;
+        this.time += dt;
         this.removeDeletedEnemies();
         return;
       case 'ACTION':

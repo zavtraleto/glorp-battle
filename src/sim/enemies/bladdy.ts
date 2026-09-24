@@ -64,13 +64,17 @@ export class Bladdy extends Enemy {
     return null;
   }
 
+  /**
+   * Player-owned cells of the nearest row with a free one, never closer than
+   * BLD_MIN_PLAYER_ROWS to the back edge. The player's own cell is included:
+   * it stays theirs, but the grab hurts them.
+   */
   private areaGrabCells(ctx: EnemyContext): Cell[] {
-    for (let y = this.y + 1; y < ROWS; y++) {
+    const lastRow = ROWS - 1 - tuning.bladdy.BLD_MIN_PLAYER_ROWS;
+    for (let y = this.y + 1; y <= lastRow; y++) {
       const cells: Cell[] = [];
-      for (let x = 0; x < COLS; x++) {
-        if (ctx.field.owner(x, y) === 'player' && ctx.occupancy.isFree(x, y)) cells.push({ x, y });
-      }
-      if (cells.length > 0) return cells;
+      for (let x = 0; x < COLS; x++) if (ctx.field.owner(x, y) === 'player') cells.push({ x, y });
+      if (cells.some((c) => ctx.occupancy.isFree(c.x, c.y))) return cells;
     }
     return [];
   }
@@ -133,10 +137,11 @@ export class Bladdy extends Enemy {
           return;
         }
         if (this.intent.kind === 'areaGrab') {
+          const grab: Attack = { id: ctx.nextAttackId(), kind: 'areaGrab', hitIds: new Set(), done: true, update: () => undefined };
           for (const cell of this.intent.cells) {
-            if (ctx.occupancy.isFree(cell.x, cell.y) && ctx.field.owner(cell.x, cell.y) === 'player') {
-              ctx.field.setOwner(cell.x, cell.y, 'enemy', t, 'world');
-            }
+            if (ctx.field.owner(cell.x, cell.y) !== 'player') continue;
+            if (ctx.occupancy.isFree(cell.x, cell.y)) ctx.field.setOwner(cell.x, cell.y, 'enemy', t, 'world');
+            else ctx.hitPlayerAt(grab, cell.x, cell.y, this.dmg(b.BLD_AREA_GRAB_DMG));
           }
           this.setTimedState('STRIKE', t, this.ticks(b.STRIKE_TIME));
           return;

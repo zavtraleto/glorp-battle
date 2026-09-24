@@ -95,9 +95,13 @@ export const DEFAULT_TUNING = {
     CHIP_DAMAGE_SPREADER_MAIN: 3,
     CHIP_DAMAGE_SPREADER_SPLASH: 1,
     CHIP_DAMAGE_WIDESWORD: 4,
-    FIELD_TARGET_DISTANCE: 2,
+    /** Rows ahead of the player that Mine arms and Break breaks. */
+    MINE_TARGET_DISTANCE: 3,
+    BREAK_TARGET_DISTANCE: 3,
     BREAK_DURATION: 5,
     AREA_GRAB_DURATION: 8,
+    /** AreaGrab skips occupied cells and deals this to whoever stands there. */
+    AREA_GRAB_OCCUPANT_DMG: 1,
   },
   /** Projectile speed in designer-facing seconds per cell. */
   projectile: {
@@ -139,6 +143,10 @@ export const DEFAULT_TUNING = {
     BLD_DMG: 3,
     BLD_SETTLE_TIME: 0.15,
     BLD_AREA_GRAB_DECISIONS: 3,
+    /** Damage to the player standing in the row Bladdy's AreaGrab takes. */
+    BLD_AREA_GRAB_DMG: 1,
+    /** AreaGrab never leaves the player fewer rows than this behind the grabbed one. */
+    BLD_MIN_PLAYER_ROWS: 2,
   },
   fx: {
     HIT_FLASH: 0.1,
@@ -159,6 +167,14 @@ export const DEFAULT_TUNING = {
   },
   input: {
     SWIPE_MIN_PX: 24,
+    /** A held finger starts a new stroke after resting this long (GDD §12). */
+    SWIPE_REARM_TIME: 0.08,
+    /** Travel below this many CSS px still counts as resting. */
+    SWIPE_REST_PX: 4,
+    /** After a step the same stroke may go on for a second dash after this long... */
+    SWIPE_CONTINUE_TIME: 0.1,
+    /** ...by travelling this many CSS px more in the same direction. */
+    SWIPE_CONTINUE_PX: 60,
     /** Delay before the first repeated step while a movement key is held. */
     HOLD_REPEAT_DELAY: 0.35,
     /** Interval between further repeated steps while the direction stays held. */

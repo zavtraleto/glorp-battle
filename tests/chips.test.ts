@@ -69,8 +69,8 @@ describe('chip catalogue (compact MMBN3 scale)', () => {
       widesword: 'WideSword',
       guard: 'Guard',
     });
-    expect(chipDesc('mine')).toContain('two cells ahead');
-    expect(chipDesc('break')).toContain('two cells ahead');
+    expect(chipDesc('mine')).toContain('three cells ahead');
+    expect(chipDesc('break')).toContain('three cells ahead');
   });
 
   it('defines Guard as a one-charge support chip', () => {

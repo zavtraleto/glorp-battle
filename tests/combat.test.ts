@@ -175,6 +175,17 @@ describe('battle outcome', () => {
     expect(w.occupancy.isFree(1, 1)).toBe(true);
   });
 
+  it('keeps both clocks running after the win so player-clock FX play out', () => {
+    const w = makeWorld({ ai: false });
+    (w.enemies[0] as Mettik).hp = 1;
+    cannon(w);
+    expect(w.state).toBe('BATTLE_WON');
+    const [tick, playerTick] = [w.tick, w.playerTick];
+    run(w, T(tuning.fx.RESULT_DELAY_WIN));
+    expect(w.tick - tick).toBe(T(tuning.fx.RESULT_DELAY_WIN));
+    expect(w.playerTick - playerTick).toBe(T(tuning.fx.RESULT_DELAY_WIN));
+  });
+
   it('player death ends the battle and freezes the simulation', () => {
     const w = makeWorld({ ai: false });
     w.player.hp = 1;

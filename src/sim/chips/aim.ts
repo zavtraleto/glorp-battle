@@ -1,5 +1,6 @@
 import type { ChipDef } from '../../data/chips';
 import { tuning } from '../../config/tuning';
+import { claimRow } from '../field';
 import { COLS, type Cell, type Side } from '../grid';
 import { lobArea, lobTarget, shapeCells, type TargetRow } from './patterns';
 
@@ -29,22 +30,26 @@ export interface Aim {
 
 const NONE: Aim = { cells: [], beam: null };
 
+/** Rows ahead of the player that Mine (`arm`) and Break target (GDD §6.2). */
+export function fieldTargetDistance(action: 'arm' | 'break'): number {
+  return action === 'arm' ? tuning.chips.MINE_TARGET_DISTANCE : tuning.chips.BREAK_TARGET_DISTANCE;
+}
+
 function fieldCells(def: ChipDef, l: AimLookup): Cell[] {
   const cells: Cell[] = [];
   switch (def.field) {
-    case 'claim':
-      for (let y = l.py - 1; y >= 0; y--) {
-        if (![0, 1, 2].some((x) => l.owner(x, y) === 'enemy')) continue;
-        for (let x = 0; x < COLS; x++) if (l.owner(x, y) === 'enemy') cells.push({ x, y });
-        break;
-      }
+    case 'claim': {
+      const free = (x: number, y: number) => !l.occupied(x, y);
+      const y = claimRow(l.owner, free);
+      if (y >= 0) for (let x = 0; x < COLS; x++) if (l.owner(x, y) === 'enemy' && free(x, y)) cells.push({ x, y });
       break;
+    }
     case 'occupy':
       if (l.py - 1 >= 0) cells.push({ x: l.px, y: l.py - 1 });
       break;
     case 'arm':
     case 'break': {
-      const y = l.py - tuning.chips.FIELD_TARGET_DISTANCE;
+      const y = l.py - fieldTargetDistance(def.field);
       if (y >= 0) cells.push({ x: l.px, y });
       break;
     }

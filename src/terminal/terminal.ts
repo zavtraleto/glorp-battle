@@ -17,7 +17,7 @@ import type { HpTag, HudLabel, HudStatus } from './crt/hudModel';
 import { menuFor, menuItemAt, menuLayout, moveCursor, type MenuAction, type MenuSpec } from './crt/menuModel';
 import { cursorCss } from './interaction/cursor';
 import { attachPointers } from './interaction/pointerEvents';
-import { PointerRouter } from './interaction/pointerRouter';
+import { PointerRouter, type GestureStats } from './interaction/pointerRouter';
 import {
   computeLayout,
   glassRect,
@@ -125,6 +125,14 @@ export class Terminal {
   private hpHitLeft = 0;
   private readonly battle: BattleTarget;
   private readonly router: PointerRouter;
+
+  /** Debug: the player's step count, stamped on trackball gestures for the overlay. */
+  movesProbe: (() => number) | null = null;
+
+  /** Latest trackball gestures, newest first (debug overlay). */
+  get gestures(): readonly GestureStats[] {
+    return this.router.gestures;
+  }
   private readonly cleanups: (() => void)[] = [];
   private readonly size = new THREE.Vector2();
   private readonly fineCursor = window.matchMedia?.('(pointer: fine)').matches ?? false;
@@ -176,6 +184,7 @@ export class Terminal {
       action: (z, x, y) => this.act(z, true, x, y),
       accepts: (z) => acceptsPress(this.mode(), z),
       hover: (z) => this.hover(z),
+      movesProbe: () => this.movesProbe?.() ?? 0,
     });
     this.cleanups.push(
       this.router.attach(renderer.domElement),

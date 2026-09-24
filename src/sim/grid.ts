@@ -27,6 +27,13 @@ export function laneCellsBelow(x: number, fromY: number): Cell[] {
   return cells;
 }
 
+/** Path of a ground attack down lane `x` from `fromY`: it ends before the first hole. */
+export function groundCellsBelow(x: number, fromY: number, hole: (x: number, y: number) => boolean): Cell[] {
+  const cells: Cell[] = [];
+  for (let y = Math.max(0, fromY); y < ROWS && !hole(x, y); y++) cells.push({ x, y });
+  return cells;
+}
+
 export function inTerritory(side: Side, x: number, y: number): boolean {
   return inField(x, y) && sideOfRow(y) === side;
 }

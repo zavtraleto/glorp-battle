@@ -1,7 +1,8 @@
 import { tuning } from '../../config/tuning';
 import type { EnemyLevel } from '../../data/enemies';
 import { Shockwave } from '../attacks/shockwave';
-import { laneCellsBelow, type Cell } from '../grid';
+import type { Field } from '../field';
+import { groundCellsBelow, type Cell } from '../grid';
 import { Enemy, type EnemyContext } from './enemyBase';
 
 type MettikIntent =
@@ -19,10 +20,10 @@ export class Mettik extends Enemy {
     super(id, x, y, tuning.mettik.MET_HP, spawnTick, level);
   }
 
-  override dangerCells(): Cell[] {
+  override dangerCells(field: Field): Cell[] {
     if (this.state !== 'LOCK' && this.state !== 'COUNTER') return [];
     const origin = this.intent?.kind === 'shockwave' ? this.intent.origin : null;
-    return origin ? laneCellsBelow(origin.x, origin.y) : [];
+    return origin ? groundCellsBelow(origin.x, origin.y, (x, y) => field.panel(x, y) === 'BROKEN') : [];
   }
 
   protected override onCountered(): void {

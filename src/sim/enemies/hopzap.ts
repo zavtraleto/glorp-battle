@@ -45,7 +45,7 @@ export class Hopzap extends Enemy {
     for (let y = 0; y < ROWS; y++) {
       for (let x = 0; x < COLS; x++) {
         if (x === this.x && y === this.y) continue;
-        if (!ctx.field.canStand('enemy', x, y) || !ctx.occupancy.isFree(x, y)) continue;
+        if (!Enemy.canEnter(ctx, x, y)) continue;
         (x === sampledLane ? aligned : other).push({ x, y });
       }
     }

@@ -8,7 +8,7 @@ import { attachKeyboard, blockBrowserGestures, trapBackNavigation } from './core
 import { GameLoop } from './core/loop';
 import { randomSeed } from './core/rng';
 import { BenchAutopilot, formatBench } from './debug/bench';
-import { DebugOverlay, enemyTimingLines } from './debug/overlay';
+import { DebugOverlay, enemyTimingLines, gestureLines } from './debug/overlay';
 import { DebugPanel } from './debug/debugPanel';
 import { parseDebugParams } from './debug/params';
 import { PerfProbe } from './debug/perfProbe';
@@ -199,6 +199,7 @@ const loop = new GameLoop(
           ` attack ${world.chips.attack.length} used ${world.chips.count('used')}` +
           ` chip ${world.activeChip ? world.activeChip.def.id : '-'}\n` +
           `step ${session.depth}/${session.steps}  folder ${session.folderSize}\n` +
+          gestureLines(terminal.gestures, p.moves) + '\n' +
           enemyTimingLines(world.enemies, world.tick, tuning.sim.SIM_HZ) +
           `\nattacks ${world.attacks.length}${cheats.god ? '  GOD' : ''}${cheats.aiEnabled ? '' : '  AI OFF'}`,
       });
@@ -206,6 +207,7 @@ const loop = new GameLoop(
   },
 );
 loop.clock.timeScale = tuning.sim.TIME_SCALE;
+terminal.movesProbe = () => session.world.player.moves;
 
 // ---------- Debug tools ----------
 const overlay = new DebugOverlay(ui);

@@ -77,16 +77,16 @@ describe('ARM entry physics', () => {
     expect(w.field.hazard(1, 3)).toBeNull();
   });
 
-  it('triggers when an enemy voluntarily enters the armed cell', () => {
+  it('is a wall for voluntary enemy moves (GDD §8.1)', () => {
     const w = world(true);
     const enemy = enemyAt(w, 0, 1);
     w.field.arm(1, 1, { kind: 'mine', side: 'player', damage: 6 });
 
     run(w, T(tuning.mettik.MOVE_TIME));
 
-    expect([enemy.x, enemy.y]).toEqual([1, 1]);
-    expect(enemy.hp).toBe(14);
-    expect(w.field.hazard(1, 1)).toBeNull();
+    expect([enemy.x, enemy.y]).toEqual([0, 1]);
+    expect(enemy.hp).toBe(20);
+    expect(w.field.hazard(1, 1)).not.toBeNull();
   });
 });
 

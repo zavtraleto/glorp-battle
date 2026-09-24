@@ -30,7 +30,8 @@ function mettikWave(): WaveOptions {
 
 /**
  * Ground wave (GDD §8.2 Mettik, roguelite spec §4.2 ShockWave): travels one
- * panel per step, pierces its targets, stops at the field edge, a hole or an object.
+ * panel per step, pierces its targets, stops at the field edge, a hole (its spawn
+ * cell included) or an object.
  */
 export class Shockwave implements LaneMover {
   readonly kind: string;
@@ -68,11 +69,11 @@ export class Shockwave implements LaneMover {
         this.done = true;
         return;
       }
-      // Waves need a floor (roguelite spec §3.2).
-      if (ctx.field.panel(this.x, this.y) === 'BROKEN') {
-        this.done = true;
-        return;
-      }
+    }
+    // Waves need a floor (roguelite spec §3.2), the spawn cell included.
+    if (ctx.field.panel(this.x, this.y) === 'BROKEN') {
+      this.done = true;
+      return;
     }
     if (ctx.hitObjectAt(this, this.x, this.y, this.damage)) {
       this.done = true;

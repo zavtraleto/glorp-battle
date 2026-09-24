@@ -1,6 +1,6 @@
 import { secondsToTicks, tuning } from '../config/tuning';
 import type { SimEvent } from './events';
-import { COLS, ROWS, inField, sideOfRow, type Side } from './grid';
+import { COLS, ROWS, inField, sideOfRow, type Cell, type Side } from './grid';
 
 // Battle panels (roguelite spec §3): state, owner and restore timers per cell.
 // Cracked panels break when their occupant leaves; holes and stolen panels
@@ -29,8 +29,28 @@ interface PanelCell {
 
 interface ClaimLayer {
   row: number;
+  /** Cells this claim took; only they roll back. */
+  cells: Cell[];
   expiresAt: number;
   domain: TimeDomain;
+}
+
+/** Outcome of AreaGrab: the row, the cells it took and the occupied cells it left alone. */
+export interface ClaimResult {
+  row: number;
+  claimed: Cell[];
+  held: Cell[];
+}
+
+/**
+ * Row AreaGrab takes (GDD §6.2): the enemy-owned row nearest to the player
+ * with at least one free cell; -1 if none.
+ */
+export function claimRow(owner: (x: number, y: number) => Side | null, free: (x: number, y: number) => boolean): number {
+  for (let y = ROWS - 1; y >= 0; y--) {
+    for (let x = 0; x < COLS; x++) if (owner(x, y) === 'enemy' && free(x, y)) return y;
+  }
+  return -1;
 }
 
 export interface FieldUpdateContext {
@@ -159,21 +179,32 @@ export class Field {
     return true;
   }
 
-  claimNextRow(tick: number, durationTicks: number, domain: TimeDomain = 'player'): number | null {
-    let row = ROWS - 1;
-    for (let y = 0; y < ROWS; y++) {
-      if (this.owner(0, y) === 'enemy') row = y;
-    }
-    if (row < 0 || row >= ROWS || this.owner(0, row) !== 'enemy') return null;
+  /** Takes the free enemy cells of `claimRow`; occupied ones stay with whoever stands there. */
+  claimNextRow(
+    tick: number,
+    durationTicks: number,
+    domain: TimeDomain = 'player',
+    isFree: (x: number, y: number) => boolean = () => true,
+  ): ClaimResult | null {
+    const row = claimRow((x, y) => this.owner(x, y), isFree);
+    if (row < 0) return null;
+    const claimed: Cell[] = [];
+    const held: Cell[] = [];
     for (let x = 0; x < COLS; x++) {
       const c = this.cell(x, row) as PanelCell;
+      if (c.owner !== 'enemy') continue;
+      if (!isFree(x, row)) {
+        held.push({ x, y: row });
+        continue;
+      }
       c.owner = 'player';
       c.ownerBackAt = Infinity;
       this.changed(x, row, c);
+      claimed.push({ x, y: row });
     }
-    this.claims.push({ row, expiresAt: tick + Math.max(0, durationTicks), domain });
+    this.claims.push({ row, cells: claimed, expiresAt: tick + Math.max(0, durationTicks), domain });
     this.emit({ type: 'claimChanged', row, claimed: true });
-    return row;
+    return { row, claimed, held };
   }
 
   private domainTick(ticks: FieldTicks, domain: TimeDomain): number {
@@ -185,11 +216,11 @@ export class Field {
       const deepest = this.claims[this.claims.length - 1] as ClaimLayer;
       if (this.domainTick(ticks, deepest.domain) < deepest.expiresAt || player.y <= deepest.row) return;
       this.claims.pop();
-      for (let x = 0; x < COLS; x++) {
-        const c = this.cell(x, deepest.row) as PanelCell;
+      for (const { x, y } of deepest.cells) {
+        const c = this.cell(x, y) as PanelCell;
         c.owner = c.home;
         c.ownerBackAt = Infinity;
-        this.changed(x, deepest.row, c);
+        this.changed(x, y, c);
       }
       this.emit({ type: 'claimChanged', row: deepest.row, claimed: false });
     }

@@ -1,6 +1,24 @@
 import type { LoopStats } from '../core/loop';
 import type { Enemy } from '../sim/enemies/enemyBase';
+import type { GestureStats } from '../terminal/interaction/pointerRouter';
 import type { PerfSnapshot } from './perfProbe';
+
+const DIR_LETTER = { up: 'U', down: 'D', left: 'L', right: 'R' } as const;
+
+/**
+ * Trackball gestures, newest first: distance, time, fired steps and the cells
+ * the player actually moved from its start until the next gesture began.
+ */
+export function gestureLines(gestures: readonly GestureStats[], playerMoves: number): string {
+  return gestures
+    .map((g, i) => {
+      const steps = g.steps.map((d) => DIR_LETTER[d]).join('') || '-';
+      const until = gestures[i - 1]?.movesAtStart ?? playerMoves;
+      return `${g.active ? '>' : ' '}swipe ${Math.round(g.net)}px path ${Math.round(g.path)} ${Math.round(g.duration * 1000)}ms` +
+        ` cmd ${g.steps.length} ${steps} moved ${Math.max(0, until - g.movesAtStart)}`;
+    })
+    .join('\n');
+}
 
 /** Pure playtest diagnostic: current timing phase and time to its deadline. */
 export function enemyTimingLines(enemies: readonly Enemy[], tick: number, simHz: number): string {

@@ -170,6 +170,8 @@ describe('Occupancy', () => {
   });
 });
 
+const TIMING = { rearmTime: 0.08, restPx: 4, continueTime: 0.1, continuePx: 60 };
+
 describe('SwipeRecognizer', () => {
   it('fires once the threshold is crossed, by dominant axis', () => {
     const s = new SwipeRecognizer(24, 0.35);
@@ -178,22 +180,64 @@ describe('SwipeRecognizer', () => {
     expect(s.move(126, 110)).toBe('right');
   });
 
-  it('requires a fresh threshold-length displacement for every step', () => {
-    const s = new SwipeRecognizer(24, 0.35);
+  it('gives one step for a long drag in one direction (one stroke = one panel)', () => {
+    const s = new SwipeRecognizer(24, 0.35, TIMING);
     s.begin(0, 0, 0);
-    expect(s.move(30, 0, 0.02)).toBe('right');
-    expect(s.move(30, 0, 0.04)).toBeNull();
-    expect(s.move(45, 2, 0.06)).toBeNull();
-    expect(s.move(55, 2, 0.08)).toBe('right');
+    const fired: (Dir | null)[] = [];
+    // A 150 px flick in 16 ms events.
+    for (let i = 1; i <= 10; i++) fired.push(s.move(i * 15, i % 2, i * 0.016));
+    expect(fired.filter(Boolean)).toEqual(['right']);
   });
 
-  it('supports a continuous right, right, up, left micro-swipe sequence', () => {
-    const s = new SwipeRecognizer(24, 0.35);
+  it('starts a new stroke after the held finger rests for rearmTime', () => {
+    const s = new SwipeRecognizer(24, 0.35, TIMING);
     s.begin(0, 0, 0);
-    expect(s.move(30, 0)).toBe('right');
-    expect(s.move(60, 0)).toBe('right');
-    expect(s.move(60, -30)).toBe('up');
-    expect(s.move(30, -30)).toBe('left');
+    expect(s.move(30, 0, 0.02)).toBe('right');
+    expect(s.move(32, 1, 0.06)).toBeNull(); // jitter inside restPx is still a rest
+    expect(s.move(50, 0, 0.09)).toBeNull(); // 0.07 s since the finger stopped: too soon
+    expect(s.move(52, 0, 0.2)).toBeNull();
+    expect(s.move(80, 0, 0.22)).toBe('right'); // rested at x = 50, then a fresh 30 px
+  });
+
+  // Pointer events every 16 ms at `speed` px per event, from x = 0; returns the fired steps.
+  function drag(s: SwipeRecognizer, speed: number, events: number): Dir[] {
+    const fired: Dir[] = [];
+    for (let i = 1; i <= events; i++) {
+      const d = s.move(i * speed, 0, i * 0.016);
+      if (d) fired.push(d);
+    }
+    return fired;
+  }
+
+  it('keeps a quick flick to one panel', () => {
+    const s = new SwipeRecognizer(24, 0.35, TIMING);
+    s.begin(0, 0, 0);
+    // 150 px in 160 ms: the step fires at 30 px, only 15 px remain after continueTime.
+    expect(drag(s, 15, 10)).toEqual(['right']);
+  });
+
+  it('gives a second dash when the stroke goes on continuePx after continueTime', () => {
+    const s = new SwipeRecognizer(24, 0.35, TIMING);
+    s.begin(0, 0, 0);
+    // 10 px per event: step at 30 px (48 ms); the dash anchor is set at 160 ms (x = 100).
+    expect(drag(s, 10, 15)).toEqual(['right']); // x = 150: 50 px into the dash
+    expect(s.move(160, 0, 0.26)).toBe('right');
+  });
+
+  it('does not dash on a pull-back after continueTime', () => {
+    const s = new SwipeRecognizer(24, 0.35, TIMING);
+    s.begin(0, 0, 0);
+    expect(drag(s, 10, 10)).toEqual(['right']);
+    for (let i = 1; i <= 10; i++) expect(s.move(100 - i * 12, 0, 0.16 + i * 0.016)).toBeNull();
+  });
+
+  it('fires at once on a perpendicular turn (L-shaped drag)', () => {
+    const s = new SwipeRecognizer(24, 0.35, TIMING);
+    s.begin(0, 0, 0);
+    expect(s.move(30, 0, 0.02)).toBe('right');
+    expect(s.move(60, 0, 0.04)).toBeNull();
+    expect(s.move(60, -30, 0.06)).toBe('up');
+    expect(s.move(30, -30, 0.08)).toBe('left');
   });
 
   it('does not move again while the finger stays still or jitters inside the dead zone', () => {
@@ -205,12 +249,13 @@ describe('SwipeRecognizer', () => {
     expect(s.move(27, 3, 0.4)).toBeNull();
   });
 
-  it('reverses only after crossing the threshold from the latest accepted step', () => {
-    const s = new SwipeRecognizer(24, 0.35);
+  it('ignores the thumb pulling back after a stroke; a reversal needs a rest', () => {
+    const s = new SwipeRecognizer(24, 0.35, TIMING);
     s.begin(0, 0, 0);
     expect(s.move(30, 0, 0.01)).toBe('right');
     expect(s.move(10, 0, 0.02)).toBeNull();
-    expect(s.move(5, 0, 0.03)).toBe('left');
+    expect(s.move(-20, 0, 0.03)).toBeNull();
+    expect(s.move(-50, 0, 0.2)).toBe('left');
   });
 
   it('counts a gesture with steps as a step, not a tap', () => {

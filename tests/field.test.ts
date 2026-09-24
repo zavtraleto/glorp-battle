@@ -118,10 +118,29 @@ describe('field physics v0.1', () => {
     expect(f.owner(0, 2)).toBe('enemy');
   });
 
+  it('claims only the free cells of a row and rolls back only those', () => {
+    const { f } = makeField();
+    const occupied = (x: number, y: number) => !(x === 1 && y === 2);
+    const claim = f.claimNextRow(0, T(1), 'player', occupied);
+    expect(claim).toEqual({ row: 2, claimed: [{ x: 0, y: 2 }, { x: 2, y: 2 }], held: [{ x: 1, y: 2 }] });
+    expect([f.owner(0, 2), f.owner(1, 2), f.owner(2, 2)]).toEqual(['player', 'enemy', 'player']);
+
+    // The next claim takes the rest of the same row once the cell is free.
+    expect(f.claimNextRow(T(0.5), T(1), 'player', free)).toEqual({ row: 2, claimed: [{ x: 1, y: 2 }], held: [] });
+
+    f.update(T(1.5) + 1, { player: { x: 1, y: 3 } });
+    expect([f.owner(0, 2), f.owner(1, 2), f.owner(2, 2)]).toEqual(['enemy', 'enemy', 'enemy']);
+  });
+
+  it('skips a row whose enemy cells are all occupied', () => {
+    const { f } = makeField();
+    expect(f.claimNextRow(0, T(1), 'player', (_x, y) => y !== 2)?.row).toBe(1);
+  });
+
   it('keeps supporting claims until deeper claims and the player can roll back', () => {
     const { f } = makeField();
-    expect(f.claimNextRow(0, T(1))).toBe(2);
-    expect(f.claimNextRow(T(0.5), T(2))).toBe(1);
+    expect(f.claimNextRow(0, T(1))?.row).toBe(2);
+    expect(f.claimNextRow(T(0.5), T(2))?.row).toBe(1);
 
     f.update(T(1), { player: { x: 1, y: 3 } });
     expect(f.owner(1, 2)).toBe('player');

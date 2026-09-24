@@ -172,3 +172,17 @@ describe('Hopzap sample-and-commit decisions', () => {
     expect(hopzap.state).toBe('MOVE');
   });
 });
+
+describe('Hopzap and player mines', () => {
+  it('never lands on a mine', () => {
+    const w = world();
+    const hopzap = w.enemies[0] as Hopzap;
+    placePlayer(w, 2);
+    keepOnly(w, [{ x: 0, y: 1 }, { x: 2, y: 2 }, { x: 1, y: 0 }]);
+    w.field.arm(2, 2, { kind: 'mine', side: 'player', damage: 6 });
+
+    run(w, settleTicks() + T(tuning.hopzap.MOVE_TIME));
+    expect({ x: hopzap.x, y: hopzap.y, hp: hopzap.hp }).toEqual({ x: 1, y: 0, hp: hopzap.maxHp });
+    expect(w.field.hazard(2, 2)).not.toBeNull();
+  });
+});

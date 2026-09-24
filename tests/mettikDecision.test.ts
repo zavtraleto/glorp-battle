@@ -128,3 +128,48 @@ describe('Mettik committed decisions', () => {
     expect(w.attacks.filter((attack) => attack.kind === 'shockwave')).toHaveLength(2);
   });
 });
+
+describe('Mettik Shockwave travels on the ground', () => {
+  function attackFrom(holeY: number) {
+    const w = world([{ x: 1, y: 1 }]);
+    const m = w.enemies[0] as Mettik;
+    if (w.player.x !== 1) placePlayerLane(w, 1);
+    w.field.breakPanel(1, holeY, w.tick, T(30));
+    run(w, T(tuning.mettik.MOVE_TIME + tuning.mettik.INTENTION_TIME + tuning.mettik.LOCK_TIME));
+    expect(m.state).toBe('COUNTER');
+    return { w, m };
+  }
+
+  it('attacks into a hole in front of it and the wave dies on its spawn cell', () => {
+    const { w, m } = attackFrom(2);
+    expect(w.dangerCells()).toEqual([]);
+    run(w, T(tuning.mettik.COUNTER_TIME));
+    expect(m.state).toBe('STRIKE');
+    expect(w.attacks.filter((a) => a.kind === 'shockwave')).toHaveLength(0);
+    run(w, 5 * T(tuning.projectile.CELL_TRAVEL_TIME));
+    expect(w.player.hp).toBe(w.player.maxHp);
+  });
+
+  it('cuts the telegraph and the wave at the first hole', () => {
+    const { w } = attackFrom(tuning.player.PLAYER_START_Y - 1);
+    expect(w.dangerCells()).toEqual(
+      Array.from({ length: tuning.player.PLAYER_START_Y - 3 }, (_, i) => ({ x: 1, y: 2 + i })),
+    );
+    run(w, T(tuning.mettik.COUNTER_TIME) + 6 * T(tuning.projectile.CELL_TRAVEL_TIME));
+    expect(w.attacks.filter((a) => a.kind === 'shockwave')).toHaveLength(0);
+    expect(w.player.hp).toBe(w.player.maxHp);
+  });
+});
+
+describe('enemies treat player mines as walls', () => {
+  it('Mettik does not step onto a mine to reach the player lane', () => {
+    const w = world([{ x: 0, y: 1 }]);
+    const m = w.enemies[0] as Mettik;
+    placePlayerLane(w, 2);
+    w.field.arm(1, 1, { kind: 'mine', side: 'player', damage: 6 });
+
+    run(w, 4 * T(tuning.mettik.MOVE_TIME));
+    expect([m.x, m.y, m.hp]).toEqual([0, 1, m.maxHp]);
+    expect(w.field.hazard(1, 1)).not.toBeNull();
+  });
+});

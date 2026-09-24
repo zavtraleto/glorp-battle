@@ -252,7 +252,7 @@ describe('PointerRouter', () => {
     expect(log).not.toContain('action:trackball');
   });
 
-  it('turns each threshold-length trackball nudge into one step', () => {
+  it('turns one quick trackball stroke into exactly one step (GDD §12)', () => {
     const { router, log, rolls, center } = makeRouter();
     const [x, y] = center('trackball');
     router.down(1, x, y);
@@ -262,7 +262,7 @@ describe('PointerRouter', () => {
     router.move(1, x + 40, y + 2);
     router.move(1, x + 60, y + 2);
     router.up(1);
-    expect(log.filter((l) => l.startsWith('move:'))).toEqual(['move:right', 'move:right']);
+    expect(log.filter((l) => l.startsWith('move:'))).toEqual(['move:right']);
     expect(log).not.toContain('action:trackball');
     expect(rolls.reduce((s, r) => s + r[0], 0)).toBe(60);
   });

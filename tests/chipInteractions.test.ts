@@ -60,7 +60,8 @@ function fireQueued(w: World, id: ChipId): void {
 describe('ten-chip systemic interactions', () => {
   it('Mine -> AirShot triggers ARM through forced entry', () => {
     const w = world();
-    const target = enemy(w, 1, 2);
+    // The player steps up to row 3, so the mine lands one row behind the target.
+    const target = enemy(w, 1, 3 - tuning.chips.MINE_TARGET_DISTANCE + 1);
     give(w, 'mine');
     give(w, 'airshot');
     step(w, [{ type: 'move', dir: 'up' }]);
@@ -70,7 +71,7 @@ describe('ten-chip systemic interactions', () => {
     fireQueued(w, 'airshot');
 
     expect([target.x, target.y, target.hp]).toEqual([
-      1, 1, 30 - CHIPS.airshot.power! - CHIPS.mine.power!,
+      1, 3 - tuning.chips.MINE_TARGET_DISTANCE, 30 - CHIPS.airshot.power! - CHIPS.mine.power!,
     ]);
   });
 
@@ -82,6 +83,16 @@ describe('ten-chip systemic interactions', () => {
     fire(w, 'airshot');
 
     expect([target.x, target.y, target.state]).toEqual([1, 2, 'STAGGER']);
+  });
+
+  it('Area Grab leaves an enemy its panel and chips it for AREA_GRAB_OCCUPANT_DMG', () => {
+    const w = world();
+    const target = enemy(w, 1, 2);
+    fire(w, 'areagrab');
+
+    expect([w.field.owner(0, 2), w.field.owner(1, 2), w.field.owner(2, 2)]).toEqual(['player', 'enemy', 'player']);
+    expect(target.hp).toBe(30 - tuning.chips.AREA_GRAB_OCCUPANT_DMG);
+    expect(target.state).not.toBe('STAGGER');
   });
 
   it('Area Grab creates the position needed for Sword', () => {

@@ -142,8 +142,8 @@ export abstract class Enemy {
     return null;
   }
 
-  /** Cells to highlight as dangerous right now (telegraph). */
-  dangerCells(): Cell[] {
+  /** Cells to highlight as dangerous right now (telegraph); ground attacks stop at holes. */
+  dangerCells(_field: Field): Cell[] {
     return [];
   }
 
@@ -218,9 +218,17 @@ export abstract class Enemy {
     return !this.alive && tick - this.deathTick >= secondsToTicks(tuning.fx.DELETE_ANIM_TIME);
   }
 
+  /**
+   * A panel the enemy may choose to move onto: its own, standing and free.
+   * A player mine is a wall for voluntary moves (GDD §8.1); forced moves ignore this.
+   */
+  static canEnter(ctx: EnemyContext, x: number, y: number): boolean {
+    return ctx.field.canStand('enemy', x, y) && ctx.occupancy.isFree(x, y) && ctx.field.hazard(x, y)?.side !== 'player';
+  }
+
   /** Instant relocation (Hopzap): no slide animation. */
   protected warpTo(ctx: EnemyContext, nx: number, ny: number): boolean {
-    if (!ctx.field.canStand('enemy', nx, ny) || !ctx.occupancy.isFree(nx, ny)) return false;
+    if (!Enemy.canEnter(ctx, nx, ny)) return false;
     const fromX = this.x;
     const fromY = this.y;
     ctx.occupancy.move(this.id, this.x, this.y, nx, ny);
@@ -232,7 +240,7 @@ export abstract class Enemy {
   }
 
   protected tryStep(ctx: EnemyContext, nx: number, ny: number): boolean {
-    if (!ctx.field.canStand('enemy', nx, ny) || !ctx.occupancy.isFree(nx, ny)) return false;
+    if (!Enemy.canEnter(ctx, nx, ny)) return false;
     ctx.occupancy.move(this.id, this.x, this.y, nx, ny);
     ctx.field.onLeave(this.x, this.y, ctx.tick);
     this.prevX = this.x;
