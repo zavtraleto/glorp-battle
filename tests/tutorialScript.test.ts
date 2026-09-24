@@ -39,8 +39,8 @@ describe('tutorial script', () => {
 
   it('places enemies inside the enemy area', () => {
     for (const s of TUTORIAL) {
-      expect(s.encounter.enemies.length).toBeGreaterThan(0);
-      for (const e of s.encounter.enemies) {
+      expect(s.encounter.waves[0]!.enemies.length).toBeGreaterThan(0);
+      for (const e of s.encounter.waves[0]!.enemies) {
         expect(e.x).toBeGreaterThanOrEqual(0);
         expect(e.x).toBeLessThan(COLS);
         expect(e.y).toBeGreaterThanOrEqual(0);
@@ -70,7 +70,7 @@ describe('tutorial script', () => {
   describe('lessons stay true under balance changes', () => {
     it('battle 1: the Cannon one-shots the tutorial Mettik', () => {
       const step1 = TUTORIAL[0]!;
-      const mettik = step1.encounter.enemies[0];
+      const mettik = step1.encounter.waves[0]!.enemies[0];
       expect(mettik).toBeDefined();
       const mettikHp = Math.round(tuning.mettik.MET_HP * ENEMY_LEVELS[mettik!.level ?? 1].hp);
       const cannon = step1.folder[0];
@@ -80,7 +80,7 @@ describe('tutorial script', () => {
 
     it("battle 3: the sword's reach clears the player's own row but reaches a stolen one", () => {
       const step3 = TUTORIAL[2]!;
-      const enemy = step3.encounter.enemies[0];
+      const enemy = step3.encounter.waves[0]!.enemies[0];
       expect(enemy).toBeDefined();
       const swordDefId = step3.folder.find((c) => CHIPS[c.defId].kind === 'attack' && CHIPS[c.defId].useTime === 'SWORD')?.defId;
       expect(swordDefId).toBeDefined();

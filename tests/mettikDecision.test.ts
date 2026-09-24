@@ -20,7 +20,7 @@ function world(spawns: { x: number; y: number }[] = [{ x: 0, y: 1 }]): World {
       tier: 'normal',
       minDepth: 1,
       maxDepth: 1,
-      enemies: spawns.map(({ x, y }) => ({ kind: 'mettik' as const, x, y })),
+      waves: [{ enemies: spawns.map(({ x, y }) => ({ kind: 'mettik' as const, x, y })) }],
     },
   });
 }

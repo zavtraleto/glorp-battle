@@ -101,6 +101,30 @@ export class Player {
     return true;
   }
 
+  /**
+   * Next wave (GDD §10.4): back on the start cell with every status cleared;
+   * HP stays. `prevX/prevY` keep the old cell so the view can glide over.
+   */
+  resetForWave(): void {
+    const x = tuning.player.PLAYER_START_X;
+    const y = tuning.player.PLAYER_START_Y;
+    this.occupancy.remove(this.id, this.x, this.y);
+    this.prevX = this.x;
+    this.prevY = this.y;
+    this.x = x;
+    this.y = y;
+    this.occupancy.place(this.id, x, y);
+    this.lastMoveTick = -Infinity;
+    this.bufferedDir = null;
+    this.flinchTicks = 0;
+    this.iframeTicks = 0;
+    this.invisTicks = 0;
+    this.paralyzeTicks = 0;
+    this.actionTicks = 0;
+    this.guard = false;
+    this.repeating = false;
+  }
+
   /** Counts down stun/i-frame/action timers. Call once per tick before `updateMovement`. */
   updateTimers(): void {
     if (this.flinchTicks > 0) this.flinchTicks--;

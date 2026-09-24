@@ -43,6 +43,8 @@ const RANGES: Record<string, [number, number, number]> = {
   SLOW_MO_EXIT: [0, 1, 0.01],
   COMBO_BREAK_EXIT: [0, 0.5, 0.01],
   CHIP_INPUT_BUFFER: [0, 0.5, 0.01],
+  SELECT_TIME_SCALE: [0.02, 1, 0.01],
+  SELECT_SLOW_MO_ENTER: [0, 1, 0.01],
   HOP_ALIGN_CHANCE: [0, 1, 0.05],
   BLD_AREA_GRAB_DECISIONS: [1, 10, 1],
   MINE_TARGET_DISTANCE: [1, 5, 1],
@@ -208,7 +210,7 @@ export class DebugPanel {
     const hp = { value: tuning.player.PLAYER_MAX_HP };
     cf.add(a.cheats, 'god').name('god mode (no damage)');
     cf.add(a.cheats, 'aiEnabled').name('enemy AI');
-    cf.add({ kill: () => a.killAll() }, 'kill').name('kill all enemies');
+    cf.add({ kill: () => a.killAll() }, 'kill').name('kill wave');
     cf.add({ force: () => a.forceAttack() }, 'force').name('force enemy attack');
     const give = { chip: 'cannon' as ChipId };
     cf.add(give, 'chip', Object.keys(CHIPS)).name('chip to give');

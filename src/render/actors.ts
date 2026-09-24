@@ -22,6 +22,8 @@ const FOOT_OFFSET = 0.18;
 const IDLE_BOB_HZ = 1.2;
 /** A hit enemy ripples for this long, seconds (decision 2026-09-19). */
 const HIT_RIPPLE_TIME = 0.3;
+/** A spawning enemy starts this high above its cell, world units. */
+const SPAWN_DROP = 1.6;
 
 export interface SpriteFrame {
   camera: THREE.PerspectiveCamera;
@@ -79,7 +81,16 @@ export class PlayerView {
     this.widthShare = art ? PLAYER_ART_WIDTH : tuning.battleVisual.SPRITE_CELL_FRAC * 0.8;
   }
 
-  update(player: Player, tick: number, alpha: number, dt: number, usingChip: boolean, frame: SpriteFrame): void {
+  /** `shift` moves the figure off its cell (the wave flight, GDD §10.4). */
+  update(
+    player: Player,
+    tick: number,
+    alpha: number,
+    dt: number,
+    usingChip: boolean,
+    frame: SpriteFrame,
+    shift: THREE.Vector3 | null = null,
+  ): void {
     this.pixels.setTime((tick + alpha) / tuning.sim.SIM_HZ);
     const time = (tick + alpha) / tuning.sim.SIM_HZ;
     const a = slideAnchor(
@@ -93,6 +104,7 @@ export class PlayerView {
       dt,
       tuning.player.CELL_MOVE_TIME,
     );
+    if (shift) a.add(shift);
     this.pixels.place(a, CELL_WIDTH * this.widthShare, frame.camera, frame.width, frame.height, usingChip ? 1 : 0);
     this.sprite.renderOrder = rowRenderOrder(player.y);
     // Paralysis flickers like a hit.
@@ -125,7 +137,8 @@ export class EnemyView {
     this.phase = enemy.id * 1.7;
   }
 
-  update(enemy: Enemy, tick: number, alpha: number, dt: number, frame: SpriteFrame): void {
+  /** `spawn` runs 0 → 1 while a wave materializes (GDD §10.4); 1 otherwise. */
+  update(enemy: Enemy, tick: number, alpha: number, dt: number, frame: SpriteFrame, spawn = 1): void {
     const a = slideAnchor(
       enemy.prevX,
       enemy.prevY,
@@ -154,14 +167,18 @@ export class EnemyView {
       flash = true;
     }
 
+    // A spawning enemy drops in from above and resolves out of the dissolve.
+    if (spawn < 1) a.y += (1 - spawn) * (1 - spawn) * SPAWN_DROP;
     this.pixels.place(a, CELL_WIDTH * this.widthShare, frame.camera, frame.width, frame.height, lift);
     this.sprite.renderOrder = rowRenderOrder(enemy.y);
     // Paralysis: a steady flicker.
     if (enemy.paralyzeTicks > 0 && Math.floor(tick / 4) % 2 === 0) flash = true;
-    this.pixels.setFlash(flash);
     const sinceHit = (tick - enemy.lastHitTick + alpha) / tuning.sim.SIM_HZ;
-    this.pixels.setRipple(sinceHit >= 0 && sinceHit < HIT_RIPPLE_TIME ? 1 - sinceHit / HIT_RIPPLE_TIME : 0, time);
-    this.pixels.setDissolve(enemy.alive ? 0 : deathProgress(enemy.deathTick, tick, alpha, dt));
+    const hitRipple = sinceHit >= 0 && sinceHit < HIT_RIPPLE_TIME ? 1 - sinceHit / HIT_RIPPLE_TIME : 0;
+    this.pixels.setRipple(Math.max(hitRipple, 1 - spawn), time);
+    this.pixels.setDissolve(enemy.alive ? 1 - spawn : deathProgress(enemy.deathTick, tick, alpha, dt));
+    if (spawn < 1) flash ||= Math.floor(spawn * 8) % 2 === 0;
+    this.pixels.setFlash(flash);
   }
 
   dispose(): void {

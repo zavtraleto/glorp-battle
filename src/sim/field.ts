@@ -246,6 +246,26 @@ export class Field {
     this.updateClaims(ticks, player);
   }
 
+  /** A fresh field for the next wave (GDD §10.4): home owners, whole panels, no mines or claims. */
+  reset(): void {
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) {
+        const c = this.cell(x, y) as PanelCell;
+        if (c.hazard) this.takeHazard(x, y);
+        c.restoreAt = Infinity;
+        c.ownerBackAt = Infinity;
+        if (c.panel === 'NORMAL' && c.owner === c.home) continue;
+        c.panel = 'NORMAL';
+        c.owner = c.home;
+        this.changed(x, y, c);
+      }
+    }
+    while (this.claims.length > 0) {
+      const claim = this.claims.pop() as ClaimLayer;
+      this.emit({ type: 'claimChanged', row: claim.row, claimed: false });
+    }
+  }
+
   snapshot(): { panel: Panel; owner: Side; armed: boolean }[] {
     return this.cells.map((c) => ({ panel: c.panel, owner: c.owner, armed: c.hazard !== null }));
   }

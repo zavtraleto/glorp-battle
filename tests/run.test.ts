@@ -5,46 +5,42 @@ import type { EnemyKind } from '../src/sim/enemies/enemyBase';
 
 beforeEach(() => mergeTuning(tuning, JSON.parse(JSON.stringify(DEFAULT_TUNING))));
 
-const kinds = (run: Run) => run.encounter.enemies.map((enemy) => enemy.kind);
+/** Enemy kinds wave by wave. */
+const waves = (run: Run) => run.encounter.waves.map((w) => w.enemies.map((enemy) => enemy.kind));
 
 describe('Run', () => {
-  it('uses the eight-stage Play progression', () => {
+  it('uses the six-stage Play progression, two or three waves each (GDD §10.2)', () => {
     const run = new Run(5, 'basic');
-    const expected = [
-      ['mettik'],
-      ['canodron', 'canodron'],
-      ['mettik', 'canodron'],
-      ['bladdy'],
-      ['bladdy', 'canodron'],
-      ['hopzap'],
-      ['mettik', 'hopzap'],
-    ];
-
-    expect(RUN_STEPS).toBe(8);
-    for (const want of expected) {
-      expect(kinds(run)).toEqual(want);
+    expect(RUN_STEPS).toBe(6);
+    // Stage 1 is fixed by the design: Mettik, two Mettiks, Mettik + Canodron.
+    expect(waves(run)).toEqual([['mettik'], ['mettik', 'mettik'], ['mettik', 'canodron']]);
+    const allowed = new Set<EnemyKind>(PLAY_CONTENT.enemies);
+    for (let step = 1; step <= RUN_STEPS; step++) {
+      const w = waves(run);
+      expect(w.length, `stage ${step}`).toBeGreaterThanOrEqual(2);
+      expect(w.length, `stage ${step}`).toBeLessThanOrEqual(3);
+      for (const kinds of w) {
+        expect(kinds.length).toBeGreaterThan(0);
+        expect(kinds.length).toBeLessThanOrEqual(3);
+        expect(kinds.every((kind) => allowed.has(kind))).toBe(true);
+      }
       run.finishBattle(true, run.hp);
     }
-
-    const finalKinds = kinds(run);
-    const allowed = new Set<EnemyKind>(PLAY_CONTENT.enemies);
-    expect(finalKinds).toHaveLength(3);
-    expect(new Set(finalKinds).size).toBe(3);
-    expect(finalKinds.every((kind) => allowed.has(kind))).toBe(true);
   });
 
-  it('reproduces the final random trio from the run seed', () => {
+  it('reproduces the final random waves from the run seed', () => {
     const a = new Run(123, 'basic');
     const b = new Run(123, 'field');
-    a.jumpTo(8);
-    b.jumpTo(8);
-    expect(kinds(a)).toEqual(kinds(b));
+    a.jumpTo(RUN_STEPS);
+    b.jumpTo(RUN_STEPS);
+    expect(waves(a)).toEqual(waves(b));
+    for (const kinds of waves(a)) expect(new Set(kinds).size).toBe(kinds.length);
   });
 
-  it('starts with the 20-card Play folder regardless of the legacy menu choice', () => {
+  it('starts with the 8-chip starter folder regardless of the legacy menu choice', () => {
     const basic = new Run(1, 'basic').folder;
     const random = new Run(1, 'random').folder;
-    expect(basic).toHaveLength(20);
+    expect(basic).toHaveLength(8);
     expect(random).toEqual(basic);
   });
 
@@ -57,7 +53,7 @@ describe('Run', () => {
     }
   });
 
-  it('completes after the eighth win', () => {
+  it('completes after the last win', () => {
     const run = new Run(1, 'basic');
     for (let step = 1; step < RUN_STEPS; step++) {
       run.finishBattle(true, run.hp);
@@ -65,7 +61,7 @@ describe('Run', () => {
     }
     run.finishBattle(true, run.hp);
     expect(run.complete).toBe(true);
-    expect(run.history).toHaveLength(8);
+    expect(run.history).toHaveLength(RUN_STEPS);
   });
 
   it('a loss ends the climb without advancing the step', () => {
@@ -73,7 +69,7 @@ describe('Run', () => {
     run.finishBattle(true, 6);
     expect(run.hp).toBe(6);
     expect(run.depth).toBe(2);
-    expect(run.folder).toHaveLength(20);
+    expect(run.folder).toHaveLength(8);
     run.finishBattle(false, 0);
     expect(run.depth).toBe(2);
     expect(run.history.map((step) => step.won)).toEqual([true, false]);
@@ -84,9 +80,9 @@ describe('Run', () => {
     const run = new Run(1, 'basic');
     run.jumpTo(RUN_STEPS);
     expect(run.depth).toBe(RUN_STEPS);
-    expect(kinds(run)).toHaveLength(3);
+    expect(waves(run)).toHaveLength(3);
     run.jumpTo(1);
     expect(run.depth).toBe(1);
-    expect(kinds(run)).toEqual(['mettik']);
+    expect(waves(run)[0]).toEqual(['mettik']);
   });
 });

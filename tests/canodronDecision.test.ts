@@ -20,7 +20,7 @@ function world(): World {
       tier: 'normal',
       minDepth: 1,
       maxDepth: 1,
-      enemies: [{ kind: 'canodron', x: 1, y: 1 }],
+      waves: [{ enemies: [{ kind: 'canodron', x: 1, y: 1 }] }],
     },
   });
 }

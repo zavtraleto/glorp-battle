@@ -3,7 +3,7 @@
 import { secondsToTicks, tuning } from '../config/tuning';
 import type { Command, Dir } from '../core/input/commands';
 import { Rng } from '../core/rng';
-import { debugEncounter, type Encounter } from '../data/encounters';
+import { debugEncounter, type Encounter, type EncounterWave } from '../data/encounters';
 import { CHIPS, type ChipDef, type FieldAction } from '../data/chips';
 import type { FolderId } from '../data/folders';
 import type { FolderChip } from './chips/chipSystem';
@@ -34,6 +34,10 @@ export type GameState =
   | 'PLAYER_DEAD'
   | 'DEFEAT'
   | 'BATTLE_WON'
+  /** A wave is deleted and more follow: deletions play out (GDD §10.4). */
+  | 'WAVE_CLEAR'
+  /** Flight to the next field, then the new enemies spawn; frozen like the intro. */
+  | 'WAVE_INTRO'
   | 'RESULT'
   | 'SEQUENCE_COMPLETE';
 
@@ -53,6 +57,8 @@ export interface WorldOptions {
   playerHp?: number;
   cheats?: Cheats;
   folder?: FolderId | readonly FolderChip[];
+  /** Debug: 0-based wave to start from (`?wave=`); clamped to the encounter. */
+  startWave?: number;
   /** Skip the intro and start in ACTION with the hand dealt (tests). */
   skipIntro?: boolean;
   /** Tutorial: the exact starting hand by slot instead of a dealt one (spec §4.4). */
@@ -60,7 +66,7 @@ export interface WorldOptions {
 }
 
 /** States in which the battle simulation (enemies, attacks, timers) is frozen. */
-const FROZEN_STATES: ReadonlySet<GameState> = new Set(['BOOT', 'TITLE', 'BATTLE_INTRO', 'PAUSED']);
+const FROZEN_STATES: ReadonlySet<GameState> = new Set(['BOOT', 'TITLE', 'BATTLE_INTRO', 'WAVE_INTRO', 'PAUSED']);
 
 /** Input snapshot handed to the simulation each tick. */
 export interface TickInput {
@@ -118,6 +124,10 @@ export class World implements EnemyContext, AttackContext {
   readonly seed: number;
   readonly battleIndex: number;
   readonly encounter: Encounter;
+  /** 0-based index of the current wave (GDD §10.4). */
+  waveIndex = 0;
+  /** WAVE_INTRO progress: the field swap and the spawn happen once each. */
+  private wavePhase: 'flight' | 'swapped' | 'spawned' = 'spawned';
   readonly rngFolder: Rng;
   readonly rngAi: Rng;
   readonly occupancy = new Occupancy();
@@ -155,7 +165,8 @@ export class World implements EnemyContext, AttackContext {
     this.player = new Player(this.occupancy, this.field, options.playerHp);
     this.chips = new ChipSystem(options.folder ?? 'basic', this.rngFolder);
     this.handSpec = options.hand ?? null;
-    this.spawnBattle();
+    this.waveIndex = Math.max(0, Math.min(this.waveCount - 1, Math.floor(options.startWave ?? 0)));
+    this.spawnWave();
     if (options.skipIntro) {
       this.dealStartingHand();
       this.state = 'ACTION';
@@ -207,16 +218,86 @@ export class World implements EnemyContext, AttackContext {
     if (k >= 1) this.worldScaleTransition = null;
   }
 
-  private spawnBattle(): void {
-    for (const spawn of this.encounter.enemies) {
+  get waveCount(): number {
+    return this.encounter.waves.length;
+  }
+
+  get wave(): EncounterWave {
+    return this.encounter.waves[this.waveIndex] as EncounterWave;
+  }
+
+  /** True while the current wave is the encounter's last one. */
+  get finalWave(): boolean {
+    return this.waveIndex >= this.waveCount - 1;
+  }
+
+  private spawnWave(): void {
+    for (const spawn of this.wave.enemies) {
       const enemy = createEnemy(spawn, this.nextEnemyId++, this.tick);
       this.occupancy.place(enemy.id, enemy.x, enemy.y);
       this.enemies.push(enemy);
     }
-    for (const p of this.encounter.panels ?? []) {
+    for (const p of this.wave.panels ?? []) {
       if (p.panel === 'CRACKED') this.field.crack(p.x, p.y);
       else this.field.breakPanel(p.x, p.y, this.tick, !this.occupancy.isFree(p.x, p.y));
     }
+  }
+
+  /**
+   * Mid-flight swap to a fresh field (GDD §10.4): panels, mines, objects and
+   * leftovers of the old wave go; the player returns to the start cell with HP kept.
+   */
+  private resetFieldForWave(): void {
+    for (const e of this.enemies) this.occupancy.remove(e.id, e.x, e.y);
+    for (const o of this.objects) this.occupancy.remove(o.id, o.x, o.y);
+    this.enemies = [];
+    this.objects = [];
+    this.attacks = [];
+    this.bombs = [];
+    this.pendingPushes.clear();
+    this.impactObjects.clear();
+    this.field.reset();
+    this.player.resetForWave();
+    this.events.push({ type: 'waveField', wave: this.waveIndex + 1 });
+  }
+
+  /** WAVE_INTRO: flight, field swap halfway, then the spawn (GDD §10.4). */
+  private updateWaveIntro(): void {
+    const flight = secondsToTicks(tuning.wave.FLIGHT_TIME);
+    const elapsed = this.stateElapsed;
+    if (this.wavePhase === 'flight' && elapsed >= Math.floor(flight / 2)) {
+      this.resetFieldForWave();
+      this.wavePhase = 'swapped';
+    }
+    if (this.wavePhase === 'swapped' && elapsed >= flight) {
+      this.spawnWave();
+      this.wavePhase = 'spawned';
+      this.events.push({ type: 'waveSpawned', wave: this.waveIndex + 1, count: this.enemies.length });
+    }
+    if (this.wavePhase === 'spawned' && elapsed >= flight + secondsToTicks(tuning.wave.SPAWN_TIME)) {
+      this.setState('ACTION');
+    }
+  }
+
+  /** Stops everything the player and the enemies had going when a wave or the battle ends. */
+  private endCombat(): void {
+    this.attacks = [];
+    this.bombs = [];
+    // A chip still before its hit frame goes back to its slot (GDD §6.5).
+    const active = this.activeChip;
+    if (active && !active.resolved) this.chips.restoreInterrupted(active.chip, active.slot);
+    this.activeChip = null;
+    this.combo = null;
+    this.bufferedChipUntil = null;
+    this.chips.cancelAttack();
+    // A combo delays the hand cooldown to its exit; ended here, it must still
+    // start, or the hand stays locked through the next wave.
+    if (this.chips.locked) {
+      this.chips.startCooldown(this.playerTick);
+      this.chips.reserveSpentRefills();
+    }
+    this.worldTimeScale = 1;
+    this.worldScaleTransition = null;
   }
 
   drainEvents(): SimEvent[] {
@@ -242,7 +323,18 @@ export class World implements EnemyContext, AttackContext {
   /** One tap on a hand slot: build or unbuild the Attack Queue (GDD §7.2). */
   selectChip(slot: number): boolean {
     if (this.state !== 'ACTION' || this.chips.locked) return false;
-    return this.chips.toggleSelect(slot);
+    if (!this.chips.toggleSelect(slot)) return false;
+    this.updateSelectSlowMo();
+    return true;
+  }
+
+  /** Decision slow-mo while the Attack Queue is being built (GDD §6.7). */
+  private updateSelectSlowMo(): void {
+    if (this.chips.attack.length > 0) {
+      this.setWorldTimeScale(tuning.combo.SELECT_TIME_SCALE, tuning.combo.SELECT_SLOW_MO_ENTER);
+    } else {
+      this.setWorldTimeScale(1, tuning.combo.SLOW_MO_EXIT);
+    }
   }
 
   /**
@@ -639,6 +731,8 @@ export class World implements EnemyContext, AttackContext {
     if (!chip) return false;
     this.beginChip(chip, slot ?? -1);
     if (startsCombo) this.startCombo(size);
+    // A single chip leaves the decision slow-mo straight to normal speed (GDD §6.7).
+    else if (first) this.setWorldTimeScale(1, tuning.combo.SLOW_MO_EXIT);
     return true;
   }
 
@@ -866,6 +960,20 @@ export class World implements EnemyContext, AttackContext {
           this.setState('ACTION');
         }
         return;
+      case 'WAVE_CLEAR':
+        // Deletions play out on both clocks, then the flight starts.
+        this.tick++;
+        this.time += dt;
+        this.removeDeletedEnemies();
+        if (this.stateElapsed >= secondsToTicks(tuning.wave.CLEAR_TIME)) {
+          this.waveIndex++;
+          this.wavePhase = 'flight';
+          this.setState('WAVE_INTRO');
+        }
+        return;
+      case 'WAVE_INTRO':
+        this.updateWaveIntro();
+        return;
       case 'BATTLE_WON':
       case 'PLAYER_DEAD':
         // Both clocks keep running after the battle ends so every animation on
@@ -958,15 +1066,13 @@ export class World implements EnemyContext, AttackContext {
       this.worldScaleTransition = null;
       this.setState('PLAYER_DEAD');
     } else if (this.enemies.every((e) => !e.alive)) {
-      this.attacks = [];
-      this.bombs = [];
-      this.activeChip = null;
-      this.combo = null;
-      this.bufferedChipUntil = null;
-      this.chips.cancelAttack();
-      this.worldTimeScale = 1;
-      this.worldScaleTransition = null;
-      this.setState('BATTLE_WON');
+      this.endCombat();
+      if (this.finalWave) {
+        this.setState('BATTLE_WON');
+      } else {
+        this.events.push({ type: 'waveCleared', wave: this.waveIndex + 1 });
+        this.setState('WAVE_CLEAR');
+      }
     }
   }
 

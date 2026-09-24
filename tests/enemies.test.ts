@@ -45,7 +45,7 @@ describe('battles', () => {
   it('spawn the enemies from data, each on its own panel', () => {
     BATTLES.forEach((def, i) => {
       const w = world(i + 1);
-      expect(w.enemies.map((e) => e.kind)).toEqual(def.enemies.map((s) => s.kind));
+      expect(w.enemies.map((e) => e.kind)).toEqual(def.waves[0]!.enemies.map((s) => s.kind));
       const cells = new Set(w.enemies.map((e) => `${e.x},${e.y}`));
       expect(cells.size).toBe(w.enemies.length);
       for (const e of w.enemies) expect(w.occupancy.get(e.x, e.y)).toBe(e.id);

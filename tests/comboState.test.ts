@@ -285,3 +285,43 @@ describe('Combo Break', () => {
     expect(wave.y).toBe(4);
   });
 });
+
+describe('Selection slow-mo (GDD §6.7)', () => {
+  const select = (w: World, slot: number) => w.step(DT, { commands: [{ type: 'selectChip', slot }], held: null });
+  const readySlots = (w: World) => w.chips.hand.map((c, i) => (c ? i : -1)).filter((i) => i >= 0);
+
+  it('slows the world while chips are queued and restores it when the queue is emptied', () => {
+    const w = world();
+    const [a] = readySlots(w);
+    select(w, a!);
+    run(w, T(tuning.combo.SELECT_SLOW_MO_ENTER) + 1);
+    expect(w.worldTimeScale).toBeCloseTo(tuning.combo.SELECT_TIME_SCALE);
+
+    select(w, a!);
+    run(w, T(tuning.combo.SLOW_MO_EXIT) + 1);
+    expect(w.worldTimeScale).toBe(1);
+  });
+
+  it('hands over to the combo scale on the first attack of a series', () => {
+    const w = world();
+    const [a, b] = readySlots(w);
+    select(w, a!);
+    select(w, b!);
+    run(w, T(tuning.combo.SELECT_SLOW_MO_ENTER) + 1);
+    step(w, true);
+    expect(w.combo).not.toBeNull();
+    run(w, T(tuning.combo.SLOW_MO_ENTER) + 1);
+    expect(w.worldTimeScale).toBeCloseTo(tuning.combo.WORLD_TIME_SCALE);
+  });
+
+  it('returns to normal speed after a single chip fires', () => {
+    const w = world();
+    const [a] = readySlots(w);
+    select(w, a!);
+    run(w, T(tuning.combo.SELECT_SLOW_MO_ENTER) + 1);
+    step(w, true);
+    expect(w.combo).toBeNull();
+    run(w, T(tuning.combo.SLOW_MO_EXIT) + 1);
+    expect(w.worldTimeScale).toBe(1);
+  });
+});

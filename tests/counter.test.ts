@@ -20,7 +20,7 @@ function world(kind: EnemyKind, aiEnabled = true): World {
     battleIndex: 1,
     skipIntro: true,
     cheats: { god: true, aiEnabled },
-    encounter: { id: `timing-${kind}`, tier: 'normal', minDepth: 1, maxDepth: 1, enemies: [{ kind, x: 1, y: 1 }] },
+    encounter: { id: `timing-${kind}`, tier: 'normal', minDepth: 1, maxDepth: 1, waves: [{ enemies: [{ kind, x: 1, y: 1 }] }] },
   });
 }
 
@@ -108,7 +108,7 @@ describe('enemy attack timing grammar', () => {
         tier: 'normal',
         minDepth: 1,
         maxDepth: 1,
-        enemies: [{ kind: 'mettik', x: 1, y: 1, level: 3 }],
+        waves: [{ enemies: [{ kind: 'mettik', x: 1, y: 1, level: 3 }] }],
       },
     });
     expect(w.enemies[0]!.moveDurationSeconds()).toBe(T(tuning.mettik.MOVE_TIME / 1.2) / tuning.sim.SIM_HZ);

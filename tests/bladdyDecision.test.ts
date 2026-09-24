@@ -20,7 +20,7 @@ function world(x = 0, y = 0): World {
       tier: 'normal',
       minDepth: 1,
       maxDepth: 1,
-      enemies: [{ kind: 'bladdy', x, y }],
+      waves: [{ enemies: [{ kind: 'bladdy', x, y }] }],
     },
   });
 }

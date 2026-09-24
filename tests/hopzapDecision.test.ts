@@ -25,7 +25,7 @@ function world(seed = 41, x = 0, y = 1): World {
       tier: 'normal',
       minDepth: 1,
       maxDepth: 1,
-      enemies: [{ kind: 'hopzap', x, y }],
+      waves: [{ enemies: [{ kind: 'hopzap', x, y }] }],
     },
   });
 }

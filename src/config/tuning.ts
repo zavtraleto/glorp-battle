@@ -44,6 +44,9 @@ export const DEFAULT_TUNING = {
     SLOW_MO_EXIT: 0.15,
     COMBO_BREAK_EXIT: 0.08,
     CHIP_INPUT_BUFFER: 0.1,
+    /** Experimental: world speed while the Attack Queue is being built (GDD §6.7); 1 = off. */
+    SELECT_TIME_SCALE: 0.1,
+    SELECT_SLOW_MO_ENTER: 0.1,
   },
   player: {
     PLAYER_MAX_HP: 10,
@@ -165,6 +168,15 @@ export const DEFAULT_TUNING = {
     /** Player deletion before the GAME OVER screen. */
     RESULT_DELAY_LOSE: 1.0,
   },
+  /** Waves inside an encounter (GDD §10.4). */
+  wave: {
+    /** Last enemy of a wave deleted → flight starts; covers the deletion animation. */
+    CLEAR_TIME: 0.5,
+    /** The player flies to the next field; the field is swapped halfway. */
+    FLIGHT_TIME: 1.0,
+    /** New enemies materialize; nothing acts yet. */
+    SPAWN_TIME: 0.5,
+  },
   input: {
     SWIPE_MIN_PX: 24,
     /** A held finger starts a new stroke after resting this long (GDD §12). */
@@ -205,6 +217,8 @@ export const DEFAULT_TUNING = {
     AFTER_TIME: 0.2,
     /** Spawn markers at the battle intro, seconds. */
     SPAWN_TIME: 0.6,
+    /** How far the camera flies per half of the wave flight, world units (GDD §10.4). */
+    WAVE_FLIGHT_DIST: 8,
     DAMAGE_SCALE: 4,
     /** Height of the CRT status band, share of the picture (spec §8). */
     HUD_BAND: 0.11,

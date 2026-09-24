@@ -25,6 +25,8 @@ export interface SignalInput {
   introTicks: number;
   wonTicks: number;
   deadTicks: number;
+  /** Wave flight (GDD §10.4); the field is swapped halfway. */
+  flightTicks: number;
 }
 
 /** Rows counted from the player's edge: the nearest row is 0. */
@@ -43,6 +45,15 @@ export function battleSignal(i: SignalInput): GridSignal {
       const t = i.elapsed / Math.max(1, i.introTicks);
       return { ...NO_SIGNAL, reveal: (y) => clamp01(t * ROWS * 1.25 - nearIndex(y)) };
     }
+    case 'WAVE_INTRO': {
+      // The old field slips away under the player, near rows first; the new
+      // one builds from the far edge as it comes in.
+      const t = i.elapsed / Math.max(1, i.flightTicks);
+      if (t >= 1) return NO_SIGNAL;
+      if (t < 0.5) return { ...NO_SIGNAL, reveal: (y) => clamp01(1 - (t * 2 * ROWS * 1.25 - nearIndex(y))) };
+      return { ...NO_SIGNAL, reveal: (y) => clamp01((t - 0.5) * 2 * ROWS * 1.25 - y) };
+    }
+    case 'WAVE_CLEAR':
     case 'BATTLE_WON': {
       // Enemy cells blink, the rest pulses once.
       const on = Math.floor(i.elapsed / 4) % 2 === 0;

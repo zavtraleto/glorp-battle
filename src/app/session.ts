@@ -102,7 +102,8 @@ export class Session {
 
   get next(): NextBattle {
     const encounter = this.run?.encounter;
-    return { kind: encounter?.tier ?? 'normal', enemies: encounter?.enemies.length ?? 0 };
+    // Only the first wave is announced: the number of waves stays a surprise.
+    return { kind: encounter?.tier ?? 'normal', enemies: encounter?.waves[0]?.enemies.length ?? 0 };
   }
 
   get healed(): boolean {
@@ -153,13 +154,14 @@ export class Session {
     return this.director?.hint() ?? null;
   }
 
-  private startBattle(encounter: Encounter): void {
+  private startBattle(encounter: Encounter, startWave = 0): void {
     const run = this.run as Run;
     this.replaceWorld(
       new World({
         seed: run.battleSeed(),
         battleIndex: 1,
         encounter,
+        startWave,
         playerHp: run.hp,
         cheats: this.options.cheats,
         folder: this.debugFolder ?? run.folder,
@@ -256,12 +258,12 @@ export class Session {
   // ---------- Debug ----------
 
   /** A fresh run that jumps straight into an encounter with the debug folder. */
-  private debugBattle(encounter: Encounter, seed?: number): void {
+  private debugBattle(encounter: Encounter, seed?: number, wave = 1): void {
     if (seed !== undefined) this.seed = seed >>> 0;
     this.run = this.newRun('basic');
     this.run.encounter = encounter;
     this.debugFolder = folderChips(this.options.folder);
-    this.startBattle(encounter);
+    this.startBattle(encounter, wave - 1);
   }
 
   /** Jumps into old battle 1–4 with full HP (debug panel / ?battle=). */
@@ -269,11 +271,11 @@ export class Session {
     this.debugBattle(debugEncounter(index), seed);
   }
 
-  /** Jumps into any encounter by id (?encounter=). */
-  debugEncounter(id: string, seed?: number): boolean {
+  /** Jumps into any encounter by id (?encounter=), optionally from a later wave (?wave=, 1-based). */
+  debugEncounter(id: string, seed?: number, wave = 1): boolean {
     const enc = encounterById(id);
     if (!enc) return false;
-    this.debugBattle(enc, seed);
+    this.debugBattle(enc, seed, wave);
     return true;
   }
 

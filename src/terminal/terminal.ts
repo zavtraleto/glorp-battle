@@ -40,6 +40,7 @@ import { cooldownForSlot } from './chips/railPlan';
 import { Mount } from './parts/mount';
 import { mountCorners, screenBounds } from './interaction/project';
 import { Trackball } from './parts/trackball';
+import { WaveBanner } from './waveBanner';
 import { terminalMode } from './terminalMode';
 import { chipName, t } from '../i18n';
 import { CHIPS } from '../data/chips';
@@ -77,6 +78,8 @@ const EDGE = { hit: 0.18, kill: 0.6, hurt: 0.5 };
 const HP_BAR_GAP = 1;
 /** User-tuned size of the framed 14-segment module under the CRT. */
 const CHIP_DISPLAY_SCALE = 0.6;
+/** "Wave 1" stays up this long after the battle intro, seconds. */
+const WAVE1_BANNER_HOLD = 0.5;
 
 export interface TerminalHandlers {
   move(dir: Dir): void;
@@ -115,6 +118,7 @@ export class Terminal {
   private readonly lighting = new DarkLighting();
   private readonly chipDisplay = new SegmentDisplay();
   private readonly pcb = new Pcb();
+  private readonly waveBanner = new WaveBanner();
   private readonly crtMount = new Mount();
   /** The control panel: rail, trackball and pause key on one tilted plane. */
   private readonly controlMount = new Mount();
@@ -198,6 +202,8 @@ export class Terminal {
       this.attachKeyVisuals(),
     );
     this.resize();
+    // A debug jump may start the page straight in a battle intro.
+    this.resetWorld();
   }
 
   /** Rebuilds layout, canvas size and meshes when the viewport or layout tunables change. */
@@ -344,6 +350,14 @@ export class Terminal {
       this.lighting.flashAlarm();
       this.shakeCabinet(SHAKE.playerHit);
     }
+    // Waves (GDD §10.4): the banner rides the flight, the landing jolts the cabinet.
+    if (e.type === 'stateChanged' && e.to === 'WAVE_INTRO') {
+      this.showWaveBanner(world, tuning.wave.FLIGHT_TIME + tuning.wave.SPAWN_TIME);
+    }
+    if (e.type === 'waveSpawned') {
+      this.crt.flash();
+      this.shakeCabinet(SHAKE.chip);
+    }
     const f = floaterFromEvent(e);
     if (f) this.floaters.add(f, world.uiTick);
   }
@@ -356,6 +370,18 @@ export class Terminal {
   resetWorld(): void {
     this.rail.reset();
     this.floaters.clear();
+    const world = this.opts.session.world;
+    if (world.state === 'BATTLE_INTRO') this.showWaveBanner(world, tuning.fx.INTRO_TIME + WAVE1_BANNER_HOLD);
+    else this.waveBanner.hide();
+  }
+
+  /** "Wave N" over the whole terminal; single-wave battles (tutorial, debug) show none. */
+  private showWaveBanner(world: World, seconds: number): void {
+    if (world.waveCount < 2) {
+      this.waveBanner.hide();
+      return;
+    }
+    this.waveBanner.show(t('banner.wave', { n: world.waveIndex + 1 }), seconds);
   }
 
   render(world: World, alpha: number, dt: number): void {
@@ -389,14 +415,36 @@ export class Terminal {
     renderer.setRenderTarget(null);
     renderer.setClearColor(TERMINAL_CLEAR_COLOR, 1);
     renderer.render(this.scene, this.camera);
+    this.renderWaveBanner(dt);
 
     renderer.getSize(this.size);
     perf.setGpu(renderer.info.render.calls, renderer.info.render.triangles, this.battle.bytes, this.size.x, this.size.y);
   }
 
+  /** The banner sits over everything, in the upper part of the CRT. */
+  private renderWaveBanner(dt: number): void {
+    const { w: vw, h: vh } = this.layout.viewport;
+    const crt = this.layout.crt;
+    this.waveBanner.update(dt, {
+      aspect: vw / vh,
+      centerX: (2 * (crt.x + crt.w / 2)) / vw - 1,
+      crtTop: 1 - (2 * crt.y) / vh,
+      crtHeight: (2 * crt.h) / vh,
+      bodyShare: this.layout.body.w / vw,
+    });
+    if (!this.waveBanner.visible) return;
+    const { renderer } = this.opts;
+    const autoClear = renderer.autoClear;
+    renderer.autoClear = false;
+    renderer.clearDepth();
+    renderer.render(this.waveBanner.scene, this.waveBanner.camera);
+    renderer.autoClear = autoClear;
+  }
+
   dispose(): void {
     for (const c of this.cleanups) c();
     this.battle.dispose();
+    this.waveBanner.dispose();
   }
 
   private mode() {

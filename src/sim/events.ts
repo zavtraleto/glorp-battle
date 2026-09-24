@@ -38,5 +38,11 @@ export type SimEvent =
   /** Enemy melee swing over these panels (Bladdy). */
   | { type: 'enemySlash'; cells: Cell[] }
   | { type: 'enemyWarped'; id: EntityId; fromX: number; fromY: number; x: number; y: number }
+  /** Every enemy of a wave that is not the last is deleted (GDD §10.4); `wave` is 1-based. */
+  | { type: 'waveCleared'; wave: number }
+  /** The field was swapped for the next wave mid-flight. */
+  | { type: 'waveField'; wave: number }
+  /** The enemies of a wave appeared; they act once the spawn animation ends. */
+  | { type: 'waveSpawned'; wave: number; count: number }
   /** The draw pile ran dry and the spent chips shuffled back in (decision 2026-09-18 А). */
   | { type: 'drawReshuffled'; count: number };

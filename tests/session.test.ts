@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { RUN_STEPS } from '../src/app/run';
 import { Session } from '../src/app/session';
 import { DEFAULT_TUNING, mergeTuning, secondsToTicks, tuning } from '../src/config/tuning';
 import type { Command } from '../src/core/input/commands';
@@ -31,9 +32,15 @@ function enterAction(s: Session): void {
   expect(s.world.state).toBe('ACTION');
 }
 
+/** Clears every wave of the encounter (GDD §10.4), then the win signal plays. */
 function win(s: Session): void {
-  s.world.killAllEnemies();
-  tick(s);
+  for (;;) {
+    s.world.killAllEnemies();
+    tick(s);
+    if (s.world.state === 'BATTLE_WON') break;
+    expect(s.world.state).toBe('WAVE_CLEAR');
+    while (s.world.state !== 'ACTION') tick(s);
+  }
   run(s, T(tuning.fx.RESULT_DELAY_WIN));
 }
 
@@ -60,14 +67,14 @@ describe('Session', () => {
     const s = make();
     s.start('basic');
     expect(s.screen).toBe('PATH');
-    expect(s.folderSize).toBe(20);
+    expect(s.folderSize).toBe(8);
     const encounter = s.run!.encounter;
-    expect(s.next).toEqual({ kind: encounter.tier, enemies: encounter.enemies.length });
+    expect(s.next).toEqual({ kind: encounter.tier, enemies: encounter.waves[0]!.enemies.length });
     s.fight();
     expect(s.screen).toBe('BATTLE');
     expect(s.world.encounter.id).toBe(encounter.id);
-    expect(s.world.enemies.map((e) => e.kind)).toEqual(encounter.enemies.map((e) => e.kind));
-    expect(s.world.chips.chips).toHaveLength(20);
+    expect(s.world.enemies.map((e) => e.kind)).toEqual(encounter.waves[0]!.enemies.map((e) => e.kind));
+    expect(s.world.chips.chips).toHaveLength(8);
     expect(s.world.player.hp).toBe(s.world.player.maxHp);
   });
 
@@ -81,7 +88,7 @@ describe('Session', () => {
     expect(s.screen).toBe('PATH');
     expect(s.run!.depth).toBe(2);
     expect(s.hp).toBe(6);
-    expect(s.folderSize).toBe(20);
+    expect(s.folderSize).toBe(8);
     s.fight();
     expect(s.world.player.hp).toBe(6);
     expect(s.lastResult).toMatchObject({ battle: 1, hpLeft: 6 });
@@ -98,17 +105,17 @@ describe('Session', () => {
     expect(s.screen).toBe('TITLE');
   });
 
-  it('clearing eight Play stages completes the run', () => {
+  it('clearing every Play stage completes the run', () => {
     const s = make();
     s.start('basic');
-    for (let step = 1; step <= 8; step++) {
+    for (let step = 1; step <= RUN_STEPS; step++) {
       expect(s.screen).toBe('PATH');
       s.fight();
       enterAction(s);
       win(s);
     }
     expect(s.screen).toBe('COMPLETE');
-    expect(s.results).toHaveLength(8);
+    expect(s.results).toHaveLength(RUN_STEPS);
     expect(s.totalTime).toBeGreaterThanOrEqual(0);
     s.toTitle();
     expect(s.screen).toBe('TITLE');

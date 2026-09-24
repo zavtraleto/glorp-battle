@@ -54,7 +54,7 @@ const WIN: TutorialBeat['done'] = (c) => c.world.enemies.every((e) => !e.alive);
 
 const step1: TutorialStep = {
   id: 'move',
-  encounter: { id: 'tut1', tier: 'normal', minDepth: 1, maxDepth: 1, enemies: [{ kind: 'mettik', x: 1, y: 1, level: 1 }] },
+  encounter: { id: 'tut1', tier: 'normal', minDepth: 1, maxDepth: 1, waves: [{ enemies: [{ kind: 'mettik', x: 1, y: 1, level: 1 }] }] },
   folder: [chip('cannon', '*')],
   hand: [null, null, null, null, null],
   beats: [
@@ -89,7 +89,7 @@ const step2: TutorialStep = {
   id: 'queue',
   encounter: {
     id: 'tut2', tier: 'normal', minDepth: 1, maxDepth: 1,
-    enemies: [{ kind: 'mettik', x: 0, y: 1, level: 1 }, { kind: 'mettik', x: 2, y: 1, level: 1 }],
+    waves: [{ enemies: [{ kind: 'mettik', x: 0, y: 1, level: 1 }, { kind: 'mettik', x: 2, y: 1, level: 1 }] }],
   },
   // Two identical chips teach queueing without introducing code rules in v0.1.
   folder: [chip('cannon', '*'), chip('cannon', '*')],
@@ -100,7 +100,7 @@ const step2: TutorialStep = {
 const step3: TutorialStep = {
   id: 'panel',
   // Row 1 is out of sword reach from the player's own area: the panel has to move.
-  encounter: { id: 'tut3', tier: 'normal', minDepth: 1, maxDepth: 1, enemies: [{ kind: 'mettik', x: 1, y: 1, level: 1 }] },
+  encounter: { id: 'tut3', tier: 'normal', minDepth: 1, maxDepth: 1, waves: [{ enemies: [{ kind: 'mettik', x: 1, y: 1, level: 1 }] }] },
   folder: [chip('areagrab', '*'), chip('sword', '*')],
   hand: [chip('areagrab', '*'), chip('sword', '*'), null, null, null],
   beats: [{ id: 'grab', focus: 'chip', seg: 'tutorial.seg.panel', line: 'tutorial.line.panel', done: WIN }],
@@ -110,7 +110,7 @@ const step4: TutorialStep = {
   id: 'graduate',
   encounter: {
     id: 'tut4', tier: 'normal', minDepth: 1, maxDepth: 1,
-    enemies: [{ kind: 'canodron', x: 1, y: 0, level: 1 }, { kind: 'mettik', x: 0, y: 2, level: 1 }],
+    waves: [{ enemies: [{ kind: 'canodron', x: 1, y: 0, level: 1 }, { kind: 'mettik', x: 0, y: 2, level: 1 }] }],
   },
   // Cannon (4) does not drop Canodron (6) in one shot, so the hand runs out
   // and spent slots refill on their own — no lesson needed for it.

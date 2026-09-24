@@ -17,6 +17,27 @@ export interface ScreenPoint {
 }
 
 const tmp = new THREE.Vector3();
+const glideFrom = new THREE.Vector3();
+const glideTo = new THREE.Vector3();
+
+/** Ease-in-out: the flight is fastest at the field swap, which hides the cut. */
+function easeInOut(t: number): number {
+  return t < 0.5 ? 2 * t * t : 1 - 2 * (1 - t) * (1 - t);
+}
+
+/**
+ * Wave flight (GDD §10.4): how far the camera has moved along the field axis
+ * (world z). It flies forward off the old field, jumps back at the swap and
+ * flies on onto the new one.
+ */
+export function flightOffset(t: number, distance: number): number {
+  if (t <= 0 || t >= 1) return 0;
+  const travelled = 2 * distance * easeInOut(t);
+  return t < 0.5 ? -travelled : 2 * distance - travelled;
+}
+
+/** The player rises this high mid-flight, world units. */
+const FLIGHT_LIFT = 0.35;
 
 /** Signal black: the palette pass turns it into the background colour. */
 export const BATTLE_CLEAR_COLOR = 0x000000;
@@ -36,6 +57,9 @@ export class SceneRenderer {
   private readonly corners: THREE.Vector3[] = [];
   private readonly spawns = new Map<number, number>();
   private lastCameraKey = '';
+  /** Camera position from the fit; the wave flight offsets from it. */
+  private readonly cameraBase = new THREE.Vector3();
+  private readonly playerShift = new THREE.Vector3();
 
   constructor(opts: SceneRendererOptions) {
     this.renderer = opts.renderer;
@@ -65,6 +89,42 @@ export class SceneRenderer {
       // The status band owns the top of the picture, so the field sits below it.
       offsetY: -v.HUD_BAND + v.VIEW_OFFSET_Y,
     });
+    this.cameraBase.copy(this.camera.position);
+  }
+
+  /** 0..1 through the wave flight, or -1 outside it. */
+  private flightProgress(world: World): number {
+    if (world.state !== 'WAVE_INTRO') return -1;
+    const t = world.stateElapsed / Math.max(1, secondsToTicks(tuning.wave.FLIGHT_TIME));
+    return t < 1 ? t : -1;
+  }
+
+  /** 0 → 1 while the new wave materializes (GDD §10.4); 1 otherwise. */
+  private spawnProgress(world: World): number {
+    if (world.state !== 'WAVE_INTRO') return 1;
+    const since = world.stateElapsed - secondsToTicks(tuning.wave.FLIGHT_TIME);
+    return Math.max(0, Math.min(1, since / Math.max(1, secondsToTicks(tuning.wave.SPAWN_TIME))));
+  }
+
+  /**
+   * Moves the camera along the wave flight. The player rides with it and, after
+   * the swap, glides from the cell it left to the start cell.
+   */
+  private placeFlight(world: World): THREE.Vector3 | null {
+    const t = this.flightProgress(world);
+    const z = flightOffset(t, tuning.battleVisual.WAVE_FLIGHT_DIST);
+    this.camera.position.copy(this.cameraBase);
+    this.camera.position.z += z;
+    this.camera.updateMatrixWorld();
+    if (t < 0) return null;
+    const p = world.player;
+    this.playerShift.set(0, Math.sin(Math.PI * t) * FLIGHT_LIFT, z);
+    if (t >= 0.5) {
+      cellToWorld(p.prevX, p.prevY, glideFrom);
+      cellToWorld(p.x, p.y, glideTo);
+      this.playerShift.add(glideFrom.sub(glideTo).multiplyScalar(1 - easeInOut((t - 0.5) * 2)));
+    }
+    return this.playerShift;
   }
 
   /** Normalized point (0..1, top-left origin) in the last render target for a world point. */
@@ -132,6 +192,7 @@ export class SceneRenderer {
 
   private syncEnemies(world: World, alpha: number, dt: number, frame: SpriteFrame): void {
     const live = new Set<number>();
+    const spawn = this.spawnProgress(world);
     for (const e of world.enemies) {
       live.add(e.id);
       let view = this.enemyViews.get(e.id);
@@ -140,7 +201,7 @@ export class SceneRenderer {
         this.enemyViews.set(e.id, view);
         this.scene.add(view.sprite);
       }
-      view.update(e, world.tick, alpha, dt, frame);
+      view.update(e, world.tick, alpha, dt, frame, spawn);
     }
     for (const [id, view] of this.enemyViews) {
       if (live.has(id)) continue;
@@ -153,7 +214,8 @@ export class SceneRenderer {
   private prepare(world: World, alpha: number, dt: number, w: number, h: number): void {
     const frame: SpriteFrame = { camera: this.camera, width: w, height: h };
     const worldAlpha = world.worldRenderAlpha(alpha);
-    this.playerView.update(world.player, world.playerTick, alpha, dt, world.activeChip !== null, frame);
+    const shift = this.placeFlight(world);
+    this.playerView.update(world.player, world.playerTick, alpha, dt, world.activeChip !== null, frame, shift);
     this.syncEnemies(world, worldAlpha, dt, frame);
     this.fx.update(world, alpha);
     // Moving enemy attacks light up the cell they are in.
@@ -173,6 +235,9 @@ export class SceneRenderer {
     this.spawns.clear();
     if (world.state === 'BATTLE_INTRO') {
       for (const e of world.enemies) this.spawns.set(cellKey(e.x, e.y, COLS), world.stateElapsed);
+    } else if (world.state === 'WAVE_INTRO') {
+      const since = world.stateElapsed - secondsToTicks(tuning.wave.FLIGHT_TIME);
+      if (since >= 0) for (const e of world.enemies) this.spawns.set(cellKey(e.x, e.y, COLS), since);
     }
     const fx = tuning.fx;
     const signal = battleSignal({
@@ -182,6 +247,7 @@ export class SceneRenderer {
       introTicks: secondsToTicks(fx.INTRO_TIME),
       wonTicks: secondsToTicks(fx.RESULT_DELAY_WIN),
       deadTicks: secondsToTicks(fx.RESULT_DELAY_LOSE),
+      flightTicks: secondsToTicks(tuning.wave.FLIGHT_TIME),
     });
     this.field.update(world, worldAlpha, this.spawns, signal, world.aimPreview());
   }

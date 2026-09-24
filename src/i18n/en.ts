@@ -16,6 +16,7 @@ export const en = {
   'banner.paused': 'PAUSED',
   'banner.allClear': 'ALL BATTLES CLEAR!',
   'banner.runClear': 'TERMINAL CLEAR!',
+  'banner.wave': 'Wave {n}',
   'path.title': 'STEP {n}/{total}',
   'path.healed': 'HP restored',
   'path.hint': 'HP restores every {n} battles.',

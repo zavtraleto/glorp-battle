@@ -1,14 +1,15 @@
 import { tuning } from '../config/tuning';
 import { deriveSeed, Rng } from '../core/rng';
-import type { Encounter, EncounterTier, EnemySpawn } from '../data/encounters';
+import { e, STAGES, wave, type Encounter, type EncounterTier } from '../data/encounters';
 import type { ChipCode, ChipId } from '../data/chips';
 import type { FolderChip } from '../sim/chips/chipSystem';
 import type { EnemyKind } from '../sim/enemies/enemyBase';
 
-// Player-facing Play run: eight fixed stages, no path choice and no automatic
-// healing. HP and the 20-card Play folder carry over between battles.
+// Player-facing Play run (GDD §10.2): five fixed stages and a seeded final one,
+// no path choice and no automatic healing. HP and the 8-chip starter folder carry
+// over between battles; every stage is two or three waves.
 
-export const RUN_STEPS = 8;
+export const RUN_STEPS = 6;
 
 interface PlayChip {
   defId: ChipId;
@@ -32,34 +33,41 @@ export const PLAY_CONTENT = {
   enemies: ['mettik', 'canodron', 'bladdy', 'hopzap'] satisfies readonly EnemyKind[],
 } as const;
 
-/** Two of every Play chip: a deterministic 20-chip prototype folder. */
-export function createPlayFolder(_rng: Pick<Rng, 'pick'>): FolderChip[] {
-  return PLAY_CONTENT.chips.flatMap((chip) => [{ ...chip }, { ...chip }]);
-}
-
-const spawn = (kind: EnemyKind, x: number, y: number): EnemySpawn => ({ kind, x, y, level: 1 });
-
-const PLAY_STAGES: readonly (readonly EnemySpawn[])[] = [
-  [spawn('mettik', 1, 1)],
-  [spawn('canodron', 0, 0), spawn('canodron', 2, 0)],
-  [spawn('mettik', 0, 2), spawn('canodron', 2, 0)],
-  [spawn('bladdy', 1, 0)],
-  [spawn('bladdy', 0, 0), spawn('canodron', 2, 1)],
-  [spawn('hopzap', 1, 1)],
-  [spawn('mettik', 0, 2), spawn('hopzap', 2, 0)],
+/**
+ * The run's folder for now (GDD §6.3): eight chips for a short, readable
+ * rotation. The rest of PLAY_CONTENT stays in the game but is not dealt yet.
+ */
+export const STARTER_FOLDER: readonly { defId: ChipId; count: number }[] = [
+  { defId: 'cannon', count: 3 },
+  { defId: 'sword', count: 2 },
+  { defId: 'areagrab', count: 2 },
+  { defId: 'guard', count: 1 },
 ];
 
-const FINAL_CELLS = [{ x: 0, y: 0 }, { x: 1, y: 1 }, { x: 2, y: 0 }] as const;
+/** The deterministic starter folder, every chip with its Play code. */
+export function createPlayFolder(_rng: Pick<Rng, 'pick'>): FolderChip[] {
+  return STARTER_FOLDER.flatMap(({ defId, count }) => {
+    const code = PLAY_CONTENT.chips.find((chip) => chip.defId === defId)?.code ?? '*';
+    return Array.from({ length: count }, () => ({ defId, code }));
+  });
+}
+
+/** Final-stage waves: how many random kinds each one takes, and where they stand. */
+const FINAL_WAVES = [
+  [{ x: 0, y: 1 }, { x: 2, y: 1 }],
+  [{ x: 0, y: 0 }, { x: 2, y: 2 }],
+  [{ x: 0, y: 0 }, { x: 1, y: 1 }, { x: 2, y: 0 }],
+] as const;
 
 function playEncounter(seed: number, depth: number): Encounter {
-  const fixed = PLAY_STAGES[depth - 1];
-  const enemies = fixed
-    ? fixed.map((enemy) => ({ ...enemy }))
-    : new Rng(deriveSeed(seed, 'path/8'))
-        .shuffle([...PLAY_CONTENT.enemies])
-        .slice(0, 3)
-        .map((kind, i) => spawn(kind, FINAL_CELLS[i]!.x, FINAL_CELLS[i]!.y));
-  return { id: `play${depth}`, tier: 'normal', minDepth: depth, maxDepth: depth, enemies };
+  const fixed = STAGES[depth - 1];
+  if (fixed) return { ...fixed, waves: fixed.waves.map((w) => ({ ...w, enemies: w.enemies.map((en) => ({ ...en })) })) };
+  const rng = new Rng(deriveSeed(seed, `path/${RUN_STEPS}`));
+  const waves = FINAL_WAVES.map((cells) => {
+    const kinds = rng.shuffle([...PLAY_CONTENT.enemies]).slice(0, cells.length);
+    return wave(...kinds.map((kind, i) => e(kind, cells[i]!.x, cells[i]!.y)));
+  });
+  return { id: `s${depth}`, tier: 'elite', minDepth: depth, maxDepth: depth, waves };
 }
 
 /** Starting folder choice (roguelite spec §4.4); the title offers three buttons. */

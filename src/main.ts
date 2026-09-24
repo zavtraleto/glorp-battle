@@ -38,8 +38,8 @@ const ui = byId('ui');
 
 const cheats: Cheats = { god: params.god, aiEnabled: true };
 const session = new Session({ seed: params.seed ?? randomSeed(), cheats, folder: params.folder });
-// ?battle=N / ?encounter=<id> skip the title and jump straight into a battle (debug).
-if (params.encounter) session.debugEncounter(params.encounter);
+// ?battle=N / ?encounter=<id>[&wave=N] skip the title and jump straight into a battle (debug).
+if (params.encounter) session.debugEncounter(params.encounter, undefined, params.wave);
 else if (query.has('battle')) session.debugJump(params.battle);
 
 // ?bench=1: autopilot on battle 1 for the frame budget check (TERMINAL.md §10).
