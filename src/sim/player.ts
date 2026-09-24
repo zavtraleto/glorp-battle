@@ -29,7 +29,7 @@ export class Player {
   /** Remaining ticks of Invis: enemy attacks pass through. */
   invisTicks = 0;
   /** One charge that fully absorbs the next damaging hit. */
-  barrier = false;
+  guard = false;
   /** Remaining ticks of paralysis: no movement or chips, no i-frames. */
   paralyzeTicks = 0;
   /** Remaining ticks of a chip animation; movement remains available. */

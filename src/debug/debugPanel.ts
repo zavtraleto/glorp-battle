@@ -191,7 +191,7 @@ export class DebugPanel {
     // More cheats arrive with their systems (fill gauge, give chip...).
     const cf = this.gui.addFolder('Cheats');
     const a = this.actions;
-    const hp = { value: 100 };
+    const hp = { value: tuning.player.PLAYER_MAX_HP };
     cf.add(a.cheats, 'god').name('god mode (no damage)');
     cf.add(a.cheats, 'aiEnabled').name('enemy AI');
     cf.add({ kill: () => a.killAll() }, 'kill').name('kill all enemies');
@@ -199,7 +199,7 @@ export class DebugPanel {
     const give = { chip: 'cannon' as ChipId };
     cf.add(give, 'chip', Object.keys(CHIPS)).name('chip to give');
     cf.add({ give: () => a.giveChip(give.chip) }, 'give').name('add chip to queue');
-    cf.add(hp, 'value', 0, 100, 1).name('player HP');
+    cf.add(hp, 'value', 0, tuning.player.PLAYER_MAX_HP, 1).name('player HP');
     cf.add({ set: () => a.setPlayerHp(hp.value) }, 'set').name('set player HP');
     cf.add({ retry: () => a.restart({}) }, 'retry').name('restart battle');
     cf.close();

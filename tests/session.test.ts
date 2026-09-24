@@ -39,7 +39,7 @@ function win(s: Session): void {
 
 function die(s: Session): void {
   const p = s.world.player;
-  p.hp = 5;
+  p.hp = 1;
   p.iframeTicks = 0;
   s.world.spawnAttack(new Shockwave(1, p.x, p.y, s.world.tick));
   tick(s);
@@ -68,7 +68,7 @@ describe('Session', () => {
     expect(s.world.encounter.id).toBe(encounter.id);
     expect(s.world.enemies.map((e) => e.kind)).toEqual(encounter.enemies.map((e) => e.kind));
     expect(s.world.chips.chips).toHaveLength(20);
-    expect(s.world.player.hp).toBe(100);
+    expect(s.world.player.hp).toBe(s.world.player.maxHp);
   });
 
   it('a win goes straight to the next step with HP and the folder carried over', () => {
@@ -76,15 +76,15 @@ describe('Session', () => {
     s.start('basic');
     s.fight();
     enterAction(s);
-    s.world.player.hp = 64;
+    s.world.player.hp = 6;
     win(s);
     expect(s.screen).toBe('PATH');
     expect(s.run!.depth).toBe(2);
-    expect(s.hp).toBe(64);
+    expect(s.hp).toBe(6);
     expect(s.folderSize).toBe(20);
     s.fight();
-    expect(s.world.player.hp).toBe(64);
-    expect(s.lastResult).toMatchObject({ battle: 1, hpLeft: 64 });
+    expect(s.world.player.hp).toBe(6);
+    expect(s.lastResult).toMatchObject({ battle: 1, hpLeft: 6 });
   });
 
   it('death leads to GAME OVER, then back to the title', () => {

@@ -27,17 +27,17 @@ describe('14-segment display', () => {
   });
 
   it('centres the first loaded chip with its damage and never shows the queue count', () => {
-    expect(chipDisplayText([{ name: 'Cannon', power: 40 }], 'NO CHIP')).toBe('  CANNON 40   ');
+    expect(chipDisplayText([{ name: 'Cannon', power: 4 }], 'NO CHIP')).toBe('   CANNON 4   ');
     expect(chipDisplayText([
-      { name: 'Cannon', power: 40 },
-      { name: 'Sword', power: 80 },
-      { name: 'Sword', power: 80 },
-    ], 'NO CHIP')).toBe('  CANNON 40   ');
+      { name: 'Cannon', power: 4 },
+      { name: 'Sword', power: 8 },
+      { name: 'Sword', power: 8 },
+    ], 'NO CHIP')).toBe('   CANNON 4   ');
   });
 
   it('shows multi-hit damage and healing values', () => {
-    expect(chipDisplayText([{ name: 'Vulcan', power: 10, hits: 3 }], 'NO CHIP')).toBe(' VULCAN 10X3  ');
-    expect(chipDisplayText([{ name: 'Recov30', power: null, heal: 30 }], 'NO CHIP')).toBe('  RECOV30 30  ');
+    expect(chipDisplayText([{ name: 'Vulcan', power: 1, hits: 3 }], 'NO CHIP')).toBe('  VULCAN 1X3  ');
+    expect(chipDisplayText([{ name: 'Recov3', power: null, heal: 3 }], 'NO CHIP')).toBe('   RECOV3 3   ');
     expect(chipDisplayText([{ name: 'Barrier', power: null }], 'NO CHIP')).toBe('   BARRIER    ');
   });
 

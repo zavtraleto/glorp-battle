@@ -1,5 +1,6 @@
 import type { ChipDef } from '../../data/chips';
-import { COLS, ROWS, type Cell, type Side } from '../grid';
+import { tuning } from '../../config/tuning';
+import { COLS, type Cell, type Side } from '../grid';
 import { lobArea, lobTarget, shapeCells, type TargetRow } from './patterns';
 
 // Aim preview of the loaded chip (TERMINAL.md §6.3, decision 2026-09-19): the
@@ -28,47 +29,25 @@ export interface Aim {
 
 const NONE: Aim = { cells: [], beam: null };
 
-function nearestEnemyRow(l: AimLookup): number {
-  for (let y = l.py - 1; y >= 0; y--) {
-    for (let x = 0; x < COLS; x++) if (l.owner(x, y) === 'enemy') return y;
-  }
-  return -1;
-}
-
 function fieldCells(def: ChipDef, l: AimLookup): Cell[] {
   const cells: Cell[] = [];
-  const all = (keep: (x: number, y: number) => boolean) => {
-    for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if (keep(x, y)) cells.push({ x, y });
-  };
   switch (def.field) {
-    case 'areaGrab': {
-      const y = nearestEnemyRow(l);
-      if (y >= 0) for (let x = 0; x < COLS; x++) if (l.owner(x, y) === 'enemy' && !l.occupied(x, y)) cells.push({ x, y });
-      break;
-    }
-    case 'grabPanel':
+    case 'claim':
       for (let y = l.py - 1; y >= 0; y--) {
-        if (l.owner(l.px, y) !== 'enemy') continue;
-        if (!l.occupied(l.px, y)) cells.push({ x: l.px, y });
+        if (![0, 1, 2].some((x) => l.owner(x, y) === 'enemy')) continue;
+        for (let x = 0; x < COLS; x++) if (l.owner(x, y) === 'enemy') cells.push({ x, y });
         break;
       }
       break;
-    case 'breakAhead':
-    case 'rock':
+    case 'occupy':
       if (l.py - 1 >= 0) cells.push({ x: l.px, y: l.py - 1 });
       break;
-    case 'breakRowAhead':
-      if (l.py - 1 >= 0) for (let x = 0; x < COLS; x++) cells.push({ x, y: l.py - 1 });
+    case 'arm':
+    case 'break': {
+      const y = l.py - tuning.chips.FIELD_TARGET_DISTANCE;
+      if (y >= 0) cells.push({ x: l.px, y });
       break;
-    case 'crackAll':
-      all((x, y) => !l.occupied(x, y));
-      break;
-    case 'breakEnemy':
-      all((x, y) => l.owner(x, y) === 'enemy' && !l.occupied(x, y));
-      break;
-    case 'repair':
-      all((x, y) => l.owner(x, y) === 'player');
-      break;
+    }
     case undefined:
       break;
   }

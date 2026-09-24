@@ -41,7 +41,7 @@ describe('Hopzap', () => {
   it('hops into the lane and paralyzes with its ring', () => {
     const { w } = arena('hopzap', 0, 0);
     until(w, () => w.player.hitsTaken > 0);
-    expect(w.player.hp).toBe(100 - tuning.hopzap.HOP_DMG);
+    expect(w.player.hp).toBe(w.player.maxHp - tuning.hopzap.HOP_DMG);
     expect(w.player.paralyzeTicks).toBeGreaterThan(0);
   });
 });
@@ -51,6 +51,6 @@ describe('Bladdy', () => {
     const { w, e } = arena('bladdy', 0, 0);
     until(w, () => w.player.hitsTaken > 0);
     expect([e.x, e.y]).toEqual([1, 2]);
-    expect(w.player.hp).toBe(100 - tuning.bladdy.BLD_DMG);
+    expect(w.player.hp).toBe(w.player.maxHp - tuning.bladdy.BLD_DMG);
   });
 });

@@ -43,10 +43,10 @@ describe('cartridge font', () => {
     }
   });
 
-  it('shows damage, healing with a plus, and nothing else', () => {
-    expect(faceNumber('cannon')).toBe('40');
-    expect(faceNumber('recov30')).toBe('+30');
-    expect(faceNumber('invis')).toBe('');
+  it('shows damage and leaves non-damaging support faces blank', () => {
+    expect(faceNumber('cannon')).toBe('4');
+    expect(faceNumber('guard')).toBe('');
+    expect(faceNumber('block')).toBe('');
   });
 
   it('keeps the panel text inside the panel', () => {

@@ -55,11 +55,11 @@ describe('player damage', () => {
     const wave = new Shockwave(1, 1, 4, w.tick);
     w.spawnAttack(wave);
     step(w);
-    expect(w.player.hp).toBe(100 - tuning.mettik.MET_DMG);
+    expect(w.player.hp).toBe(w.player.maxHp - tuning.mettik.MET_DMG);
     expect(w.player.flinched).toBe(true);
     expect(w.player.invulnerable).toBe(true);
     run(w, 5);
-    expect(w.player.hp).toBe(100 - tuning.mettik.MET_DMG);
+    expect(w.player.hp).toBe(w.player.maxHp - tuning.mettik.MET_DMG);
     expect(w.player.hitsTaken).toBe(1);
   });
 
@@ -68,7 +68,7 @@ describe('player damage', () => {
     w.player.iframeTicks = 100;
     w.spawnAttack(new Shockwave(1, 1, 4, w.tick));
     run(w, 3);
-    expect(w.player.hp).toBe(100);
+    expect(w.player.hp).toBe(w.player.maxHp);
   });
 
   it('cannot move while flinched', () => {
@@ -83,7 +83,7 @@ describe('player damage', () => {
     const w = makeWorld({ ai: false, god: true });
     w.spawnAttack(new Shockwave(1, 1, 4, w.tick));
     step(w);
-    expect(w.player.hp).toBe(100);
+    expect(w.player.hp).toBe(w.player.maxHp);
   });
 });
 
@@ -109,9 +109,9 @@ describe('Mettik', () => {
     expect(w.attacks).toHaveLength(1);
     // Wave spawns at y=2 and needs two steps to reach the player at y=4.
     run(w, 2 * waveStep - 1);
-    expect(w.player.hp).toBe(100);
+    expect(w.player.hp).toBe(w.player.maxHp);
     run(w, 1);
-    expect(w.player.hp).toBe(100 - tuning.mettik.MET_DMG);
+    expect(w.player.hp).toBe(w.player.maxHp - tuning.mettik.MET_DMG);
   });
 
   it('the wave can be dodged by leaving the lane before Strike', () => {
@@ -119,7 +119,7 @@ describe('Mettik', () => {
     run(w, T(tuning.mettik.MOVE_TIME) + 5);
     move(w, 'left');
     run(w, T(2));
-    expect(w.player.hp).toBe(100);
+    expect(w.player.hp).toBe(w.player.maxHp);
   });
 
   it('steps toward the player lane, one cell per interval, staying in its row', () => {
@@ -185,7 +185,7 @@ describe('battle outcome', () => {
 
   it('player death ends the battle and freezes the simulation', () => {
     const w = makeWorld({ ai: false });
-    w.player.hp = 5;
+    w.player.hp = 1;
     w.spawnAttack(new Shockwave(1, 1, 4, w.tick));
     step(w);
     expect(w.state).toBe('PLAYER_DEAD');
@@ -197,7 +197,7 @@ describe('battle outcome', () => {
 
   it('kill-trade on the same tick counts as a loss', () => {
     const w = makeWorld({ ai: false });
-    w.player.hp = 5;
+    w.player.hp = 1;
     (w.enemies[0] as Mettik).hp = 1;
     // Enemy dies and the wave lands on the player in the same tick.
     w.killAllEnemies();

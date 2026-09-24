@@ -67,6 +67,11 @@ export abstract class Enemy {
   deathTick = -Infinity;
   /** Ticks left of paralysis: no actions, state timers stand still. */
   paralyzeTicks = 0;
+  private collisionResume: {
+    state: EnemyState;
+    elapsed: number;
+    remaining: number;
+  } | null = null;
 
   constructor(
     readonly id: EntityId,
@@ -157,13 +162,39 @@ export abstract class Enemy {
     return true;
   }
 
+  applyCollisionStagger(tick: number, durationTicks: number): void {
+    if (!this.alive) return;
+    if (this.state === 'STAGGER' && this.collisionResume) {
+      this.stateTick = tick;
+      this.stateEndTick = tick + durationTicks;
+      return;
+    }
+    this.collisionResume = {
+      state: this.state,
+      elapsed: this.elapsed(tick),
+      remaining: this.phaseRemaining(tick),
+    };
+    this.setTimedState('STAGGER', tick, durationTicks);
+  }
+
   /** Enemy-specific pending attack state can be cleared here. */
   protected onCountered(): void {}
 
   /** Runs in World even when enemy AI is disabled. */
   updateStagger(ctx: EnemyContext): void {
     if (this.state !== 'STAGGER') return;
-    if (this.elapsed(ctx.tick) < secondsToTicks(tuning.counter.COUNTER_STAGGER_TIME)) return;
+    const duration = this.collisionResume
+      ? Math.max(0, this.stateEndTick - this.stateTick)
+      : secondsToTicks(tuning.counter.COUNTER_STAGGER_TIME);
+    if (this.elapsed(ctx.tick) < duration) return;
+    if (this.collisionResume) {
+      const resume = this.collisionResume;
+      this.collisionResume = null;
+      this.state = resume.state;
+      this.stateTick = ctx.tick - resume.elapsed;
+      this.stateEndTick = resume.remaining > 0 ? ctx.tick + resume.remaining : Infinity;
+      return;
+    }
     this.finishCounterStagger(ctx);
     this.setState('IDLE', ctx.tick);
   }

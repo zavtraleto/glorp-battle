@@ -29,9 +29,9 @@ function slotOf(s: ChipSystem, defId: ChipId, code: ChipCode): number {
 const FIVE: FolderChip[] = [
   chip('cannon', 'A'),
   chip('cannon', 'F'),
-  chip('recover50', 'F'),
+  chip('guard', 'F'),
   chip('sword', 'B'),
-  chip('shotgun', 'A'),
+  chip('airshot', 'A'),
 ];
 
 const TEN: FolderChip[] = [...FIVE, ...FIVE.map((c) => ({ ...c }))];
@@ -61,7 +61,7 @@ describe('attack queue', () => {
   it('adds a tapped chip at the end and numbers it', () => {
     const s = sys(FIVE);
     const a = slotOf(s, 'cannon', 'A');
-    const b = slotOf(s, 'shotgun', 'A');
+    const b = slotOf(s, 'airshot', 'A');
     expect(s.toggleSelect(a)).toBe(true);
     expect(s.toggleSelect(b)).toBe(true);
     expect(s.attack).toEqual([a, b]);
@@ -82,7 +82,7 @@ describe('attack queue', () => {
   it('locks the series once the first chip has been fired', () => {
     const s = sys(FIVE);
     const a = slotOf(s, 'cannon', 'A');
-    const b = slotOf(s, 'shotgun', 'A');
+    const b = slotOf(s, 'airshot', 'A');
     s.toggleSelect(a);
     s.toggleSelect(b);
     s.startAttack();
@@ -93,7 +93,7 @@ describe('attack queue', () => {
   });
 
   it('can hold the whole hand when every code matches', () => {
-    const s = sys([chip('cannon', 'A'), chip('shotgun', 'A'), chip('vgun', 'A'), chip('spreader', 'A'), chip('airshot', '*')]);
+    const s = sys([chip('cannon', 'A'), chip('airshot', 'A'), chip('spreader', 'A'), chip('mine', 'A'), chip('guard', '*')]);
     for (let i = 0; i < 5; i++) s.toggleSelect(i);
     expect(s.attack).toHaveLength(tuning.chips.HAND_SIZE);
     for (let i = 0; i < 5; i++) expect(s.slotState(i)).toBe('queued');
@@ -118,7 +118,7 @@ describe('code rule', () => {
     expect(s.slotState(sword)).toBe('ready');
     s.toggleSelect(slotOf(s, 'cannon', 'A'));
     expect(s.slotState(sword)).toBe('blocked');
-    expect(s.slotState(slotOf(s, 'shotgun', 'A'))).toBe('ready');
+    expect(s.slotState(slotOf(s, 'airshot', 'A'))).toBe('ready');
     expect(s.toggleSelect(sword)).toBe(false);
   });
 
@@ -130,8 +130,8 @@ describe('code rule', () => {
     s.toggleSelect(slotOf(s, 'cannon', 'F'));
     s.startAttack();
     s.takeNext(0); // Cannon A is gone; only Cannon F is left queued
-    // Recover50 F shares a code with what is left, but not with the series.
-    expect(s.toggleSelect(slotOf(s, 'recover50', 'F'))).toBe(false);
+    // Guard F shares a code with what is left, but not with the series.
+    expect(s.toggleSelect(slotOf(s, 'guard', 'F'))).toBe(false);
   });
 
   it('resets the rule once the series is spent', () => {

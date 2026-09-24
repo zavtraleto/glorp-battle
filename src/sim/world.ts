@@ -22,6 +22,7 @@ import type { SimEvent } from './events';
 import { COLS, ROWS, type Cell, type Side } from './grid';
 import { Occupancy } from './occupancy';
 import { Player } from './player';
+import { resolveMove } from './movement';
 
 export type GameState =
   | 'BOOT'
@@ -64,6 +65,24 @@ const FROZEN_STATES: ReadonlySet<GameState> = new Set(['BOOT', 'TITLE', 'BATTLE_
 export interface TickInput {
   commands: readonly Command[];
   held: Dir | null;
+}
+
+export interface HitSpec {
+  target: Player | Enemy;
+  damage: number;
+  canCounter?: boolean;
+  push?: boolean;
+  pushRequiresDamage?: boolean;
+  source?: Cell;
+}
+
+export interface HitOutcome {
+  order: readonly ['counter', 'guard', 'damage', 'death', 'secondary', 'world'];
+  countered: boolean;
+  guarded: boolean;
+  damageApplied: number;
+  died: boolean;
+  pushed: boolean;
 }
 
 const NO_INPUT: TickInput = { commands: [], held: null };
@@ -112,6 +131,8 @@ export class World implements EnemyContext, AttackContext {
   private nextEnemyId = 100;
   private attackIdCounter = 1;
   private readonly handSpec: readonly (FolderChip | null)[] | null;
+  private readonly pendingPushes = new Map<number, Cell>();
+  private readonly impactObjects = new Map<string, FieldObject>();
 
   constructor(options: WorldOptions) {
     this.seed = options.seed;
@@ -278,16 +299,11 @@ export class World implements EnemyContext, AttackContext {
     // Hits on an invulnerable player are ignored entirely (GDD §9).
     if (p.invulnerable || p.invisTicks > 0) return false;
     attack.hitIds.add(p.id);
-    if (p.barrier && damage > 0) {
-      p.barrier = false;
-      this.events.push({ type: 'barrierBroken', x, y });
-      return true;
-    }
-    let amount = this.cheats.god ? 0 : damage;
-    // Tutorial: the hit lands and shows, but never kills (spec §4.3).
-    if (this.cheats.noKo) amount = Math.min(amount, Math.max(0, p.hp - 1));
-    p.takeHit(amount, this.tick);
-    this.events.push({ type: 'damaged', targetId: p.id, amount, x, y, hpLeft: p.hp });
+    this.resolveHit({ target: p, damage });
+    return true;
+  }
+
+  private interruptPlayerChip(): void {
     // A hit interrupts the chain. An unresolved active chip returns to its slot (GDD §6.5).
     const cancelledChips: { slot: number; deal: number }[] = [];
     if (this.activeChip) {
@@ -308,7 +324,6 @@ export class World implements EnemyContext, AttackContext {
       }
     }
     if (cancelledChips.length > 0) this.events.push({ type: 'chipChainCancelled', chips: cancelledChips });
-    return true;
   }
 
   // ---------- Objects ----------
@@ -328,6 +343,41 @@ export class World implements EnemyContext, AttackContext {
     return o;
   }
 
+  placeBlock(x: number, y: number): FieldObject | null {
+    if (!this.occupancy.isFree(x, y) || this.field.panel(x, y) === 'BROKEN') return null;
+    this.field.takeHazard(x, y);
+    const block = new FieldObject(
+      this.nextEnemyId++, 'block', x, y, 'player', tuning.field.BLOCK_HP,
+      this.tick + secondsToTicks(tuning.field.BLOCK_DURATION),
+    );
+    this.occupancy.place(block.id, x, y);
+    this.objects.push(block);
+    this.events.push({ type: 'objectPlaced', id: block.id, kind: block.kind, x, y });
+    return block;
+  }
+
+  breakCell(x: number, y: number, durationTicks: number): boolean {
+    if (this.enemyAt(x, y) || (this.player.x === x && this.player.y === y)) return false;
+    const object = this.objectAt(x, y);
+    if (object) this.damageObject(object, object.hp);
+    this.field.takeHazard(x, y);
+    return this.field.breakPanel(x, y, this.tick, durationTicks);
+  }
+
+  private updateObjects(): void {
+    for (const object of [...this.objects]) {
+      if (this.tick < object.expiresAt) continue;
+      this.occupancy.remove(object.id, object.x, object.y);
+      this.objects = this.objects.filter((candidate) => candidate !== object);
+      this.events.push({ type: 'objectBroken', id: object.id, x: object.x, y: object.y });
+    }
+  }
+
+  private captureImpactObjects(): void {
+    this.impactObjects.clear();
+    for (const object of this.objects) this.impactObjects.set(`${object.x},${object.y}`, object);
+  }
+
   damageObject(o: FieldObject, amount: number): void {
     if (!o.alive) return;
     o.hp = Math.max(0, o.hp - amount);
@@ -340,7 +390,7 @@ export class World implements EnemyContext, AttackContext {
   }
 
   hitObjectAt(attack: Attack, x: number, y: number, damage: number): boolean {
-    const o = this.objectAt(x, y);
+    const o = this.objectAt(x, y) ?? this.impactObjects.get(`${x},${y}`) ?? null;
     if (!o) return false;
     if (!attack.hitIds.has(o.id)) {
       attack.hitIds.add(o.id);
@@ -361,16 +411,97 @@ export class World implements EnemyContext, AttackContext {
 
 
   damageEnemy(enemy: Enemy, amount: number, canCounter = false): void {
-    if (!enemy.alive) return;
-    const countered = canCounter && amount > 0 && enemy.counterWindowOpen();
-    const died = enemy.applyDamage(amount, this.tick);
-    this.events.push({ type: 'damaged', targetId: enemy.id, amount, x: enemy.x, y: enemy.y, hpLeft: enemy.hp });
-    if (!died && countered && enemy.counter(this.tick)) {
-      this.events.push({ type: 'enemyCountered', id: enemy.id, x: enemy.x, y: enemy.y });
+    this.resolveHit({ target: enemy, damage: amount, canCounter });
+  }
+
+  resolveHit(spec: HitSpec): HitOutcome {
+    const order = ['counter', 'guard', 'damage', 'death', 'secondary', 'world'] as const;
+    const target = spec.target;
+    const isPlayer = target.id === this.player.id;
+    const enemy = isPlayer ? null : target as Enemy;
+    const countered = !!enemy && !!spec.canCounter && spec.damage > 0 && enemy.counterWindowOpen();
+    let guarded = false;
+    let damageApplied = 0;
+    let died = false;
+    let pushed = false;
+
+    if (isPlayer && this.player.guard && spec.damage > 0) {
+      guarded = true;
+      this.player.guard = false;
+      this.events.push({ type: 'barrierBroken', x: target.x, y: target.y });
     }
-    if (died) {
-      this.events.push({ type: 'enemyKilled', id: enemy.id, x: enemy.x, y: enemy.y });
-      if (this.mettikTurnId === enemy.id) this.passTurn(enemy);
+
+    if (!guarded && spec.damage > 0) {
+      if (isPlayer) {
+        let amount = this.cheats.god ? 0 : spec.damage;
+        if (this.cheats.noKo) amount = Math.min(amount, Math.max(0, this.player.hp - 1));
+        this.player.takeHit(amount, this.tick);
+        damageApplied = amount;
+        died = !this.player.alive;
+        this.events.push({ type: 'damaged', targetId: target.id, amount, x: target.x, y: target.y, hpLeft: target.hp });
+        this.interruptPlayerChip();
+      } else if (enemy?.alive) {
+        damageApplied = spec.damage;
+        died = enemy.applyDamage(spec.damage, this.tick);
+        this.events.push({ type: 'damaged', targetId: enemy.id, amount: spec.damage, x: enemy.x, y: enemy.y, hpLeft: enemy.hp });
+        if (!died && countered && enemy.counter(this.tick)) {
+          this.events.push({ type: 'enemyCountered', id: enemy.id, x: enemy.x, y: enemy.y });
+        }
+        if (died) {
+          this.events.push({ type: 'enemyKilled', id: enemy.id, x: enemy.x, y: enemy.y });
+          if (this.mettikTurnId === enemy.id) this.passTurn(enemy);
+        }
+      }
+    }
+
+    const mayPush = !!spec.push && !died && (!spec.pushRequiresDamage || damageApplied > 0);
+    if (mayPush && enemy && spec.source) pushed = this.pushEnemy(enemy, spec.source) === 'moved';
+    return { order, countered, guarded, damageApplied, died, pushed };
+  }
+
+  pushEnemy(enemy: Enemy, source: Cell): 'moved' | 'blocked' | 'queued' {
+    if (!enemy.alive) return 'blocked';
+    const moveTicks = secondsToTicks(enemy.moveDurationSeconds());
+    if (this.tick - enemy.lastMoveTick < moveTicks) {
+      this.pendingPushes.set(enemy.id, source);
+      return 'queued';
+    }
+    return this.applyEnemyPush(enemy, source);
+  }
+
+  private applyEnemyPush(enemy: Enemy, source: Cell): 'moved' | 'blocked' {
+    const dx = Math.sign(enemy.x - source.x);
+    const dy = Math.sign(enemy.y - source.y);
+    const result = resolveMove(this, enemy, 'enemy', { x: enemy.x + dx, y: enemy.y + dy }, 'forced');
+    if (!result.moved) {
+      enemy.applyCollisionStagger(this.tick, secondsToTicks(tuning.field.STAGGER_TIME));
+      if (result.reason === 'actor' && result.blockerId !== undefined) {
+        const blocker = this.enemies.find((candidate) => candidate.id === result.blockerId);
+        blocker?.applyCollisionStagger(this.tick, secondsToTicks(tuning.field.STAGGER_TIME));
+      }
+      return 'blocked';
+    }
+    const hazard = this.field.takeHazard(result.to.x, result.to.y) ?? result.hazard;
+    if (hazard) this.damageEnemy(enemy, hazard.damage, false);
+    return 'moved';
+  }
+
+  /** Consumes a latched cell hazard exactly once when any actor enters it. */
+  private triggerCellEntry(target: Player | Enemy): void {
+    const hazard = this.field.takeHazard(target.x, target.y);
+    if (hazard) this.resolveHit({ target, damage: hazard.damage });
+  }
+
+  private updatePendingPushes(): void {
+    for (const [id, source] of this.pendingPushes) {
+      const enemy = this.enemies.find((candidate) => candidate.id === id);
+      if (!enemy?.alive) {
+        this.pendingPushes.delete(id);
+        continue;
+      }
+      if (this.tick - enemy.lastMoveTick < secondsToTicks(enemy.moveDurationSeconds())) continue;
+      this.pendingPushes.delete(id);
+      this.applyEnemyPush(enemy, source);
     }
   }
 
@@ -402,36 +533,30 @@ export class World implements EnemyContext, AttackContext {
     return -1;
   };
 
-  private damageCells(cells: readonly { x: number; y: number }[], damage: number): Enemy[] {
+  /** Damage plus the chip's on-hit effects (roguelite spec §4.2). */
+  private hitCells(cells: readonly Cell[], damage: number, def: ChipDef, source: Cell): void {
     const hit = new Set<number>();
-    const enemies: Enemy[] = [];
-    for (const c of cells) {
-      const o = this.objectAt(c.x, c.y);
-      if (o) {
-        if (!hit.has(o.id)) {
-          hit.add(o.id);
-          this.damageObject(o, damage);
+    for (const cell of cells) {
+      const object = this.objectAt(cell.x, cell.y);
+      if (object) {
+        if (!hit.has(object.id)) {
+          hit.add(object.id);
+          this.damageObject(object, damage);
         }
         continue;
       }
-      const e = this.enemyAt(c.x, c.y);
-      if (!e || !e.alive || hit.has(e.id)) continue;
-      hit.add(e.id);
-      this.damageEnemy(e, damage, true);
-      enemies.push(e);
-    }
-    return enemies;
-  }
-
-  /** Damage plus the chip's on-hit effects (roguelite spec §4.2). */
-  private hitCells(cells: readonly Cell[], damage: number, def: ChipDef): void {
-    const hit = this.damageCells(cells, damage);
-    const on = def.onHit;
-    if (!on) return;
-    for (const e of hit) {
-      if (!e.alive) continue;
-      if (on.paralyze) e.paralyze(secondsToTicks(tuning.chips.PARALYZE_TIME));
-      if (on.push) e.pushBack(this);
+      const enemy = this.enemyAt(cell.x, cell.y);
+      if (!enemy?.alive || hit.has(enemy.id)) continue;
+      hit.add(enemy.id);
+      this.resolveHit({
+        target: enemy,
+        damage,
+        canCounter: true,
+        push: def.onHit?.push,
+        pushRequiresDamage: def.onHit?.pushRequiresDamage,
+        source,
+      });
+      if (def.onHit?.paralyze && enemy.alive) enemy.paralyze(secondsToTicks(tuning.chips.PARALYZE_TIME));
     }
   }
 
@@ -480,16 +605,18 @@ export class World implements EnemyContext, AttackContext {
   private resolveDueChipHits(active: ActiveChip): void {
     while (active.nextHit < active.hitTicks.length && this.tick >= active.hitTicks[active.nextHit]!) {
       active.nextHit++;
-      const firstResolution = !active.resolved;
-      active.resolved = true;
-      if (firstResolution) {
-        const reshuffles = this.chips.reshuffles;
-        this.chips.reserveRefill(active.slot);
-        if (this.chips.reshuffles > reshuffles) {
-          this.events.push({ type: 'drawReshuffled', count: this.chips.reshuffles });
-        }
-      }
+      this.commitChipResolution(active);
       this.resolveChip(active);
+    }
+  }
+
+  private commitChipResolution(active: ActiveChip): void {
+    if (active.resolved) return;
+    active.resolved = true;
+    const reshuffles = this.chips.reshuffles;
+    this.chips.reserveRefill(active.slot);
+    if (this.chips.reshuffles > reshuffles) {
+      this.events.push({ type: 'drawReshuffled', count: this.chips.reshuffles });
     }
   }
 
@@ -518,9 +645,24 @@ export class World implements EnemyContext, AttackContext {
     switch (shape.t) {
       case 'lane':
       case 'near': {
+        if (def.id === 'spreader') {
+          const row = this.firstTargetRow(px, py);
+          if (row < 0) {
+            effect([], -1);
+            break;
+          }
+          const main = { x: px, y: row };
+          const target = this.enemyAt(main.x, main.y);
+          const sides = [{ x: px - 1, y: row }, { x: px + 1, y: row }]
+            .filter((cell) => cell.x >= 0 && cell.x < COLS);
+          effect([main, ...sides], row);
+          this.hitCells([main], power, def, { x: px, y: py });
+          if (target) this.hitCells(sides, def.splashPower ?? 0, def, { x: px, y: py });
+          break;
+        }
         const cells = shapeCells(shape, px, py, this.firstTargetRow);
         effect(cells, shape.t === 'lane' ? (cells[0]?.y ?? -1) : -1);
-        this.hitCells(cells, power, def);
+        this.hitCells(cells, power, def, { x: px, y: py });
         break;
       }
       case 'lob': {
@@ -544,7 +686,10 @@ export class World implements EnemyContext, AttackContext {
         effect([]);
         break;
       case 'self':
-        effect([]);
+        if (def.field === 'arm' || def.field === 'break') {
+          const target = { x: px, y: py - tuning.chips.FIELD_TARGET_DISTANCE };
+          effect(target.y >= 0 ? [target] : []);
+        } else effect([]);
         break;
     }
     if (def.field) this.applyFieldAction(def.field, px, py);
@@ -554,63 +699,31 @@ export class World implements EnemyContext, AttackContext {
       this.events.push({ type: 'healed', amount: p.hp - before, x: px, y: py });
     }
     if (def.invis) p.invisTicks = secondsToTicks(tuning.chips.INVIS_TIME);
-    if (def.barrier) {
-      p.barrier = true;
+    if (def.guard) {
+      p.guard = true;
       this.events.push({ type: 'barrierSet', x: px, y: py });
     }
-  }
-
-  /** Nearest row in front of the player with an enemy panel; -1 if none. */
-  private nearestEnemyRow(): number {
-    for (let y = this.player.y - 1; y >= 0; y--) {
-      for (let x = 0; x < COLS; x++) if (this.field.owner(x, y) === 'enemy') return y;
-    }
-    return -1;
   }
 
   /** Field chips (roguelite spec §4.4). */
   private applyFieldAction(action: FieldAction, px: number, py: number): void {
     const f = this.field;
-    const free = (x: number, y: number) => this.occupancy.isFree(x, y);
     switch (action) {
-      case 'areaGrab': {
-        const y = this.nearestEnemyRow();
-        if (y < 0) return;
-        for (let x = 0; x < COLS; x++) {
-          if (f.owner(x, y) === 'enemy' && free(x, y)) f.setOwner(x, y, 'player', this.tick);
+      case 'claim':
+        f.claimNextRow(this.tick, secondsToTicks(tuning.chips.AREA_GRAB_DURATION));
+        return;
+      case 'occupy':
+        this.placeBlock(px, py - 1);
+        return;
+      case 'arm':
+        if (this.occupancy.isFree(px, py - tuning.chips.FIELD_TARGET_DISTANCE)) {
+          f.arm(px, py - tuning.chips.FIELD_TARGET_DISTANCE, {
+            kind: 'mine', side: 'player', damage: CHIPS.mine.power ?? 0,
+          });
         }
         return;
-      }
-      case 'grabPanel':
-        for (let y = py - 1; y >= 0; y--) {
-          if (f.owner(px, y) !== 'enemy') continue;
-          if (free(px, y)) f.setOwner(px, y, 'player', this.tick);
-          return;
-        }
-        return;
-      case 'breakAhead':
-        if (py - 1 >= 0) f.breakPanel(px, py - 1, this.tick, !free(px, py - 1));
-        return;
-      case 'breakRowAhead':
-        if (py - 1 < 0) return;
-        for (let x = 0; x < COLS; x++) f.breakPanel(x, py - 1, this.tick, !free(x, py - 1));
-        return;
-      case 'crackAll':
-      case 'breakEnemy':
-      case 'repair':
-        for (let y = 0; y < ROWS; y++) {
-          for (let x = 0; x < COLS; x++) {
-            if (action === 'repair') {
-              if (f.owner(x, y) === 'player') f.repair(x, y);
-            } else if (free(x, y)) {
-              if (action === 'crackAll') f.crack(x, y);
-              else if (f.owner(x, y) === 'enemy') f.breakPanel(x, y, this.tick, false);
-            }
-          }
-        }
-        return;
-      case 'rock':
-        if (f.owner(px, py - 1) === 'player') this.placeObject('rock', px, py - 1, 'player');
+      case 'break':
+        this.breakCell(px, py - tuning.chips.FIELD_TARGET_DISTANCE, secondsToTicks(tuning.chips.BREAK_DURATION));
         return;
     }
   }
@@ -623,7 +736,7 @@ export class World implements EnemyContext, AttackContext {
       const shape = b.def.shape;
       const cells = shape.t === 'lob' ? lobArea(shape.area, b.x, b.y) : [{ x: b.x, y: b.y }];
       this.events.push({ type: 'bombLanded', id: b.id, x: b.x, y: b.y, cells });
-      this.hitCells(cells, b.damage, b.def);
+      this.hitCells(cells, b.damage, b.def, { x: b.fromX, y: b.fromY });
     }
     this.bombs = this.bombs.filter((b) => !b.done);
   }
@@ -699,18 +812,27 @@ export class World implements EnemyContext, AttackContext {
       this.events.push({ type: 'drawReshuffled', count: this.chips.reshuffles });
     }
     this.removeDeletedEnemies();
-    this.field.update(this.tick, (x, y) => this.occupancy.isFree(x, y));
+    this.field.update(this.tick, {
+      player: { x: this.player.x, y: this.player.y },
+      isFree: (x, y) => this.occupancy.isFree(x, y),
+    });
+    this.updateObjects();
 
     const p = this.player;
     p.updateTimers();
 
     const moves: Dir[] = [];
     for (const c of input.commands) {
-      if (c.type === 'move') moves.push(c.dir);
+      if (c.type === 'move') {
+        moves.push(c.dir);
+      }
       else if (c.type === 'useChip') this.requestUseChip();
       else if (c.type === 'selectChip') this.selectChip(c.slot);
     }
+    const playerBefore = { x: p.x, y: p.y };
     p.updateMovement(this.tick, moves, input.held);
+    if (p.x !== playerBefore.x || p.y !== playerBefore.y) this.triggerCellEntry(p);
+    this.updatePendingPushes();
     this.updateActiveChip();
     this.useBufferedChip();
     this.updateBombs();
@@ -727,9 +849,14 @@ export class World implements EnemyContext, AttackContext {
         e.freezePhase();
         continue;
       }
-      if (this.cheats.aiEnabled) e.update(this);
+      if (this.cheats.aiEnabled) {
+        const before = { x: e.x, y: e.y };
+        e.update(this);
+        if (e.x !== before.x || e.y !== before.y) this.triggerCellEntry(e);
+      }
     }
 
+    this.captureImpactObjects();
     for (const a of this.attacks) a.update(this);
     if (this.attacks.some((a) => a.done)) this.attacks = this.attacks.filter((a) => !a.done);
 

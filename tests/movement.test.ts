@@ -33,7 +33,7 @@ describe('player movement', () => {
   it('starts at (1,4) with full HP', () => {
     const w = freshWorld();
     expect(pos(w)).toEqual([1, 4]);
-    expect(w.player.hp).toBe(100);
+    expect(w.player.hp).toBe(w.player.maxHp);
   });
 
   it('steps one cell in four directions', () => {

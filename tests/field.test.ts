@@ -78,6 +78,50 @@ describe('Field', () => {
   });
 });
 
+describe('field physics v0.1', () => {
+  it('restores BREAK after the duration supplied by its effect', () => {
+    const { f } = makeField();
+    expect(f.breakPanel(1, 2, 10, T(2))).toBe(true);
+    expect(f.panel(1, 2)).toBe('BROKEN');
+    f.update(10 + T(2) - 1, { player: { x: 1, y: 4 } });
+    expect(f.panel(1, 2)).toBe('BROKEN');
+    f.update(10 + T(2), { player: { x: 1, y: 4 } });
+    expect(f.panel(1, 2)).toBe('NORMAL');
+  });
+
+  it('arms a normal cell and removes its hazard exactly once', () => {
+    const { f } = makeField();
+    const mine = { kind: 'mine', side: 'player', damage: 6 } as const;
+    expect(f.arm(0, 1, mine)).toBe(true);
+    expect(f.arm(0, 1, mine)).toBe(false);
+    expect(f.takeHazard(0, 1)).toEqual(mine);
+    expect(f.takeHazard(0, 1)).toBeNull();
+  });
+
+  it('removes ARM when BREAK replaces its topology without changing ownership', () => {
+    const { f } = makeField();
+    f.arm(0, 2, { kind: 'mine', side: 'player', damage: 6 });
+    expect(f.breakPanel(0, 2, 0, T(1))).toBe(true);
+    expect(f.hazard(0, 2)).toBeNull();
+    expect(f.owner(0, 2)).toBe('enemy');
+  });
+
+  it('keeps supporting claims until deeper claims and the player can roll back', () => {
+    const { f } = makeField();
+    expect(f.claimNextRow(0, T(1))).toBe(2);
+    expect(f.claimNextRow(T(0.5), T(2))).toBe(1);
+
+    f.update(T(1), { player: { x: 1, y: 3 } });
+    expect(f.owner(1, 2)).toBe('player');
+
+    f.update(T(2.5), { player: { x: 1, y: 1 } });
+    expect([f.owner(1, 1), f.owner(1, 2)]).toEqual(['player', 'player']);
+
+    f.update(T(2.5) + 1, { player: { x: 1, y: 3 } });
+    expect([f.owner(1, 1), f.owner(1, 2)]).toEqual(['enemy', 'enemy']);
+  });
+});
+
 const DT = 1 / 60;
 function battle(): World {
   return new World({

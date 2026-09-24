@@ -25,6 +25,11 @@ describe('chip icons', () => {
       }
     }
   });
+
+  it('gives every playtest chip its own pictogram', () => {
+    const signatures = (Object.keys(CHIPS) as ChipId[]).map((id) => CHIP_ICONS[id].join('\n'));
+    expect(new Set(signatures).size).toBe(signatures.length);
+  });
 });
 
 describe('railChanges', () => {

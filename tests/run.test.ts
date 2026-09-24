@@ -50,7 +50,7 @@ describe('Run', () => {
 
   it('carries HP without automatic healing', () => {
     const run = new Run(1, 'basic');
-    for (const hp of [40, 30, 20, 10]) {
+    for (const hp of [4, 3, 2, 1]) {
       run.finishBattle(true, hp);
       expect(run.hp).toBe(hp);
       expect(run.healed).toBe(false);
@@ -70,8 +70,8 @@ describe('Run', () => {
 
   it('a loss ends the climb without advancing the step', () => {
     const run = new Run(3, 'basic');
-    run.finishBattle(true, 64);
-    expect(run.hp).toBe(64);
+    run.finishBattle(true, 6);
+    expect(run.hp).toBe(6);
     expect(run.depth).toBe(2);
     expect(run.folder).toHaveLength(20);
     run.finishBattle(false, 0);

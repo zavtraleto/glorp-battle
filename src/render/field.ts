@@ -197,6 +197,11 @@ export class FieldView {
             this.outline(c, cellHw, cellHd, base);
             this.box(c, cellHw * 0.55, OBJECT_HEIGHT, cellHd * 0.55, col.blue);
             break;
+          case 'ARM':
+            this.outline(c, cellHw, cellHd, col.red);
+            this.lines.line(c.x - cellHw * 0.45, LINE_Y, c.z - cellHd * 0.45, c.x + cellHw * 0.45, LINE_Y, c.z + cellHd * 0.45, col.red);
+            this.lines.line(c.x - cellHw * 0.45, LINE_Y, c.z + cellHd * 0.45, c.x + cellHw * 0.45, LINE_Y, c.z - cellHd * 0.45, col.red);
+            break;
           case 'ACTIVE':
             this.outline(c, cellHw, cellHd, base);
             this.outline(c, cellHw * 0.92, cellHd * 0.92, base);

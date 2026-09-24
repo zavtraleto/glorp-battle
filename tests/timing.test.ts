@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_TUNING, mergeTuning, secondsToTicks, tuning } from '../src/config/tuning';
 import { FixedStepClock } from '../src/core/loop';
-import { CHIPS } from '../src/data/chips';
+import { CHIPS, type ChipDef } from '../src/data/chips';
 import { enemyTimingLines } from '../src/debug/overlay';
 import { PlayerBomb } from '../src/sim/attacks/bomb';
 import { Shockwave } from '../src/sim/attacks/shockwave';
@@ -49,7 +49,8 @@ describe('time-based combat timing', () => {
 
   it('derives lob flight from cells travelled', () => {
     const throwTick = 10;
-    const bomb = new PlayerBomb(1, 1, 4, 1, 1, 50, throwTick, CHIPS.minibomb);
+    const lob = { ...CHIPS.cannon, shape: { t: 'lob', depth: 3, area: [] } } as ChipDef;
+    const bomb = new PlayerBomb(1, 1, 4, 1, 1, 50, throwTick, lob);
     expect(bomb.landTick - throwTick).toBe(T(3 * tuning.projectile.CELL_TRAVEL_TIME));
   });
 
@@ -117,7 +118,7 @@ describe('time-based combat timing', () => {
     expect(w.activeChip?.def.id).toBe('cannon');
     run(chipTiming(CHIPS.cannon).startupTicks);
     expect(enemy.state).toBe('LOCK');
-    expect(enemy.hp).toBe(160);
+    expect(enemy.hp).toBe(196);
     run(T(tuning.mettik.LOCK_TIME) - chipTiming(CHIPS.cannon).startupTicks - 1);
     step({ commands: [{ type: 'useChip' }], held: null });
     expect(enemy.state).toBe('COUNTER');

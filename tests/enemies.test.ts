@@ -61,7 +61,7 @@ describe('Canodron', () => {
     toLane(w, 0);
     run(w, T(5));
     expect(cano(w).state).toBe('IDLE');
-    expect(w.player.hp).toBe(100);
+    expect(w.player.hp).toBe(w.player.maxHp);
   });
 
   it('sends a cursor, locks on the player and fires after the delay', () => {
@@ -75,9 +75,9 @@ describe('Canodron', () => {
     expect(c.cursorCell()).toEqual({ x: 1, y: 4, locked: true });
     expect(w.dangerCells().length).toBe(4);
     run(w, T(tuning.canodron.LOCK_TIME + tuning.canodron.COUNTER_TIME) - 1);
-    expect(w.player.hp).toBe(100);
+    expect(w.player.hp).toBe(w.player.maxHp);
     run(w, 1);
-    expect(w.player.hp).toBe(100 - tuning.canodron.CANO_DMG);
+    expect(w.player.hp).toBe(w.player.maxHp - tuning.canodron.CANO_DMG);
     expect(events.some((e) => e.type === 'enemyShot' && e.toY === 4)).toBe(true);
     expect(c.state).toBe('STRIKE');
   });
@@ -89,7 +89,7 @@ describe('Canodron', () => {
     expect(cano(w).cursorCell()?.locked).toBe(true);
     move(w, 'left');
     run(w, T(tuning.canodron.LOCK_TIME + tuning.canodron.COUNTER_TIME));
-    expect(w.player.hp).toBe(100);
+    expect(w.player.hp).toBe(w.player.maxHp);
     expect(events.some((e) => e.type === 'enemyShot' && e.toY === 6)).toBe(true);
   });
 
@@ -107,7 +107,7 @@ describe('Canodron', () => {
   it('cools down after firing', () => {
     const w = world(2);
     run(w, 1 + 2 * T(tuning.canodron.CANO_CURSOR_STEP) + T(tuning.canodron.LOCK_TIME + tuning.canodron.COUNTER_TIME));
-    expect(w.player.hp).toBe(90);
+    expect(w.player.hp).toBe(w.player.maxHp - tuning.canodron.CANO_DMG);
     run(w, T(tuning.canodron.STRIKE_TIME + tuning.canodron.RECOVERY_TIME) - 2);
     expect(cano(w).state).toBe('RECOVERY');
     run(w, 2);
@@ -141,12 +141,12 @@ describe('Canodron', () => {
       if (cano(w).state === 'IDLE') reset = true;
     }
     expect(reset).toBe(true);
-    expect(w.player.hp).toBe(100);
+    expect(w.player.hp).toBe(w.player.maxHp);
   });
 });
 
 describe('battles 2–4 are winnable', () => {
-  it.each([2, 3, 4])('battle %i with god mode and HiCannon chips', (battle) => {
+  it.each([2, 3, 4])('battle %i with god mode and Cannon chips', (battle) => {
     const w = world(battle, 9);
     w.cheats.god = true;
     for (let i = 0; i < 200 && w.state === 'ACTION'; i++) {
@@ -158,9 +158,9 @@ describe('battles 2–4 are winnable', () => {
         run(w, T(tuning.player.CELL_MOVE_TIME));
         continue;
       }
-      w.giveChip({ uid: 20_000 + i, defId: 'hicannon', code: '*', state: 'queued', deal: 0 });
+      w.giveChip({ uid: 20_000 + i, defId: 'cannon', code: '*', state: 'queued', deal: 0 });
       step(w, [{ type: 'useChip' }]);
-      run(w, useTicks(CHIPS.hicannon));
+      run(w, useTicks(CHIPS.cannon));
     }
     expect(w.state).toBe('BATTLE_WON');
   });

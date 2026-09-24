@@ -3,7 +3,7 @@ import type { Side } from './grid';
 // Objects on the field (roguelite spec §3.4): take a cell, stop shots and
 // waves, break at 0 HP. No AI.
 
-export type ObjectKind = 'rock';
+export type ObjectKind = 'rock' | 'block';
 
 export class FieldObject {
   constructor(
@@ -13,6 +13,7 @@ export class FieldObject {
     readonly y: number,
     readonly side: Side,
     public hp: number,
+    readonly expiresAt = Infinity,
   ) {}
 
   get alive(): boolean {
