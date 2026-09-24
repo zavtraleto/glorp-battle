@@ -1,7 +1,6 @@
 // Abstract input (GDD §12.1). Devices write here; the simulation reads it once per tick.
 
 export type Dir = 'up' | 'down' | 'left' | 'right';
-export type HeldSource = 'keyboard' | 'pointer';
 
 export const DIR_VECTORS: Record<Dir, { dx: number; dy: number }> = {
   up: { dx: 0, dy: -1 },
@@ -18,7 +17,7 @@ export type Command =
 
 export class InputState {
   private queue: Command[] = [];
-  private readonly held: Record<HeldSource, Dir | null> = { keyboard: null, pointer: null };
+  private held: Dir | null = null;
 
   push(cmd: Command): void {
     // Bound the queue so a stalled simulation never accumulates stale input.
@@ -26,12 +25,12 @@ export class InputState {
     this.queue.push(cmd);
   }
 
-  setHeld(dir: Dir | null, source: HeldSource = 'keyboard'): void {
-    this.held[source] = dir;
+  setHeld(dir: Dir | null): void {
+    this.held = dir;
   }
 
   get heldDir(): Dir | null {
-    return this.held.pointer ?? this.held.keyboard;
+    return this.held;
   }
 
   drain(): Command[] {
@@ -42,7 +41,6 @@ export class InputState {
 
   clear(): void {
     this.queue = [];
-    this.held.keyboard = null;
-    this.held.pointer = null;
+    this.held = null;
   }
 }

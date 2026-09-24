@@ -1,4 +1,5 @@
 import type { Side } from './grid';
+import type { TimeDomain } from './field';
 
 // Objects on the field (roguelite spec §3.4): take a cell, stop shots and
 // waves, break at 0 HP. No AI.
@@ -14,6 +15,7 @@ export class FieldObject {
     readonly side: Side,
     public hp: number,
     readonly expiresAt = Infinity,
+    readonly timeDomain: TimeDomain = 'world',
   ) {}
 
   get alive(): boolean {

@@ -9,6 +9,9 @@ import type { EntityId } from './occupancy';
 
 export type SimEvent =
   | { type: 'damaged'; targetId: EntityId; amount: number; x: number; y: number; hpLeft: number }
+  | { type: 'comboStarted'; size: number }
+  | { type: 'comboEnded'; reason: 'complete' }
+  | { type: 'comboBroken' }
   | { type: 'enemyKilled'; id: EntityId; x: number; y: number }
   | { type: 'enemyCountered'; id: EntityId; x: number; y: number }
   | { type: 'enemyRemoved'; id: EntityId }

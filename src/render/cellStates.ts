@@ -21,12 +21,14 @@ export interface CellView {
 export interface AttackMark {
   tick: number;
   tone: AttackTone;
+  domain?: 'player' | 'world';
 }
 
 export interface CellInputs {
   cols: number;
   rows: number;
   tick: number;
+  playerTick?: number;
   player: Cell | null;
   enemies: readonly Cell[];
   danger: readonly Cell[];
@@ -64,7 +66,8 @@ export function cellStates(i: CellInputs): CellView[] {
     });
     const override = i.overrides.get(key);
     const attack = i.attacks.get(key);
-    const attackAge = attack ? i.tick - attack.tick : Infinity;
+    const attackNow = attack?.domain === 'player' ? (i.playerTick ?? i.tick) : i.tick;
+    const attackAge = attack ? attackNow - attack.tick : Infinity;
     const spawnAge = i.spawns.get(key) ?? Infinity;
     if (override === 'EMPTY' || override === 'BROKEN') out.push(view(override));
     else if (p.panel === 'BROKEN') out.push(view('BROKEN'));

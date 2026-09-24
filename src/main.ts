@@ -88,7 +88,6 @@ const terminal = new Terminal({
   perf,
   handlers: {
     move: (dir) => input.push({ type: 'move', dir }),
-    holdMove: (dir) => input.setHeld(dir, 'pointer'),
     execute: () => input.push({ type: 'useChip' }),
     selectChip: (slot) => input.push({ type: 'selectChip', slot }),
     pause: () => {

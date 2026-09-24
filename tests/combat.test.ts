@@ -142,22 +142,14 @@ describe('Mettik', () => {
     expect(w.attacks.length).toBe(1);
   });
 
-  it('multiple Mettiks take turns attacking', () => {
+  it('allows multiple Mettiks to attack independently', () => {
     const w = makeWorld();
     const a = w.enemies[0] as Mettik;
     const b = addMettik(w, 1, 0, 501);
-    let both = false;
-    let bAttacked = false;
-    for (let i = 0; i < T(8); i++) {
-      step(w);
-      const attackPhases = ['INTENTION', 'LOCK', 'COUNTER', 'STRIKE'] as const;
-      const busyA = attackPhases.includes(a.state as (typeof attackPhases)[number]);
-      const busyB = attackPhases.includes(b.state as (typeof attackPhases)[number]);
-      if (busyA && busyB) both = true;
-      if (b.state === 'INTENTION') bAttacked = true;
-    }
-    expect(both).toBe(false);
-    expect(bAttacked).toBe(true);
+    run(w, T(tuning.mettik.MOVE_TIME));
+    expect([a.state, b.state]).toEqual(['INTENTION', 'INTENTION']);
+    run(w, T(tuning.mettik.INTENTION_TIME + tuning.mettik.LOCK_TIME + tuning.mettik.COUNTER_TIME));
+    expect(w.attacks.filter((attack) => attack.kind === 'shockwave')).toHaveLength(2);
   });
 
   it('the wave travels to the last row and disappears', () => {

@@ -91,6 +91,16 @@ describe('ARM entry physics', () => {
 });
 
 describe('OCCUPY physics', () => {
+  it('keeps a player Block duration unscaled while the world is slowed', () => {
+    const w = world();
+    w.setWorldTimeScale(0.5, 0);
+    expect(w.placeBlock(0, 1)).not.toBeNull();
+
+    run(w, T(tuning.field.BLOCK_DURATION));
+
+    expect(w.objectAt(0, 1)).toBeNull();
+  });
+
   it('places Block on either territory and removes its collision at expiry', () => {
     const w = world();
     const block = w.placeBlock(0, 1);

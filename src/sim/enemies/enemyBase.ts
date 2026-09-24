@@ -44,9 +44,6 @@ export interface EnemyContext {
   hitPlayerAt(attack: Attack, x: number, y: number, damage: number): boolean;
   paralyzePlayer(ticks: number): void;
   placeObject(kind: ObjectKind, x: number, y: number, side: Side): FieldObject | null;
-  /** Mettik turn-taking (GDD §8.2). */
-  hasTurn(enemy: Enemy): boolean;
-  passTurn(enemy: Enemy): void;
 }
 
 export abstract class Enemy {
@@ -71,6 +68,7 @@ export abstract class Enemy {
     state: EnemyState;
     elapsed: number;
     remaining: number;
+    timed: boolean;
   } | null = null;
 
   constructor(
@@ -173,6 +171,7 @@ export abstract class Enemy {
       state: this.state,
       elapsed: this.elapsed(tick),
       remaining: this.phaseRemaining(tick),
+      timed: Number.isFinite(this.stateEndTick),
     };
     this.setTimedState('STAGGER', tick, durationTicks);
   }
@@ -192,7 +191,7 @@ export abstract class Enemy {
       this.collisionResume = null;
       this.state = resume.state;
       this.stateTick = ctx.tick - resume.elapsed;
-      this.stateEndTick = resume.remaining > 0 ? ctx.tick + resume.remaining : Infinity;
+      this.stateEndTick = resume.timed ? ctx.tick + resume.remaining : Infinity;
       return;
     }
     this.finishCounterStagger(ctx);

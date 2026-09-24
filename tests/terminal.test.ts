@@ -188,7 +188,9 @@ function makeRouter() {
   const log: string[] = [];
   const rolls: [number, number][] = [];
   const holds: (Dir | null)[] = [];
-  const handlers: RouterHandlers = {
+  // The extra legacy-shaped `hold` spy is intentional: touch gestures must
+  // never call it, even if a future change tries to restore pointer repeat.
+  const handlers: RouterHandlers & { hold(dir: Dir | null): void } = {
     press: (z) => log.push(`press:${z}`),
     release: (z) => log.push(`release:${z}`),
     move: (d: Dir) => log.push(`move:${d}`),
@@ -250,32 +252,34 @@ describe('PointerRouter', () => {
     expect(log).not.toContain('action:trackball');
   });
 
-  it('turns one trackball gesture into exactly one step', () => {
+  it('turns each threshold-length trackball nudge into one step', () => {
     const { router, log, rolls, center } = makeRouter();
     const [x, y] = center('trackball');
     router.down(1, x, y);
     router.move(1, x + 10, y);
     router.move(1, x + 30, y);
-    router.move(1, x + 90, y + 5);
+    router.move(1, x + 30, y);
+    router.move(1, x + 40, y + 2);
+    router.move(1, x + 60, y + 2);
     router.up(1);
-    expect(log.filter((l) => l.startsWith('move:'))).toEqual(['move:right']);
+    expect(log.filter((l) => l.startsWith('move:'))).toEqual(['move:right', 'move:right']);
     expect(log).not.toContain('action:trackball');
-    expect(rolls.reduce((s, r) => s + r[0], 0)).toBe(90);
+    expect(rolls.reduce((s, r) => s + r[0], 0)).toBe(60);
   });
 
-  it('holds the swiped direction until the trackball pointer is released', () => {
+  it('never turns a trackball gesture into a held direction', () => {
     const { router, log, holds, center } = makeRouter();
     const [x, y] = center('trackball');
     router.down(1, x, y);
     router.move(1, x + 30, y);
-    router.move(1, x + 90, y);
+    router.move(1, x + 30, y);
     router.up(1);
 
     expect(log.filter((line) => line.startsWith('move:'))).toEqual(['move:right']);
-    expect(holds).toEqual(['right', null]);
+    expect(holds).toEqual([]);
   });
 
-  it('changes the held direction when the same gesture turns', () => {
+  it('changes direction when the next micro-swipe turns', () => {
     const { router, log, holds, center } = makeRouter();
     const [x, y] = center('trackball');
     router.down(1, x, y);
@@ -284,7 +288,7 @@ describe('PointerRouter', () => {
     router.up(1);
 
     expect(log.filter((line) => line.startsWith('move:'))).toEqual(['move:right', 'move:up']);
-    expect(holds).toEqual(['right', 'up', null]);
+    expect(holds).toEqual([]);
   });
 
   it('keeps the gesture alive outside the zone', () => {
@@ -327,6 +331,7 @@ describe('PointerRouter', () => {
     router.cancelAll();
     router.up(1);
     expect(log.filter((l) => l.startsWith('release:'))).toEqual(['release:trackball']);
+    expect(log.filter((l) => l.startsWith('action:'))).toEqual([]);
   });
 });
 

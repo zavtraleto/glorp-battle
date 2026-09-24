@@ -150,6 +150,35 @@ describe('code rule', () => {
 });
 
 describe('shared hand cooldown', () => {
+  it('can commit a combo without starting cooldown until the combo finishes', () => {
+    const s = sys(Array.from({ length: 7 }, () => chip('cannon', 'A')));
+    s.toggleSelect(0);
+    s.toggleSelect(1);
+
+    expect(s.commitAttack()).toBe(true);
+    expect(s.phase).toBe('committed');
+    expect(s.handCooldownProgress(0)).toBeNull();
+
+    s.takeNext(0);
+    s.startCooldown(T(1));
+    s.reserveSpentRefills();
+    expect(s.handCooldownProgress(T(1))).toBe(0);
+    expect(s.pendingChip(0)).not.toBeNull();
+  });
+
+  it('burns the committed tail into spent slots without returning it to the hand', () => {
+    const s = sys(Array.from({ length: 7 }, () => chip('cannon', 'A')));
+    s.toggleSelect(0);
+    s.toggleSelect(1);
+    s.commitAttack();
+
+    expect(s.burnAttackTail()).toEqual([0, 1]);
+    expect(s.attack).toEqual([]);
+    expect(s.hand[0]).toBeNull();
+    expect(s.hand[1]).toBeNull();
+    expect(s.count('used')).toBe(2);
+  });
+
   it('refills only spent slots and preserves intentionally empty hand slots', () => {
     const s = new ChipSystem(FIVE, new Rng(1));
     s.dealHandExact([chip('cannon', 'A'), null, null, null, null]);

@@ -38,6 +38,13 @@ export interface DebugActions {
 const RANGES: Record<string, [number, number, number]> = {
   SIM_HZ: [30, 240, 1],
   TIME_SCALE: [0.05, 4, 0.05],
+  WORLD_TIME_SCALE: [0.1, 1, 0.05],
+  SLOW_MO_ENTER: [0, 1, 0.01],
+  SLOW_MO_EXIT: [0, 1, 0.01],
+  COMBO_BREAK_EXIT: [0, 0.5, 0.01],
+  CHIP_INPUT_BUFFER: [0, 0.5, 0.01],
+  HOP_ALIGN_CHANCE: [0, 1, 0.05],
+  BLD_AREA_GRAB_DECISIONS: [1, 10, 1],
   VIEW_PITCH: [5, 80, 1],
   VIEW_FOV: [15, 90, 1],
   VIEW_FILL: [0.5, 1.5, 0.01],

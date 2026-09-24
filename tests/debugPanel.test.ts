@@ -8,7 +8,13 @@ describe('debug tuning order', () => {
 
     expect(values.chips?.HAND_REFILL_COOLDOWN).toBe(4);
     expect(values.player?.CELL_MOVE_TIME).toBe(0.2);
-    expect(values.input?.ACTION_BUFFER_TIME).toBe(0.1);
+    expect(values.combo).toMatchObject({
+      WORLD_TIME_SCALE: 0.7,
+      SLOW_MO_ENTER: 0.1,
+      SLOW_MO_EXIT: 0.15,
+      COMBO_BREAK_EXIT: 0.08,
+      CHIP_INPUT_BUFFER: 0.1,
+    });
     expect(values.projectile?.CELL_TRAVEL_TIME).toBe(0.2);
     expect(values.chips).toMatchObject({
       CHIP_STARTUP_CANNON: 0.1,

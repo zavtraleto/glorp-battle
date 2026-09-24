@@ -2,11 +2,11 @@ import type { Dir } from './commands';
 
 // Swipe recognition for the trackball (spec §10.2). Pure logic, no DOM: fed with
 // pointer positions and a clock in seconds.
-// A direction fires as soon as the finger travels `threshold` px (dominant
-// axis). The pointer router then holds that direction for simulation-driven
-// repeat. A turn can emit a new direction; continuing the same way emits no
-// extra discrete steps. A gesture that ends without a step, inside
-// `tapMaxTime`, is a tap — the trackball is also the chip trigger.
+// A direction fires as soon as the finger travels `threshold` CSS px on the
+// dominant axis. Each accepted step rebases the anchor at the current pointer,
+// so another step requires another intentional displacement. A gesture that
+// ends without a step, inside `tapMaxTime`, is a tap — the trackball is also
+// the chip trigger.
 
 export type GestureEnd = 'step' | 'tap' | 'none';
 
@@ -19,8 +19,6 @@ export class SwipeRecognizer {
   private anchorY = 0;
   private startedAt = 0;
   private active = false;
-  /** Direction of the current stroke's step, or null while the gesture is armed. */
-  private stroke: Dir | null = null;
   private steps = 0;
 
   constructor(
@@ -34,7 +32,6 @@ export class SwipeRecognizer {
 
   begin(x: number, y: number, now: number): void {
     this.active = true;
-    this.stroke = null;
     this.steps = 0;
     this.anchorX = x;
     this.anchorY = y;
@@ -48,23 +45,10 @@ export class SwipeRecognizer {
     const dx = x - this.anchorX;
     const dy = y - this.anchorY;
     const far = Math.max(Math.abs(dx), Math.abs(dy)) >= this.threshold;
-    const dir = dominant(dx, dy);
-    if (this.stroke === null) {
-      if (!far) return null;
-      return this.fire(dir, x, y);
-    }
-    // Carrying on in the stroke's direction: the anchor follows the finger, so
-    // turning back is measured from where it turned.
-    if (dir === this.stroke) {
-      this.anchorX = x;
-      this.anchorY = y;
-      return null;
-    }
-    return far ? this.fire(dir, x, y) : null;
+    return far ? this.fire(dominant(dx, dy), x, y) : null;
   }
 
   private fire(dir: Dir, x: number, y: number): Dir {
-    this.stroke = dir;
     this.steps++;
     this.anchorX = x;
     this.anchorY = y;
@@ -77,7 +61,6 @@ export class SwipeRecognizer {
     const stepped = this.steps > 0;
     const held = now - this.startedAt;
     this.active = false;
-    this.stroke = null;
     this.steps = 0;
     if (!wasActive) return 'none';
     if (stepped) return 'step';

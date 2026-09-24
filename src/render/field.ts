@@ -90,10 +90,10 @@ export class FieldView {
   }
 
   /** Records a hit passing through cells (ATTACK then AFTER). */
-  markAttack(cells: readonly Cell[], tick: number, tone: AttackTone): void {
+  markAttack(cells: readonly Cell[], tick: number, tone: AttackTone, domain: 'player' | 'world' = 'world'): void {
     for (const c of cells) {
       if (c.x < 0 || c.x >= COLS || c.y < 0 || c.y >= ROWS) continue;
-      this.marks.set(cellKey(c.x, c.y, COLS), { tick, tone });
+      this.marks.set(cellKey(c.x, c.y, COLS), { tick, tone, domain });
     }
   }
 
@@ -112,6 +112,7 @@ export class FieldView {
       cols: COLS,
       rows: ROWS,
       tick: world.tick,
+      playerTick: world.playerTick,
       player: world.player.alive ? { x: world.player.x, y: world.player.y } : null,
       enemies: world.enemies.filter((enemy) => enemy.alive).map((enemy) => ({ x: enemy.x, y: enemy.y })),
       danger: world.state === 'ACTION' ? world.dangerCells() : [],

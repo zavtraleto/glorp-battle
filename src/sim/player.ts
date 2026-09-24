@@ -4,7 +4,7 @@ import type { Field } from './field';
 import type { EntityId, Occupancy } from './occupancy';
 
 // Player (GDD §3): one-cell steps inside the player territory, instant logical
-// move, cooldown, one buffered direction, hold-to-repeat; flinch and i-frames (§9).
+// move, cooldown, one buffered direction, keyboard hold-to-repeat; flinch and i-frames (§9).
 
 export const PLAYER_ID: EntityId = 1;
 
@@ -95,7 +95,7 @@ export class Player {
     this.occupancy.move(this.id, this.x, this.y, this.x + v.dx, this.y + v.dy);
     this.x += v.dx;
     this.y += v.dy;
-    this.field.onLeave(this.prevX, this.prevY, tick);
+    this.field.onLeave(this.prevX, this.prevY, tick, 'player');
     this.lastMoveTick = tick;
     this.moves++;
     return true;

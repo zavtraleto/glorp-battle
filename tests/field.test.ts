@@ -79,6 +79,18 @@ describe('Field', () => {
 });
 
 describe('field physics v0.1', () => {
+  it('restores player-owned and world-owned panels on their owner timelines', () => {
+    const { f } = makeField();
+    const duration = T(1);
+    f.breakPanel(0, 2, 0, duration, 'player');
+    f.breakPanel(1, 2, 0, duration, 'world');
+
+    f.update({ playerTick: duration, worldTick: duration / 2 }, { player: { x: 1, y: 4 } });
+
+    expect(f.panel(0, 2)).toBe('NORMAL');
+    expect(f.panel(1, 2)).toBe('BROKEN');
+  });
+
   it('restores BREAK after the duration supplied by its effect', () => {
     const { f } = makeField();
     expect(f.breakPanel(1, 2, 10, T(2))).toBe(true);

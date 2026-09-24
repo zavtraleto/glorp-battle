@@ -63,7 +63,7 @@ export class ChipSystem {
   private series: ChipKey[] = [];
   /** Selection, committed manual charge, or cooldown wait before the next selection. */
   phase: HandPhase = 'selecting';
-  /** The shared next-hand cooldown starts with the first chip in a charge. */
+  /** Shared next-hand cooldown; Combo State may delay its start until exit. */
   private refillStartedAt: number | null = null;
   private refillReadyAt: number | null = null;
   /** Slots emptied by this or an earlier charge, distinct from intentionally empty slots. */
@@ -223,13 +223,25 @@ export class ChipSystem {
     return true;
   }
 
-  /** Commits the selection on the first shot; later calls admit one manual shot. */
-  startAttack(tick = 0): boolean {
+  /** Commits the selected series without starting the next-hand cooldown. */
+  commitAttack(): boolean {
     if (this.phase === 'waiting' || this.attack.length === 0) return false;
     if (this.phase === 'committed') return true;
     this.phase = 'committed';
+    return true;
+  }
+
+  /** Starts the shared next-hand cooldown once; delayed combos call this on exit. */
+  startCooldown(tick = 0): void {
+    if (this.refillStartedAt !== null) return;
     this.refillStartedAt = tick;
     this.refillReadyAt = tick + secondsToTicks(tuning.chips.HAND_REFILL_COOLDOWN);
+  }
+
+  /** Existing single-chip entry point: commit and start cooldown immediately. */
+  startAttack(tick = 0): boolean {
+    if (!this.commitAttack()) return false;
+    this.startCooldown(tick);
     return true;
   }
 
@@ -277,6 +289,23 @@ export class ChipSystem {
     return chip;
   }
 
+  /** Permanently consumes every unstarted chip in the committed tail. */
+  burnAttackTail(): number[] {
+    const burned: number[] = [];
+    while (this.attack.length > 0) {
+      const slot = this.attack.shift();
+      if (slot === undefined) break;
+      const chip = this.hand[slot];
+      if (!chip) continue;
+      chip.state = 'used';
+      this.hand[slot] = null;
+      this.pendingRefills[slot] = null;
+      this.spentSlots[slot] = true;
+      burned.push(slot);
+    }
+    return burned;
+  }
+
   /** Reserves the real next draw once the outgoing chip can no longer return. */
   reserveRefill(slot: number, reservedUid: number | null = null): ChipInstance | null {
     if (slot < 0 || slot >= this.hand.length || this.hand[slot] !== null) return null;
@@ -289,6 +318,14 @@ export class ChipSystem {
     const startedAt = this.refillStartedAt ?? readyAt;
     this.pendingRefills[slot] = { chip, startedAt, readyAt };
     return chip;
+  }
+
+  /** Assigns replacement chips to every spent slot after delayed cooldown starts. */
+  reserveSpentRefills(): void {
+    if (this.refillReadyAt === null) return;
+    for (let slot = 0; slot < this.hand.length; slot++) {
+      if (this.spentSlots[slot] && this.hand[slot] === null) this.reserveRefill(slot);
+    }
   }
 
   pendingChip(slot: number): ChipInstance | null {

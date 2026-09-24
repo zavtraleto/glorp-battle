@@ -31,7 +31,7 @@ Before every commit: `npm test` and `npm run build` must pass. Pushing to `main`
 - **Deliberate deviations — do not undo them:**
   - There is no Buster (GDD §4): only chips deal damage. Spent chips reshuffle into the draw pile when it runs dry (GDD §5).
   - The run is linear and the folder never changes during it: no path choice, rewards, legacy or saves between runs (GDD §10).
-  - One trackball stroke = exactly one panel. With the finger held down, a new stroke starts after a rest (`SWIPE_REARM_TIME`) or a turn; a long drag in one direction is still one panel. No hold-to-repeat on gestures (keyboard keeps it).
+  - One trackball micro-swipe = exactly one panel. After each accepted step, the current finger position becomes the next gesture anchor; a stationary finger never repeats movement. No hold-to-repeat on gestures (keyboard keeps it).
   - A `DBG` button (bottom-right) toggles debug tools in every build; the pause key sits bottom-left on the control panel.
   - Working names replace Capcom names: Mettik, Canodron, Spiker, … (see GDD §0.1).
 - When behavior changes, update the GDD in the same change. Mark new decisions `[решение YYYY-MM-DD]`, estimates `[оценка]`, and keep §17 (tuning table) in sync with `src/config/tuning.ts`.

@@ -32,6 +32,37 @@ function timingWorld(): World {
 }
 
 describe('time-based combat timing', () => {
+  it('keeps player time unscaled while the world advances at its own scale', () => {
+    const w = timingWorld();
+    w.cheats.aiEnabled = false;
+    w.setWorldTimeScale(0.5, 0);
+
+    for (let i = 0; i < 60; i++) w.step(DT);
+
+    expect(w.playerTick).toBe(60);
+    expect(w.tick).toBe(30);
+    expect(w.time).toBeCloseTo(1, 5);
+  });
+
+  it('updates simultaneous player and enemy projectiles on their owner timelines', () => {
+    const w = timingWorld();
+    w.cheats.aiEnabled = false;
+    w.setWorldTimeScale(0.5, 0);
+    const stepTicks = T(tuning.projectile.CELL_TRAVEL_TIME);
+    const playerWave = new Shockwave(801, 0, 5, w.playerTick, {
+      dir: -1, damage: 1, stepTicks, owner: 'player',
+    });
+    const enemyWave = new Shockwave(802, 2, 0, w.tick, {
+      dir: 1, damage: 1, stepTicks, owner: 'enemy',
+    });
+    w.attacks = [playerWave, enemyWave];
+
+    for (let i = 0; i < stepTicks * 2; i++) w.step(DT);
+
+    expect(playerWave.y).toBe(3);
+    expect(enemyWave.y).toBe(1);
+  });
+
   it('moves a standard projectile one cell per configured travel time', () => {
     const shot = new Shockwave(1, 1, 1, 0, {
       dir: 1,
@@ -119,10 +150,10 @@ describe('time-based combat timing', () => {
     run(chipTiming(CHIPS.cannon).startupTicks);
     expect(enemy.state).toBe('LOCK');
     expect(enemy.hp).toBe(196);
-    run(T(tuning.mettik.LOCK_TIME) - chipTiming(CHIPS.cannon).startupTicks - 1);
+    for (let i = 0; i < 60 && enemy.state === 'LOCK'; i++) step();
+    expect(enemy.state).toBe('COUNTER');
     step({ commands: [{ type: 'useChip' }], held: null });
     expect(enemy.state).toBe('COUNTER');
-    run(chipTiming(CHIPS.cannon).totalTicks - T(tuning.mettik.LOCK_TIME) + 1);
     run(chipTiming(CHIPS.cannon).startupTicks);
     expect(enemy.state).toBe('STAGGER');
 

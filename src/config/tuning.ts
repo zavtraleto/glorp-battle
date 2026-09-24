@@ -38,6 +38,13 @@ export const DEFAULT_TUNING = {
     MAX_FRAME_TIME: 0.25,
     TIME_SCALE: 1,
   },
+  combo: {
+    WORLD_TIME_SCALE: 0.7,
+    SLOW_MO_ENTER: 0.1,
+    SLOW_MO_EXIT: 0.15,
+    COMBO_BREAK_EXIT: 0.08,
+    CHIP_INPUT_BUFFER: 0.1,
+  },
   player: {
     PLAYER_MAX_HP: 10,
     PLAYER_START_X: 1,
@@ -123,11 +130,15 @@ export const DEFAULT_TUNING = {
     HOP_HP: 4,
     HOP_DMG: 1,
     HOP_PARALYZE: 1.0,
+    HOP_SETTLE_TIME: 0.15,
+    HOP_ALIGN_CHANCE: 0.6,
   },
   bladdy: {
     ...HEAVY_ENEMY_TIMING,
     BLD_HP: 9,
     BLD_DMG: 3,
+    BLD_SETTLE_TIME: 0.15,
+    BLD_AREA_GRAB_DECISIONS: 3,
   },
   fx: {
     HIT_FLASH: 0.1,
@@ -152,8 +163,6 @@ export const DEFAULT_TUNING = {
     HOLD_REPEAT_DELAY: 0.35,
     /** Interval between further repeated steps while the direction stays held. */
     HOLD_REPEAT: 0.2,
-    /** One early Attack press retained until the current chip lock ends. */
-    ACTION_BUFFER_TIME: 0.1,
   },
   /** Battle field look, "CRT Occult Vector" (docs/BATTLE_VISUAL.md §9). */
   battleVisual: {
@@ -165,7 +174,7 @@ export const DEFAULT_TUNING = {
     /** Field centre in NDC, applied to the field, sprites and effects together. */
     VIEW_OFFSET_X: 0,
     /** Extra vertical shift after reserving the HUD band; negative moves down. */
-    VIEW_OFFSET_Y: -0.06,
+    VIEW_OFFSET_Y: 0.01,
     /** Gap between cell outlines (share of a cell). */
     CELL_GAP: 0.08,
     /** Brightness of idle grid lines. */

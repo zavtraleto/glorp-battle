@@ -12,6 +12,7 @@ export interface LaneShotOptions {
 }
 
 export class LaneShot implements LaneMover {
+  readonly timeDomain = 'world' as const;
   readonly hitIds = new Set<number>();
   done = false;
   lastStepTick: number;
@@ -34,11 +35,11 @@ export class LaneShot implements LaneMover {
     this.paralyze = opts.paralyze ?? 0;
   }
 
-  update(ctx: AttackContext): void {
+  update(ctx: AttackContext, tick = ctx.tick): void {
     if (this.done) return;
-    if (ctx.tick - this.lastStepTick >= this.stepTicks) {
+    if (tick - this.lastStepTick >= this.stepTicks) {
       this.y++;
-      this.lastStepTick = ctx.tick;
+      this.lastStepTick = tick;
       if (this.y >= ROWS) {
         this.done = true;
         return;
