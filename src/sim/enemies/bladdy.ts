@@ -9,13 +9,17 @@ type BladdyIntent =
   | { kind: 'wideSword' | 'longSword'; cells: Cell[] }
   | { kind: 'areaGrab'; cells: Cell[] };
 
-// Bladdy (Swordy, MMBN3) — GDD §8.6.
+// Bladdy (Swordy, MMBN3; timings MMBN6) — GDD §8.6.
 // Commits one positional step or one fixed sword/AreaGrab action per decision.
+// Only one Bladdy attacks at a time (`EnemyContext.claimAttack`); the others
+// stand while it swings.
 
 export class Bladdy extends Enemy {
   readonly kind = 'bladdy';
   private intent: BladdyIntent | null = null;
   private outOfRangeDecisions = 0;
+  /** Let go of the attack lock at the next update (countered: no context there). */
+  private releasePending = false;
 
   constructor(id: number, x: number, y: number, spawnTick: number, level: EnemyLevel = 1) {
     super(id, x, y, tuning.bladdy.BLD_HP, spawnTick, level);
@@ -48,6 +52,7 @@ export class Bladdy extends Enemy {
   protected override onCountered(): void {
     this.intent = null;
     this.outOfRangeDecisions = 0;
+    this.releasePending = true;
   }
 
   private commitAttack(intent: Exclude<BladdyIntent, { kind: 'move' }>, tick: number): void {
@@ -90,7 +95,9 @@ export class Bladdy extends Enemy {
   private decide(ctx: EnemyContext): void {
     const sword = this.selectSword(ctx);
     if (sword) {
-      this.commitAttack(sword, ctx.tick);
+      // Another Bladdy is attacking: hold position until it is done.
+      if (ctx.claimAttack(this)) this.commitAttack(sword, ctx.tick);
+      else this.setState('IDLE', ctx.tick);
       return;
     }
 
@@ -103,7 +110,7 @@ export class Bladdy extends Enemy {
     this.outOfRangeDecisions++;
     if (this.outOfRangeDecisions >= tuning.bladdy.BLD_AREA_GRAB_DECISIONS) {
       const cells = this.areaGrabCells(ctx);
-      if (cells.length > 0) {
+      if (cells.length > 0 && ctx.claimAttack(this)) {
         this.commitAttack({ kind: 'areaGrab', cells }, ctx.tick);
         return;
       }
@@ -114,6 +121,10 @@ export class Bladdy extends Enemy {
   update(ctx: EnemyContext): void {
     const b = tuning.bladdy;
     const t = ctx.tick;
+    if (this.releasePending) {
+      this.releasePending = false;
+      ctx.releaseAttack(this);
+    }
     switch (this.state) {
       case 'IDLE':
         if (this.elapsed(t) < this.ticks(b.BLD_SETTLE_TIME)) return;
@@ -133,6 +144,7 @@ export class Bladdy extends Enemy {
       case 'COUNTER': {
         if (!this.phaseDone(t)) return;
         if (!this.intent || this.intent.kind === 'move') {
+          ctx.releaseAttack(this);
           this.setState('IDLE', t);
           return;
         }
@@ -159,6 +171,7 @@ export class Bladdy extends Enemy {
       case 'RECOVERY':
         if (!this.phaseDone(t)) return;
         this.intent = null;
+        ctx.releaseAttack(this);
         this.setState('IDLE', t);
         return;
       case 'STAGGER':

@@ -91,8 +91,8 @@ describe('Mettik', () => {
   it('attacks the player lane with a wave that arrives on schedule', () => {
     const w = makeWorld();
     const m = w.enemies[0] as Mettik;
-    const moveI = T(tuning.mettik.MOVE_TIME);
-    const waveStep = T(tuning.projectile.CELL_TRAVEL_TIME);
+    const moveI = T(tuning.mettik.MET_ACTION_DELAY);
+    const waveStep = T(tuning.mettik.MET_WAVE_CELL_TIME);
     run(w, moveI);
     expect(m.state).toBe('INTENTION');
     expect(w.dangerCells()).toEqual([]);
@@ -116,7 +116,7 @@ describe('Mettik', () => {
 
   it('the wave can be dodged by leaving the lane before Strike', () => {
     const w = makeWorld();
-    run(w, T(tuning.mettik.MOVE_TIME) + 5);
+    run(w, T(tuning.mettik.MET_ACTION_DELAY) + 5);
     move(w, 'left');
     run(w, T(2));
     expect(w.player.hp).toBe(w.player.maxHp);
@@ -126,7 +126,7 @@ describe('Mettik', () => {
     const w = makeWorld();
     const m = w.enemies[0] as Mettik;
     move(w, 'right');
-    run(w, T(tuning.mettik.MOVE_TIME));
+    run(w, T(tuning.mettik.MET_ACTION_DELAY));
     expect([m.x, m.y]).toEqual([2, 1]);
     expect(m.state).toBe('MOVE');
   });
@@ -135,21 +135,26 @@ describe('Mettik', () => {
     const w = makeWorld();
     const m = w.enemies[0] as Mettik;
     m.hp = 999;
-    run(w, T(tuning.mettik.MOVE_TIME));
+    run(w, T(tuning.mettik.MET_ACTION_DELAY));
     w.damageEnemy(m, 1);
     expect(m.state).toBe('INTENTION');
     run(w, T(tuning.mettik.INTENTION_TIME + tuning.mettik.LOCK_TIME + tuning.mettik.COUNTER_TIME));
     expect(w.attacks.length).toBe(1);
   });
 
-  it('allows multiple Mettiks to attack independently', () => {
+  it('takes turns: the other Mettik stands until the wave leaves, then acts after its own delay', () => {
     const w = makeWorld();
     const a = w.enemies[0] as Mettik;
     const b = addMettik(w, 1, 0, 501);
-    run(w, T(tuning.mettik.MOVE_TIME));
-    expect([a.state, b.state]).toEqual(['INTENTION', 'INTENTION']);
+    run(w, T(tuning.mettik.MET_ACTION_DELAY));
+    expect([a.state, b.state]).toEqual(['INTENTION', 'IDLE']);
     run(w, T(tuning.mettik.INTENTION_TIME + tuning.mettik.LOCK_TIME + tuning.mettik.COUNTER_TIME));
-    expect(w.attacks.filter((attack) => attack.kind === 'shockwave')).toHaveLength(2);
+    expect(w.attacks.filter((attack) => attack.kind === 'shockwave')).toHaveLength(1);
+    expect(b.state).toBe('IDLE');
+    run(w, T(tuning.mettik.MET_ACTION_DELAY) - 1);
+    expect(b.state).toBe('IDLE');
+    run(w, 1);
+    expect(b.state).toBe('INTENTION');
   });
 
   it('the wave travels to the last row and disappears', () => {

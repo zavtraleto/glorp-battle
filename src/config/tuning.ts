@@ -5,33 +5,6 @@
 /** Designer-facing combat timing unit. The simulation still runs at SIM_HZ. */
 export const COMBAT_TIMING_UNIT = 0.1;
 
-const FAST_ENEMY_TIMING = {
-  INTENTION_TIME: 0.2,
-  LOCK_TIME: 0.15,
-  COUNTER_TIME: 0.15,
-  STRIKE_TIME: 0.1,
-  RECOVERY_TIME: 0.25,
-  MOVE_TIME: 0.15,
-};
-
-const STANDARD_ENEMY_TIMING = {
-  INTENTION_TIME: 0.3,
-  LOCK_TIME: 0.2,
-  COUNTER_TIME: 0.18,
-  STRIKE_TIME: 0.1,
-  RECOVERY_TIME: 0.3,
-  MOVE_TIME: 0.2,
-};
-
-const HEAVY_ENEMY_TIMING = {
-  INTENTION_TIME: 0.4,
-  LOCK_TIME: 0.25,
-  COUNTER_TIME: 0.2,
-  STRIKE_TIME: 0.15,
-  RECOVERY_TIME: 0.4,
-  MOVE_TIME: 0.3,
-};
-
 export const DEFAULT_TUNING = {
   sim: {
     SIM_HZ: 60,
@@ -122,30 +95,72 @@ export const DEFAULT_TUNING = {
     /** Least time between one callout closing and the next opening. */
     TUT_CALLOUT_GAP: 1,
   },
+  // Enemy timings follow MMBN6 as the Hub-OS mods recreate it (GDD §8.2–8.6):
+  // frame counts / 60, rounded. Bunny has no frame data: Hopzap is [оценка].
   mettik: {
-    ...STANDARD_ENEMY_TIMING,
+    /** Pickaxe raised (0.34 s in BN6), then the counter window up to the wave (0.72 s). */
+    INTENTION_TIME: 0.2,
+    LOCK_TIME: 0.14,
+    COUNTER_TIME: 0.38,
+    STRIKE_TIME: 0.1,
+    RECOVERY_TIME: 0.32,
+    /** Slide between cells on screen. */
+    MOVE_TIME: 0.2,
+    /** Wait before every action: each step, each strike, and on getting the turn (38 frames). */
+    MET_ACTION_DELAY: 0.63,
+    /** Shockwave speed: 21 frames per cell. */
+    MET_WAVE_CELL_TIME: 0.35,
+    /** Steps the turn holder may chase the player's lane before handing the turn on. */
+    MET_CHASE_STEPS: 3,
+    /** true: the turn goes on as the wave leaves; false: after recovery (BN6). */
+    MET_HANDOFF_ON_WAVE: true,
     MET_HP: 4,
     MET_DMG: 1,
   },
   canodron: {
-    ...STANDARD_ENEMY_TIMING,
+    /** Least time the cursor is on screen before it can lock. */
+    INTENTION_TIME: 0.3,
+    /** Lock-on blink, then the shot (0.37 s in BN3). */
+    LOCK_TIME: 0.2,
+    COUNTER_TIME: 0.17,
+    STRIKE_TIME: 0.1,
+    /** The cursor smoke clears ~2 s after a shot before it aims again. */
+    RECOVERY_TIME: 1.9,
+    MOVE_TIME: 0.2,
     CANO_HP: 6,
     CANO_DMG: 1,
-    CANO_CURSOR_STEP: 0.15,
+    /** Cursor speed: 15 frames per cell. */
+    CANO_CURSOR_STEP: 0.25,
   },
   hopzap: {
-    ...FAST_ENEMY_TIMING,
+    INTENTION_TIME: 0.3,
+    LOCK_TIME: 0.2,
+    COUNTER_TIME: 0.2,
+    STRIKE_TIME: 0.1,
+    RECOVERY_TIME: 0.4,
+    MOVE_TIME: 0.15,
     HOP_HP: 4,
     HOP_DMG: 1,
     HOP_PARALYZE: 1.0,
-    HOP_SETTLE_TIME: 0.15,
+    /** Stop between hops. */
+    HOP_SETTLE_TIME: 0.5,
     HOP_ALIGN_CHANCE: 0.6,
+    /** ZapRing speed. */
+    HOP_RING_CELL_TIME: 0.2,
   },
   bladdy: {
-    ...HEAVY_ENEMY_TIMING,
+    /** Warned cells flash 64 frames before the swing. */
+    INTENTION_TIME: 0.5,
+    LOCK_TIME: 0.3,
+    COUNTER_TIME: 0.27,
+    STRIKE_TIME: 0.15,
+    /** Holds after the swing (~64–80 frames). */
+    RECOVERY_TIME: 1.1,
+    MOVE_TIME: 0.4,
     BLD_HP: 9,
     BLD_DMG: 3,
-    BLD_SETTLE_TIME: 0.15,
+    /** With MOVE_TIME: one step per ~1.2 s (72 frames). */
+    BLD_SETTLE_TIME: 0.8,
     BLD_AREA_GRAB_DECISIONS: 3,
     /** Damage to the player standing in the row Bladdy's AreaGrab takes. */
     BLD_AREA_GRAB_DMG: 1,

@@ -101,7 +101,7 @@ export class Hopzap extends Enemy {
         ctx.spawnAttack(
           new LaneShot(ctx.nextAttackId(), 'zapring', this.intent.origin.x, this.intent.origin.y, t, {
             damage: this.dmg(h.HOP_DMG),
-            stepTicks: this.ticks(tuning.projectile.FAST_CELL_TRAVEL_TIME),
+            stepTicks: this.ticks(h.HOP_RING_CELL_TIME),
             paralyze: this.ticks(h.HOP_PARALYZE),
           }),
         );

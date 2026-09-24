@@ -44,6 +44,13 @@ export interface EnemyContext {
   hitPlayerAt(attack: Attack, x: number, y: number, damage: number): boolean;
   paralyzePlayer(ticks: number): void;
   placeObject(kind: ObjectKind, x: number, y: number, side: Side): FieldObject | null;
+  /** Mettik relay (GDD §8.1): whether this enemy holds its kind's turn. */
+  hasTurn(enemy: Enemy): boolean;
+  /** The holder hands its kind's turn on. */
+  passTurn(enemy: Enemy): void;
+  /** One attacker of a kind at a time (GDD §8.1): true if it is (now) this enemy. */
+  claimAttack(enemy: Enemy): boolean;
+  releaseAttack(enemy: Enemy): void;
 }
 
 export abstract class Enemy {

@@ -137,7 +137,7 @@ describe('Hopzap sample-and-commit decisions', () => {
     run(w, T(tuning.hopzap.LOCK_TIME + tuning.hopzap.COUNTER_TIME));
     const ring = w.attacks.find((attack): attack is LaneShot => attack instanceof LaneShot);
     expect(ring?.x).toBe(1);
-    expect(ring?.stepTicks).toBe(T(tuning.projectile.FAST_CELL_TRAVEL_TIME));
+    expect(ring?.stepTicks).toBe(T(tuning.hopzap.HOP_RING_CELL_TIME));
     for (let i = 0; ring && !ring.done && i < 5 * ring.stepTicks; i++) step(w);
     expect(ring?.done).toBe(true);
     expect(w.player.hp).toBe(w.player.maxHp);
@@ -149,7 +149,7 @@ describe('Hopzap sample-and-commit decisions', () => {
       tuning.hopzap.INTENTION_TIME
       + tuning.hopzap.LOCK_TIME
       + tuning.hopzap.COUNTER_TIME
-      + 2 * tuning.projectile.FAST_CELL_TRAVEL_TIME,
+      + 2 * tuning.hopzap.HOP_RING_CELL_TIME,
     ));
     expect(hitWorld.player.hp).toBe(hitWorld.player.maxHp - tuning.hopzap.HOP_DMG);
     expect(hitWorld.player.paralyzeTicks).toBeGreaterThan(0);

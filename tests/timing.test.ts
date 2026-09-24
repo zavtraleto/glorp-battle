@@ -152,12 +152,16 @@ describe('time-based combat timing', () => {
     expect(enemy.hp).toBe(196);
     for (let i = 0; i < 60 && enemy.state === 'LOCK'; i++) step();
     expect(enemy.state).toBe('COUNTER');
+    // The first Cannon may still be recovering: the second press waits for a free player.
+    for (let i = 0; i < 60 && (w.activeChip || w.player.actionTicks > 0); i++) step();
+    expect(enemy.state).toBe('COUNTER');
     step({ commands: [{ type: 'useChip' }], held: null });
     expect(enemy.state).toBe('COUNTER');
     run(chipTiming(CHIPS.cannon).startupTicks);
     expect(enemy.state).toBe('STAGGER');
 
-    run(T(tuning.counter.COUNTER_STAGGER_TIME));
+    // The stagger runs on the world clock, which the combo slows down.
+    for (let i = 0; i < 120 && enemy.state === 'STAGGER'; i++) step();
     enemy.forceAttack(w.tick);
     run(T(tuning.mettik.INTENTION_TIME + tuning.mettik.LOCK_TIME + tuning.mettik.COUNTER_TIME));
     run(T(tuning.mettik.STRIKE_TIME + tuning.mettik.RECOVERY_TIME));

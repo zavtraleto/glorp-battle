@@ -21,7 +21,8 @@ import type { Enemy, EnemyContext } from './enemies/enemyBase';
 import { createEnemy } from './enemies/factory';
 import type { SimEvent } from './events';
 import { COLS, ROWS, type Cell, type Side } from './grid';
-import { Occupancy } from './occupancy';
+import { Occupancy, type EntityId } from './occupancy';
+import { AttackLock, TurnRelay } from './turns';
 import { Player } from './player';
 import { resolveMove } from './movement';
 
@@ -167,6 +168,9 @@ export class World implements EnemyContext, AttackContext {
   private attackIdCounter = 1;
   private readonly handSpec: readonly (FolderChip | null)[] | null;
   private readonly pendingPushes = new Map<number, Cell>();
+  /** Per kind, rebuilt every wave (GDD §8.1). */
+  private relays = new Map<Enemy['kind'], TurnRelay>();
+  private locks = new Map<Enemy['kind'], AttackLock>();
   private readonly impactObjects = new Map<string, FieldObject>();
 
   constructor(options: WorldOptions) {
@@ -251,6 +255,15 @@ export class World implements EnemyContext, AttackContext {
       const enemy = createEnemy(spawn, this.nextEnemyId++, this.tick);
       this.occupancy.place(enemy.id, enemy.x, enemy.y);
       this.enemies.push(enemy);
+    }
+    // Turn order: the row nearest the player first, then left to right.
+    const order = [...this.enemies].sort((a, b) => b.y - a.y || a.x - b.x);
+    this.relays = new Map();
+    this.locks = new Map();
+    for (const e of order) {
+      const relay = this.relays.get(e.kind) ?? new TurnRelay();
+      relay.holds(e.id, () => true);
+      this.relays.set(e.kind, relay);
     }
     for (const p of this.wave.panels ?? []) {
       if (p.panel === 'CRACKED') this.field.crack(p.x, p.y);
@@ -386,6 +399,28 @@ export class World implements EnemyContext, AttackContext {
   }
 
   // ---------- EnemyContext ----------
+
+  private readonly enemyAlive = (id: EntityId): boolean => this.enemies.some((e) => e.id === id && e.alive);
+
+  hasTurn(enemy: Enemy): boolean {
+    let relay = this.relays.get(enemy.kind);
+    if (!relay) this.relays.set(enemy.kind, (relay = new TurnRelay()));
+    return relay.holds(enemy.id, this.enemyAlive);
+  }
+
+  passTurn(enemy: Enemy): void {
+    this.relays.get(enemy.kind)?.pass(enemy.id, this.enemyAlive);
+  }
+
+  claimAttack(enemy: Enemy): boolean {
+    let lock = this.locks.get(enemy.kind);
+    if (!lock) this.locks.set(enemy.kind, (lock = new AttackLock()));
+    return lock.claim(enemy.id, this.enemyAlive);
+  }
+
+  releaseAttack(enemy: Enemy): void {
+    this.locks.get(enemy.kind)?.release(enemy.id);
+  }
 
   nextAttackId(): number {
     return this.attackIdCounter++;

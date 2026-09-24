@@ -172,3 +172,34 @@ describe('Bladdy sample-and-commit decisions', () => {
     expect([w.field.owner(0, 4), w.field.owner(1, 4), w.field.owner(2, 4)]).toEqual(['player', 'player', 'player']);
   });
 });
+
+describe('Bladdy attack lock', () => {
+  it('lets one Bladdy attack at a time; the other waits for the recovery to end', () => {
+    const w = new World({
+      seed: 53,
+      battleIndex: 1,
+      skipIntro: true,
+      cheats: { god: true, aiEnabled: true },
+      encounter: {
+        id: 'bladdy-lock',
+        tier: 'normal',
+        minDepth: 1,
+        maxDepth: 1,
+        waves: [{ enemies: [{ kind: 'bladdy', x: 0, y: 2 }, { kind: 'bladdy', x: 2, y: 2 }] }],
+      },
+    });
+    const [a, b] = w.enemies as Bladdy[];
+    // Both have the player in WideSword reach.
+    placePlayer(w, 1, 3);
+    run(w, T(tuning.bladdy.BLD_SETTLE_TIME));
+    expect([a!.state, b!.state].sort()).toEqual(['IDLE', 'INTENTION']);
+    const first = a!.state === 'INTENTION' ? a! : b!;
+    const second = first === a ? b! : a!;
+    const b_ = tuning.bladdy;
+    run(w, T(b_.INTENTION_TIME + b_.LOCK_TIME + b_.COUNTER_TIME + b_.STRIKE_TIME + b_.RECOVERY_TIME) - 1);
+    expect(second.state).toBe('IDLE');
+    // It retries every BLD_SETTLE_TIME, so it starts within one settle.
+    run(w, T(b_.BLD_SETTLE_TIME) + 2);
+    expect(['INTENTION', 'LOCK']).toContain(second.state);
+  });
+});
