@@ -10,25 +10,15 @@ import {
   DISPLAY_TOTAL_CHARS,
   glyph,
   hasGlyph,
-  signedSeconds,
   SEGMENTS,
   TIMER_BANK_CHARS,
   TIMER_BANK_HALVES,
 } from '../src/terminal/chips/segmentFont';
 
-const COOLDOWN_NOTICES = (['kill', 'counter', 'combo', 'hit'] as const)
-  .map((reason) => t(`hud.cooldown.${reason}`, { s: signedSeconds(-0.75) }));
-
 // The amber chip display under the rail and the trackball ring (TERMINAL.md §3.1).
 describe('14-segment display', () => {
   it('has a glyph for every character it can be asked to show', () => {
-    const ids = Object.keys(CHIPS) as ChipId[];
-    const texts = [
-      t('hud.selectChip'), '+0123456789',
-      ...ids.map((id) => chipName(id)),
-      ...ids.map((id) => t('hud.chipLost', { name: chipName(id) })),
-      ...COOLDOWN_NOTICES,
-    ];
+    const texts = [t('hud.selectChip'), '+0123456789', ...(Object.keys(CHIPS) as ChipId[]).map((id) => chipName(id))];
     for (const text of texts) {
       for (const ch of text) expect(hasGlyph(ch), `${text}: '${ch}'`).toBe(true);
     }
@@ -41,20 +31,6 @@ describe('14-segment display', () => {
       expect(seen.get(key), `${ch} looks like ${seen.get(key)}`).toBeUndefined();
       seen.set(key, ch);
     }
-  });
-
-  it('fits every <CHIP> LOST line into the centre characters', () => {
-    for (const id of Object.keys(CHIPS) as ChipId[]) {
-      expect(t('hud.chipLost', { name: chipName(id) }).length).toBeLessThanOrEqual(DISPLAY_CHARS);
-    }
-  });
-
-  it('writes hand cooldown changes as signed seconds that fit the display (GDD §5.1)', () => {
-    expect(signedSeconds(-0.5)).toBe('-0.5');
-    expect(signedSeconds(1)).toBe('+1');
-    expect(signedSeconds(-0.75)).toBe('-0.75');
-    expect(t('hud.cooldown.kill', { s: signedSeconds(-0.5) })).toBe('KILL -0.5S');
-    for (const text of COOLDOWN_NOTICES) expect(text.length).toBeLessThanOrEqual(DISPLAY_CHARS);
   });
 
   it('shows NO CHIP for an empty queue', () => {

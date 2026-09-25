@@ -75,7 +75,7 @@ export function readyToHit(w: World): boolean {
 
 /**
  * The chip the beat waits on is gone: fired on the player's own (a miss) or
- * sent back to the hand by a broken combo. On to the last beat, where the lesson can retry.
+ * burned by a broken combo. On to the last beat, where the lesson can retry.
  */
 const NOTHING_QUEUED: TutorialBeat['skip'] = (c) => c.world.chips.attack.length === 0;
 
@@ -115,7 +115,7 @@ const two: TutorialLesson = {
       // Every queued chip needs its own press: said once, when it would hit.
       callout: { text: 'tutorial.again', gate: 'attack' },
       when: (c) => readyToHit(c.world),
-      // A hit taken breaks the combo; the second cannon waits for the next hand (GDD §6.6).
+      // A hit taken breaks the combo and burns the second cannon (GDD §6.6).
       skip: NOTHING_QUEUED,
     },
     CLEAR,

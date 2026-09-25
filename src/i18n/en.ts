@@ -19,13 +19,6 @@ export const en = {
   'btn.resume': 'Resume',
   'btn.debug': 'DBG',
   'hud.selectChip': 'SELECT CHIP',
-  /** Segment display when a chip spends its last charge (GDD §6.1). */
-  'hud.chipLost': '{name} LOST',
-  /** Segment display when the hand cooldown moves (GDD §5.1); `{s}` is signed seconds. */
-  'hud.cooldown.kill': 'KILL {s}S',
-  'hud.cooldown.counter': 'COUNTER {s}S',
-  'hud.cooldown.combo': 'COMBO {s}S',
-  'hud.cooldown.hit': 'HIT {s}S',
   'tutorial.title': 'TUTORIAL',
   'tutorial.complete.title': 'TUTORIAL CLEAR',
   'tutorial.complete.hint': 'YOU KNOW THE BASICS',

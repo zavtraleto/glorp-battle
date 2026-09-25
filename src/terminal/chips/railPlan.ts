@@ -41,17 +41,6 @@ export function returningCartIndex(carts: readonly { deal: number; phase: string
   return carts.findIndex((cart) => cart.deal === deal && cart.phase === 'eject');
 }
 
-/**
- * Shown cooldown fill while it slides after a jump (GDD §5.1): the gap to the
- * sim's progress shrinks with ease-out over the slide, the fill keeps rising
- * underneath. `left`/`total` in seconds.
- */
-export function slidCooldown(target: number, gap: number, left: number, total: number): number {
-  if (total <= 0 || left <= 0) return target;
-  const k = Math.min(1, left / total);
-  return Math.max(0, Math.min(1, target + gap * k * k));
-}
-
 /** Shared cooldown covers unavailable chips, but never the usable committed tail. */
 export function cooldownForSlot(state: SlotState, progress: number | null): number | null {
   if (progress === null) return null;

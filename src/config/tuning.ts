@@ -52,22 +52,7 @@ export const DEFAULT_TUNING = {
     CHIP_STARTUP_FIELD: 0.15,
     CHIP_RECOVERY_FIELD: 0.15,
     /** Shared delay from the first charged shot until the next hand may activate. */
-    HAND_REFILL_COOLDOWN: 3.0,
-    /** The hand cooldown with every bonus and penalty stays within these (GDD §5.1). */
-    HAND_COOLDOWN_MIN: 2.0,
-    HAND_COOLDOWN_MAX: 6.0,
-    /** Taken off the running cooldown per enemy deleted (GDD §5.1). */
-    COOLDOWN_KILL_BONUS: 0.5,
-    /** Taken off the running cooldown per Counter hit (GDD §5.1). */
-    COOLDOWN_COUNTER_BONUS: 0.5,
-    /** Taken off a completed combo's cooldown per chip beyond the first (GDD §5.1). */
-    COOLDOWN_COMBO_BONUS: 0.25,
-    /** Added to the running cooldown per hit that costs HP (GDD §5.1). */
-    COOLDOWN_HIT_PENALTY: 1.0,
-    /** Uses per battle of one attack chip copy (GDD §6.1). */
-    CHIP_CHARGES_ATTACK: 2,
-    /** Uses per battle of one field or support chip copy (GDD §6.1). */
-    CHIP_CHARGES_SUPPORT: 1,
+    HAND_REFILL_COOLDOWN: 4.0,
     CHIP_DAMAGE_CANNON: 4,
     CHIP_DAMAGE_SWORD: 6,
     CHIP_DAMAGE_MINE: 6,
@@ -354,20 +339,6 @@ export const DEFAULT_TUNING = {
     CONTACT_FLASH_TIME: 0.2,
     /** Three red body pulses when a chip chain is cancelled before use. */
     CHIP_CANCEL_FLASH_TIME: 1.2,
-    /** A last-charge cartridge flies its eject arc this much slower until it bursts (GDD §6.1). */
-    LAST_CHARGE_FLIGHT_SCALE: 0.3,
-    /** Last charge spent: shards are born red-hot and cool to their own colours over this (s). */
-    SHATTER_FLASH_TIME: 0.1,
-    /** Life of the shards (s). */
-    SHATTER_TIME: 0.6,
-    /** Shard burst speed, cartridge widths per second. */
-    SHATTER_SPEED: 6,
-    /** Pull on the shards, cartridge widths per second squared. */
-    SHATTER_GRAVITY: 30,
-    /** How long the segment display shows a notice: `<CHIP> LOST`, hand cooldown change (s). */
-    DISPLAY_NOTICE_TIME: 0.9,
-    /** A kill or hit moves the cooldown fill: it slides to the new level over this, not in one step (s). */
-    COOLDOWN_JUMP_TIME: 0.2,
     /** Nothing queued this long in battle: the cassette faces start flashing to call for a pick (s). */
     RAIL_ATTRACT_DELAY: 1.5,
     /** One beat of those flashing patterns (s). */

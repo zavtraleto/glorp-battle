@@ -6,7 +6,7 @@ import {
   glyph,
   SEGMENTS,
   TIMER_BANK_CHARS,
-  type Stroke,
+  type Segment,
   type SegmentDisplayModel,
 } from '../chips/segmentFont';
 
@@ -31,7 +31,7 @@ const STROKE = 2.4;
 type Line = [number, number, number, number];
 
 /** Segment strokes inside one cell, in cell-local pixels. */
-function segmentLines(): Record<Stroke, Line> {
+function segmentLines(): Record<Segment, Line> {
   const l = 2.5;
   const r = CELL_W - 4.5;
   const t = 2.5;
@@ -134,10 +134,6 @@ export class SegmentDisplay {
         ctx.moveTo(x0 + x1 + slant(y1), PAD + y1);
         ctx.lineTo(x0 + x2 + slant(y2), PAD + y2);
         ctx.stroke();
-      }
-      if (on.has('dp')) {
-        ctx.fillStyle = COLOR.lit;
-        ctx.fillRect(x0 + CELL_W / 2 - STROKE / 2, PAD + CELL_H - 2.5 - STROKE / 2, STROKE, STROKE);
       }
     }
     this.texture.needsUpdate = true;

@@ -197,7 +197,7 @@ const loop = new GameLoop(
           `player ${p.x},${p.y} hp ${p.hp} hits ${p.hitsTaken} ${p.flinched ? 'FLINCH ' : ''}${p.invulnerable ? 'IFR' : ''}\n` +
           `cooling ${world.chips.coolingCount}\n` +
           `draw ${world.chips.drawRemaining} hand ${world.chips.hand.filter(Boolean).length}/${world.chips.hand.length}` +
-          ` attack ${world.chips.attack.length} used ${world.chips.count('used')} out ${world.chips.count('exhausted')}` +
+          ` attack ${world.chips.attack.length} used ${world.chips.count('used')}` +
           ` chip ${world.activeChip ? world.activeChip.def.id : '-'}\n` +
           `step ${session.depth}/${session.steps}  folder ${session.folderSize}` +
           (session.tutorialBeat ? `  tut ${session.tutorialBeat}` : '') + '\n' +

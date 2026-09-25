@@ -199,7 +199,7 @@ describe('Combo State slow-motion transitions', () => {
 });
 
 describe('Combo Break', () => {
-  it('breaks only on actual HP loss and returns the active chip and the tail to the hand', () => {
+  it('breaks only on actual HP loss, restores an unresolved active chip, and burns the tail', () => {
     const w = world();
     const [firstSlot, secondSlot] = give(w, 'cannon', 'sword');
     step(w, true);
@@ -211,12 +211,7 @@ describe('Combo Break', () => {
     expect(w.combo).toBeNull();
     expect(w.activeChip).toBeNull();
     expect(w.chips.hand[firstSlot!]?.defId).toBe('cannon');
-    expect(w.chips.hand[secondSlot!]?.defId).toBe('sword');
-    expect(w.chips.attack).toEqual([]);
-    expect(w.chips.slotState(secondSlot!)).toBe('locked');
-    const cancelled = w.drainEvents().find((e) => e.type === 'chipChainCancelled');
-    expect(cancelled?.type === 'chipChainCancelled' && cancelled.chips.map((c) => c.slot).sort())
-      .toEqual([firstSlot, secondSlot].sort());
+    expect(w.chips.hand[secondSlot!]).toBeNull();
     expect(w.chips.handCooldownProgress(w.playerTick)).toBe(0);
   });
 

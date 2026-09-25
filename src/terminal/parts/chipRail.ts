@@ -17,7 +17,6 @@ import { activeSlot, cancelFlashLevel, railChanges, returningCartIndex } from '.
 import { attractLevel } from '../chips/railAttract';
 import { CHIP_TEXELS_H, CHIP_TEXELS_W, RAIL_LEFT, RAIL_SLOTS, RAIL_SPAN } from '../chips/railLayout';
 import { rectToWorld, type TerminalLayout } from '../layout';
-import { ChipShards } from './chipShards';
 
 // Chip rail (TERMINAL.md §6.3–6.5): five slots with contacts and chip
 // cartridges. It mirrors the hand slot for slot: used chips eject, new ones
@@ -32,9 +31,6 @@ export interface RailChip {
   /** Draw serial: a chip dealt again gets a new one, so the rail reloads it. */
   deal: number;
   defId: ChipId;
-  /** Charges left when dealt; the cartridge face shows them (GDD §6.1). */
-  charges: number;
-  maxCharges: number;
 }
 
 /** How a rail slot looks, straight from the simulation (GDD §7.1). */
@@ -65,17 +61,6 @@ interface Cart {
   aim: EjectAim;
   wasCooling: boolean;
   cancelFlashLeft: number;
-  /**
-   * Dealt with one charge left: once fired it flies its arc slowed down, so
-   * it is still near its slot when the burst comes (TERMINAL.md §6.5).
-   */
-  lastCharge: boolean;
-  /** Spent its last charge (GDD §6.1): bursts into shards on the next update. */
-  doomed: boolean;
-  /** Time along the eject arc; runs slower than `t` for a last-charge cartridge. */
-  flightT: number;
-  /** Last flight position in world space, for the velocity the shards inherit. */
-  prevFlight: THREE.Vector3;
 }
 
 const COLOR = {
@@ -135,11 +120,6 @@ const GLOW_IDLE = 0.03;
 const GLOW_ATTRACT = 0.16;
 /** In flight the cartridge leaves the lit rail, so it carries its own light. */
 const GLOW_FLIGHT = 0.45;
-/**
- * A last-charge cartridge flies slowed down this long for its hit frame; if
- * the burst never comes (an interrupted shot returns instead), it speeds up.
- */
-const LAST_CHARGE_HOLD = 0.6;
 /** Cartridges slide to a new slot at this rate (1/s). */
 const SLIDE_RATE = 22;
 /** Cartridge width as a share of its slot pitch. */
@@ -193,11 +173,9 @@ export class ChipRail {
   private readonly unitPlane = new THREE.PlaneGeometry(1, 1);
   private readonly frameMat = new THREE.MeshLambertMaterial({ color: COLOR.frame, flatShading: true });
   private readonly contactTex = contactTexture();
-  private readonly shards = new ChipShards();
-  private readonly velocity = new THREE.Vector3();
 
   constructor() {
-    this.group.add(this.statics, this.shards.mesh);
+    this.group.add(this.statics);
   }
 
   build(layout: TerminalLayout, texel: number): void {
@@ -282,16 +260,6 @@ export class ChipRail {
     for (const c of this.carts) this.detach(c);
     this.carts = [];
     this.slots = new Array<number | null>(RAIL_SLOTS).fill(null);
-    this.shards.clear();
-  }
-
-  /**
-   * The chip with this deal spent its last charge (GDD §6.1): its cartridge
-   * bursts into red-hot shards in flight (TERMINAL.md §6.5).
-   */
-  shatter(deal: number): void {
-    const cart = this.carts.find((candidate) => candidate.deal === deal);
-    if (cart) cart.doomed = true;
   }
 
   /** Blinks the bodies of chips that were returned from a cancelled chain. */
@@ -418,24 +386,14 @@ export class ChipRail {
             this.drop(c);
             break;
           }
-          // No burst came in time: the rest of the arc runs at full speed.
-          if (c.lastCharge && c.t >= LAST_CHARGE_HOLD) c.lastCharge = false;
-          c.flightT += dt * (c.lastCharge ? t.LAST_CHARGE_FLIGHT_SCALE : 1);
           const duration = t.EJECT_LIFT_TIME + t.EJECT_TIME * profile.durationScale;
-          const p = duration > 0 ? c.flightT / duration : 1;
+          const p = duration > 0 ? c.t / duration : 1;
           if (p >= 1) {
             this.drop(c);
             break;
           }
           const pose = ejectPose(p, c.aim, profile);
           this.flight.set(c.origin.x + pose.x, c.origin.y + pose.y, c.origin.z + pose.z);
-          if (c.doomed) {
-            // Bursts in the frame the charge is gone: no pause before the shards.
-            this.burst(c, dt, pose.scale);
-            this.drop(c);
-            break;
-          }
-          c.prevFlight.copy(this.flight);
           o.position.copy(this.group.worldToLocal(this.flight));
           o.rotation.set(pose.rotX, pose.rotY, pose.rotZ);
           o.scale.setScalar(pose.scale);
@@ -452,15 +410,6 @@ export class ChipRail {
       const k = Math.max(base, flash > 0 ? ct.left / flash : 0);
       ct.mat.color.copy(COLOR.contactOff).lerp(COLOR.contactOn, k);
     });
-    this.shards.update(dt);
-  }
-
-  /** Replaces a doomed cartridge with its shards where it is now, keeping its motion. */
-  private burst(c: Cart, dt: number, scale: number): void {
-    if (dt > 0) this.velocity.copy(this.flight).sub(c.prevFlight).divideScalar(dt);
-    else this.velocity.set(0, 0, 0);
-    const width = CHIP_TEXELS_W * this.texel * scale;
-    this.shards.burst(c.cart.defId, c.deal, this.flight, this.velocity, width);
   }
 
   private startLeave(c: Cart): void {
@@ -478,12 +427,10 @@ export class ChipRail {
     c.profile = chooseEjectProfile(c.deal, slot, occupied);
     c.aim = ejectAim(c.profile, c.origin, this.cameraAt);
     this.flight.copy(c.origin);
-    c.prevFlight.copy(c.origin);
     c.cart.object.position.copy(this.group.worldToLocal(this.flight));
     c.cart.object.rotation.set(0, 0, 0);
     c.slot = -1;
     c.t = 0;
-    c.flightT = 0;
     c.phase = 'eject';
     c.delay = 0;
     c.cart.setTint(COLOR.tintPlain, COLOR.faceSelected);
@@ -521,7 +468,7 @@ export class ChipRail {
   }
 
   private makeCart(chip: RailChip, slot: number, delay: number): Cart {
-    const cart = new Cartridge(chip.defId, chip.charges, chip.maxCharges);
+    const cart = new Cartridge(chip.defId);
     cart.shape(this.texel, this.maxH);
     cart.setTint(COLOR.tintPlain, COLOR.faceNormal);
     cart.setGlow(COLOR.glowAttract, GLOW_IDLE);
@@ -542,10 +489,6 @@ export class ChipRail {
       aim: { x: 0, y: 0, z: 0 },
       wasCooling: this.slotViews?.[slot]?.state === 'cooling',
       cancelFlashLeft: 0,
-      lastCharge: chip.charges === 1,
-      doomed: false,
-      flightT: 0,
-      prevFlight: new THREE.Vector3(),
     };
   }
 

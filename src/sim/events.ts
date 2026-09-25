@@ -1,5 +1,4 @@
 import type { ChipId, ShapeKind } from '../data/chips';
-import type { CooldownReason } from './chips/chipSystem';
 import type { Panel } from './field';
 import type { ObjectKind } from './fieldObject';
 import type { Cell, Side } from './grid';
@@ -13,8 +12,6 @@ export type SimEvent =
   | { type: 'comboStarted'; size: number }
   | { type: 'comboEnded'; reason: 'complete' }
   | { type: 'comboBroken' }
-  /** A kill, Counter, completed combo or hit moved the hand cooldown by `seconds` (GDD §5.1). */
-  | { type: 'handCooldownChanged'; reason: CooldownReason; seconds: number }
   | { type: 'enemyKilled'; id: EntityId; x: number; y: number }
   | { type: 'enemyCountered'; id: EntityId; x: number; y: number }
   | { type: 'enemyRemoved'; id: EntityId }
@@ -22,8 +19,6 @@ export type SimEvent =
   | { type: 'stateChanged'; from: string; to: string }
   | { type: 'chipUsed'; defId: ChipId; x: number; y: number }
   | { type: 'chipInterrupted'; defId: ChipId }
-  /** A resolved chip spent its copy's last charge (GDD §6.1); `deal` names the flying cartridge. */
-  | { type: 'chipExhausted'; defId: ChipId; deal: number }
   /** Frozen-chain cartridges that did not resolve and returned to ready. */
   | { type: 'chipChainCancelled'; chips: { slot: number; deal: number }[] }
   /** Visual footprint of a resolved chip; `cells` are the panels it swept or hit. */

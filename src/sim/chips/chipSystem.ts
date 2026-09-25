@@ -8,11 +8,9 @@ import { canAddToSelection, type ChipKey } from './selection';
 //
 // There is no Custom Screen: the hand of five sits in the rail for the whole
 // battle and the player builds a series of chips while dodging. A fired chip
-// leaves its slot empty until that chip's refill cooldown elapses. Every copy
-// has charges for the battle; at zero it leaves the folder (GDD §6.1, §7.5).
+// leaves its slot empty until that chip's refill cooldown elapses.
 
-/** `exhausted`: no charges left, out of the folder until the battle ends. */
-export type ChipState = 'folder' | 'hand' | 'pending' | 'queued' | 'used' | 'exhausted';
+export type ChipState = 'folder' | 'hand' | 'pending' | 'queued' | 'used';
 
 /** What a hand slot shows right now; derived, never stored. */
 export type SlotState = 'empty' | 'cooling' | 'ready' | 'queued' | 'blocked' | 'committed' | 'locked';
@@ -24,9 +22,6 @@ export interface ChipInstance {
   state: ChipState;
   /** Serial of the draw that put this chip in the hand (0 = never drawn); a re-dealt chip gets a new one. */
   deal: number;
-  /** Uses left in this battle (GDD §6.1). */
-  charges: number;
-  readonly maxCharges: number;
 }
 
 /** A chip in a run's folder. */
@@ -34,28 +29,15 @@ export interface FolderChip {
   defId: ChipId;
 }
 
-/** Why the running hand cooldown changed (GDD §5.1). */
-export type CooldownReason = 'kill' | 'counter' | 'combo' | 'hit';
-
-/** Signed change of the hand cooldown per reason, in seconds (GDD §5.1). */
-export function cooldownDelta(reason: CooldownReason, comboSize = 0): number {
-  const c = tuning.chips;
-  switch (reason) {
-    case 'kill': return -c.COOLDOWN_KILL_BONUS;
-    case 'counter': return -c.COOLDOWN_COUNTER_BONUS;
-    case 'combo': return -c.COOLDOWN_COMBO_BONUS * Math.max(0, comboSize - 1);
-    case 'hit': return c.COOLDOWN_HIT_PENALTY;
-  }
+interface PendingRefill {
+  chip: ChipInstance;
+  startedAt: number;
+  readyAt: number;
 }
 
 /** A folder as a flat chip list. */
 export function folderChips(id: FolderId): FolderChip[] {
   return FOLDERS[id].flatMap((e) => Array.from({ length: e.count }, () => ({ defId: e.chip })));
-}
-
-/** `secondsToTicks` for a signed change. */
-function signedTicks(seconds: number): number {
-  return Math.sign(seconds) * secondsToTicks(Math.abs(seconds));
 }
 
 export function chipDef(chip: ChipInstance): ChipDef {
@@ -84,8 +66,8 @@ export class ChipSystem {
   private refillReadyAt: number | null = null;
   /** Slots emptied by this or an earlier charge, distinct from intentionally empty slots. */
   private spentSlots: boolean[] = [];
-  /** The real next draw assigned to each cooling slot; it cools on the shared timer. */
-  private pendingRefills: (ChipInstance | null)[] = [];
+  /** The real next draw assigned to each cooling slot. */
+  private pendingRefills: (PendingRefill | null)[] = [];
   /** Times the spent chips went back into the draw pile (GDD §7.5). */
   reshuffles = 0;
   /** Bumped by `replaceFolder`: the old hand was swapped out, not spent. */
@@ -100,17 +82,14 @@ export class ChipSystem {
     this.drawPile = [];
     this.fill(typeof folder === 'string' ? folderChips(folder) : folder);
     this.hand = new Array<ChipInstance | null>(tuning.chips.HAND_SIZE).fill(null);
-    this.pendingRefills = new Array<ChipInstance | null>(tuning.chips.HAND_SIZE).fill(null);
+    this.pendingRefills = new Array<PendingRefill | null>(tuning.chips.HAND_SIZE).fill(null);
     this.spentSlots = new Array<boolean>(tuning.chips.HAND_SIZE).fill(false);
   }
 
   private fill(list: readonly FolderChip[]): void {
     const first = (this.chips[this.chips.length - 1]?.uid ?? 0) + 1;
     this.chips.length = 0;
-    list.forEach((c, i) => {
-      const charges = CHIPS[c.defId].charges;
-      this.chips.push({ uid: first + i, defId: c.defId, state: 'folder', deal: 0, charges, maxCharges: charges });
-    });
+    list.forEach((c, i) => this.chips.push({ uid: first + i, defId: c.defId, state: 'folder', deal: 0 }));
     this.drawPile = this.rng.shuffle([...this.chips]);
     this.drawIndex = 0;
   }
@@ -124,7 +103,7 @@ export class ChipSystem {
     this.folderVersion++;
     this.fill(list);
     this.hand = new Array<ChipInstance | null>(tuning.chips.HAND_SIZE).fill(null);
-    this.pendingRefills = new Array<ChipInstance | null>(tuning.chips.HAND_SIZE).fill(null);
+    this.pendingRefills = new Array<PendingRefill | null>(tuning.chips.HAND_SIZE).fill(null);
     this.spentSlots = new Array<boolean>(tuning.chips.HAND_SIZE).fill(false);
     this.resetCycle();
   }
@@ -156,15 +135,9 @@ export class ChipSystem {
     return chip;
   }
 
-  /** Empty pile: every spent chip with charges left is shuffled back in (GDD §7.5). */
+  /** Empty pile: every spent chip is shuffled back in (GDD §7.5). */
   private reshuffleSpent(reservedUid: number | null = null): void {
-    let spent = this.chips.filter((c) => c.state === 'used' && c.uid !== reservedUid);
-    // TEMP until T3 (empty folder): with nothing left to draw, exhausted copies
-    // come back with full charges so the battle never stalls.
-    if (spent.length === 0) {
-      spent = this.chips.filter((c) => c.state === 'exhausted');
-      for (const c of spent) c.charges = c.maxCharges;
-    }
+    const spent = this.chips.filter((c) => c.state === 'used' && c.uid !== reservedUid);
     if (spent.length === 0) return;
     for (const c of spent) c.state = 'folder';
     this.drawPile.length = 0;
@@ -176,7 +149,7 @@ export class ChipSystem {
   /** Fills the hand at the start of the battle (GDD §7.6). */
   dealHand(): void {
     this.hand = Array.from({ length: tuning.chips.HAND_SIZE }, () => this.draw());
-    this.pendingRefills = new Array<ChipInstance | null>(tuning.chips.HAND_SIZE).fill(null);
+    this.pendingRefills = new Array<PendingRefill | null>(tuning.chips.HAND_SIZE).fill(null);
     this.spentSlots = new Array<boolean>(tuning.chips.HAND_SIZE).fill(false);
     this.resetCycle();
   }
@@ -184,7 +157,7 @@ export class ChipSystem {
   /** Tutorial (GDD §10.5): the exact hand by slot; null leaves the slot empty. */
   dealHandExact(spec: readonly (FolderChip | null)[]): void {
     this.hand = new Array<ChipInstance | null>(tuning.chips.HAND_SIZE).fill(null);
-    this.pendingRefills = new Array<ChipInstance | null>(tuning.chips.HAND_SIZE).fill(null);
+    this.pendingRefills = new Array<PendingRefill | null>(tuning.chips.HAND_SIZE).fill(null);
     this.spentSlots = new Array<boolean>(tuning.chips.HAND_SIZE).fill(false);
     this.resetCycle();
     for (let i = 0; i < Math.min(spec.length, this.hand.length); i++) {
@@ -271,47 +244,11 @@ export class ChipSystem {
     return true;
   }
 
-  /**
-   * Starts the shared next-hand cooldown once; delayed combos call this on exit
-   * with their bonus (GDD §5.1). Returns the change from the base length in
-   * seconds after the clamp, or null when the cooldown was already running.
-   */
-  startCooldown(tick = 0, deltaSeconds = 0): number | null {
-    if (this.refillStartedAt !== null) return null;
-    const base = secondsToTicks(tuning.chips.HAND_REFILL_COOLDOWN);
-    const span = this.clampSpan(base + signedTicks(deltaSeconds));
+  /** Starts the shared next-hand cooldown once; delayed combos call this on exit. */
+  startCooldown(tick = 0): void {
+    if (this.refillStartedAt !== null) return;
     this.refillStartedAt = tick;
-    this.refillReadyAt = tick + span;
-    return (span - this.clampSpan(base)) / secondsToTicks(1);
-  }
-
-  /** Full length of the current hand cooldown in ticks, or null when none started. */
-  get cooldownSpan(): number | null {
-    if (this.refillStartedAt === null || this.refillReadyAt === null) return null;
-    return this.refillReadyAt - this.refillStartedAt;
-  }
-
-  /** True while the shared cooldown counts down (GDD §5.1). */
-  cooldownRunning(tick: number): boolean {
-    return this.refillReadyAt !== null && tick < this.refillReadyAt;
-  }
-
-  /**
-   * Shortens or lengthens the running cooldown (GDD §5.1): the full length
-   * stays within HAND_COOLDOWN_MIN..MAX. Outside a running cooldown nothing
-   * changes. Returns the applied change in seconds, 0 when none.
-   */
-  adjustCooldown(tick: number, deltaSeconds: number): number {
-    if (this.refillStartedAt === null || this.refillReadyAt === null || !this.cooldownRunning(tick)) return 0;
-    const span = this.refillReadyAt - this.refillStartedAt;
-    const next = this.clampSpan(span + signedTicks(deltaSeconds));
-    this.refillReadyAt = this.refillStartedAt + next;
-    return (next - span) / secondsToTicks(1);
-  }
-
-  private clampSpan(ticks: number): number {
-    const c = tuning.chips;
-    return Math.max(secondsToTicks(c.HAND_COOLDOWN_MIN), Math.min(secondsToTicks(c.HAND_COOLDOWN_MAX), ticks));
+    this.refillReadyAt = tick + secondsToTicks(tuning.chips.HAND_REFILL_COOLDOWN);
   }
 
   /** Existing single-chip entry point: commit and start cooldown immediately. */
@@ -365,24 +302,34 @@ export class ChipSystem {
     return chip;
   }
 
-  /**
-   * A fired chip reached its hit frame: one charge is gone, and a spent copy
-   * at zero leaves the folder. Interrupted chips keep theirs.
-   */
-  spendCharge(chip: ChipInstance): void {
-    chip.charges = Math.max(0, chip.charges - 1);
-    if (chip.charges === 0 && chip.state === 'used') chip.state = 'exhausted';
+  /** Permanently consumes every unstarted chip in the committed tail. */
+  burnAttackTail(): number[] {
+    const burned: number[] = [];
+    while (this.attack.length > 0) {
+      const slot = this.attack.shift();
+      if (slot === undefined) break;
+      const chip = this.hand[slot];
+      if (!chip) continue;
+      chip.state = 'used';
+      this.hand[slot] = null;
+      this.pendingRefills[slot] = null;
+      this.spentSlots[slot] = true;
+      burned.push(slot);
+    }
+    return burned;
   }
 
   /** Reserves the real next draw once the outgoing chip can no longer return. */
   reserveRefill(slot: number, reservedUid: number | null = null): ChipInstance | null {
     if (slot < 0 || slot >= this.hand.length || this.hand[slot] !== null) return null;
-    if (this.refillReadyAt === null) return null;
+    const readyAt = this.refillReadyAt;
+    if (readyAt === null) return null;
     const existing = this.pendingRefills[slot];
-    if (existing) return existing;
+    if (existing) return existing.chip;
     const chip = this.draw(reservedUid, 'pending');
     if (!chip) return null;
-    this.pendingRefills[slot] = chip;
+    const startedAt = this.refillStartedAt ?? readyAt;
+    this.pendingRefills[slot] = { chip, startedAt, readyAt };
     return chip;
   }
 
@@ -395,7 +342,7 @@ export class ChipSystem {
   }
 
   pendingChip(slot: number): ChipInstance | null {
-    return this.pendingRefills[slot] ?? null;
+    return this.pendingRefills[slot]?.chip ?? null;
   }
 
   /** Shared hand cooldown progress, including retained chips that are locked. */
@@ -408,8 +355,11 @@ export class ChipSystem {
 
   /** Cooling progress for the reserved chip, or null when no chip is assigned. */
   refillProgress(slot: number, tick: number): number | null {
-    if (!this.pendingRefills[slot]) return null;
-    return this.handCooldownProgress(tick);
+    const pending = this.pendingRefills[slot];
+    if (!pending) return null;
+    const span = pending.readyAt - pending.startedAt;
+    if (span <= 0) return 1;
+    return Math.max(0, Math.min(1, (tick - pending.startedAt) / span));
   }
 
   /** Activates all spent slots only after both charge completion and cooldown. */
@@ -419,7 +369,7 @@ export class ChipSystem {
     for (let slot = 0; slot < this.hand.length; slot++) {
       if (slot === reserved?.slot) continue;
       if (!this.spentSlots[slot] || this.hand[slot] !== null) continue;
-      const chip = this.pendingRefills[slot] ?? this.reserveRefill(slot, reserved?.uid ?? null);
+      const chip = this.pendingRefills[slot]?.chip ?? this.reserveRefill(slot, reserved?.uid ?? null);
       if (!chip) continue;
       chip.state = 'hand';
       this.hand[slot] = chip;

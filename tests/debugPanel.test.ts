@@ -6,7 +6,7 @@ describe('debug tuning order', () => {
     const { DEFAULT_TUNING } = await import('../src/config/tuning');
     const values = DEFAULT_TUNING as unknown as Record<string, Record<string, number>>;
 
-    expect(values.chips?.HAND_REFILL_COOLDOWN).toBe(3);
+    expect(values.chips?.HAND_REFILL_COOLDOWN).toBe(4);
     expect(values.player?.CELL_MOVE_TIME).toBe(0.2);
     expect(values.combo).toMatchObject({
       WORLD_TIME_SCALE: 0.7,
