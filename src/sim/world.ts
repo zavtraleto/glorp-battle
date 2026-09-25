@@ -17,6 +17,7 @@ import { shapeCells } from './chips/patterns';
 import { chipAim, fieldTargetDistance, type Aim } from './chips/aim';
 import type { Enemy, EnemyContext } from './enemies/enemyBase';
 import { createEnemy } from './enemies/factory';
+import type { Telegraph } from './enemies/telegraph';
 import type { SimEvent } from './events';
 import { COLS, ROWS, type Cell, type Side } from './grid';
 import { Occupancy, type EntityId } from './occupancy';
@@ -408,11 +409,19 @@ export class World implements EnemyContext, AttackContext {
     return this.enemies.find((e) => e.id === id) ?? null;
   }
 
+  /** Enemy attacks being telegraphed now (GDD §8.1). */
+  telegraphs(): Telegraph[] {
+    const out: Telegraph[] = [];
+    for (const e of this.enemies) {
+      const t = e.alive ? e.telegraph(this.field) : null;
+      if (t) out.push(t);
+    }
+    return out;
+  }
+
   /** All cells currently telegraphed by enemies. */
   dangerCells(): Cell[] {
-    const cells: Cell[] = [];
-    for (const e of this.enemies) cells.push(...e.dangerCells(this.field));
-    return cells;
+    return this.telegraphs().flatMap((t) => t.cells);
   }
 
   // ---------- EnemyContext ----------

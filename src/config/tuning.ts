@@ -247,7 +247,17 @@ export const DEFAULT_TUNING = {
     ACTIVE_FILL: 0.0,
     /** Creature sprite width as a share of a cell; texels are then rounded to whole CRT pixels. */
     SPRITE_CELL_FRAC: 0.95,
+    /** Blink rate of a winding-up enemy; the counter window blinks twice as fast. */
     DANGER_PULSE_HZ: 6,
+    /** Telegraph (GDD §8.1.1): peak fill brightness of a struck cell, brightness of its closing inner frame. */
+    TELEGRAPH_FILL: 0.05,
+    TELEGRAPH_FRAME: 0.35,
+    /** Red wash over a winding-up enemy sprite, 0..1. */
+    WINDUP_TINT: 0.55,
+    /** Canodron reticle homing onto the player after reaching their panel, seconds. */
+    CURSOR_SETTLE_TIME: 0.3,
+    /** Sprite brightness in RECOVERY. */
+    RECOVERY_DIM: 0.5,
     /** Hit stripe, then the flickering afterglow, seconds. */
     ATTACK_CELL_TIME: 0.15,
     AFTER_TIME: 0.2,

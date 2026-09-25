@@ -71,6 +71,9 @@ type HologramUniforms = {
   uHoloDropoutSize: { value: number };
   uHoloDropoutSpeed: { value: number };
   uHoloDropoutAngle: { value: number };
+  uHoloTint: { value: THREE.Color };
+  uHoloTintAmount: { value: number };
+  uHoloBrightness: { value: number };
 };
 
 const FRAGMENT_SHADER = /* glsl */ `
@@ -107,6 +110,9 @@ uniform float uHoloDropoutAmount;
 uniform float uHoloDropoutSize;
 uniform float uHoloDropoutSpeed;
 uniform float uHoloDropoutAngle;
+uniform vec3 uHoloTint;
+uniform float uHoloTintAmount;
+uniform float uHoloBrightness;
 varying vec2 vMapUv;
 
 float hash21(vec2 p) {
@@ -240,6 +246,10 @@ void main() {
   float finalAlpha = shape * opacity + nearHalo * uHoloHalo * 0.16 + wideHalo * uHoloBloom * 0.3 + particle * 0.72;
   if (finalAlpha <= 0.001) discard;
 
+  // Telegraph wash (GDD §8.1): keeps the figure's shading, recolours it.
+  vec3 washed = uHoloTint * (0.45 + 1.1 * holoLuma(finalColour));
+  finalColour = mix(finalColour, washed, clamp(uHoloTintAmount, 0.0, 1.0)) * uHoloBrightness;
+
   gl_FragColor = vec4(finalColour * diffuse, clamp(finalAlpha, 0.0, 1.0));
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -278,6 +288,9 @@ function makeUniforms(textureWidth: number, textureHeight: number, seed: number)
     uHoloDropoutSize: { value: 0 },
     uHoloDropoutSpeed: { value: 0 },
     uHoloDropoutAngle: { value: 0 },
+    uHoloTint: { value: new THREE.Color() },
+    uHoloTintAmount: { value: 0 },
+    uHoloBrightness: { value: 1 },
   };
 }
 
@@ -329,6 +342,14 @@ export class HologramSpriteMaterial extends THREE.SpriteMaterial {
   /** Wave materialize 0..1 (GDD §10.4); 1 = whole. */
   setBuild(progress: number): void {
     this.holoUniforms.uHoloBuild.value = Math.max(0, Math.min(1, progress));
+  }
+
+  /** Colour wash 0..1 and brightness multiplier (enemy phases, GDD §8.1). */
+  setLook(tint: THREE.Color | null, amount: number, brightness: number): void {
+    const u = this.holoUniforms;
+    if (tint) u.uHoloTint.value.copy(tint);
+    u.uHoloTintAmount.value = tint ? Math.max(0, Math.min(1, amount)) : 0;
+    u.uHoloBrightness.value = Math.max(0, brightness);
   }
 
   setDissolve(progress: number): void {

@@ -95,7 +95,8 @@ describe('Mettik', () => {
     const waveStep = T(tuning.mettik.WAVE_CELL_TIME);
     run(w, moveI);
     expect(m.state).toBe('INTENTION');
-    expect(w.dangerCells()).toEqual([]);
+    // The corridor is lit for the whole wind-up (GDD §8.1).
+    expect(w.dangerCells()).toHaveLength(4);
     run(w, T(tuning.mettik.INTENTION_TIME));
     expect(m.state).toBe('LOCK');
     expect(w.dangerCells()).toEqual([

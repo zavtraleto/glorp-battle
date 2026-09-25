@@ -69,10 +69,10 @@ describe('Canodron', () => {
     step(w);
     const c = cano(w);
     expect(c.state).toBe('INTENTION');
-    expect(c.cursorCell()).toEqual({ x: 1, y: 2, locked: false });
+    expect(c.cursorCell()).toMatchObject({ x: 1, y: 2, locked: false });
     // Cursor needs two steps (2→3→4) to reach the player.
     run(w, 2 * T(tuning.canodron.CURSOR_STEP));
-    expect(c.cursorCell()).toEqual({ x: 1, y: 4, locked: true });
+    expect(c.cursorCell()).toMatchObject({ x: 1, y: 4, locked: true });
     expect(w.dangerCells().length).toBe(4);
     run(w, T(tuning.canodron.LOCK_TIME + tuning.canodron.COUNTER_TIME) - 1);
     expect(w.player.hp).toBe(w.player.maxHp);
@@ -118,9 +118,9 @@ describe('Canodron', () => {
     const w = world(2);
     move(w, 'up'); // (1,3)
     run(w, T(tuning.canodron.CURSOR_STEP));
-    expect(cano(w).cursorCell()).toEqual({ x: 1, y: 3, locked: false });
+    expect(cano(w).cursorCell()).toMatchObject({ x: 1, y: 3, locked: false });
     run(w, T(tuning.canodron.INTENTION_TIME - tuning.canodron.CURSOR_STEP));
-    expect(cano(w).cursorCell()).toEqual({ x: 1, y: 3, locked: true });
+    expect(cano(w).cursorCell()).toMatchObject({ x: 1, y: 3, locked: true });
   });
 
   it('a cursor that passes the player resets at the last row', () => {

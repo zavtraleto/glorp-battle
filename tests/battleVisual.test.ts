@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { DEFAULT_TUNING, mergeTuning, tuning } from '../src/config/tuning';
 import { describe, expect, it } from 'vitest';
 import { battleSignal, NO_SIGNAL } from '../src/render/battleSignals';
 import { cellKey, cellStates, type CellInputs } from '../src/render/cellStates';
@@ -15,6 +16,7 @@ import {
 import { fitView } from '../src/render/viewCamera';
 import { SceneRenderer } from '../src/render/scene';
 import { spritePixels } from '../src/render/pixelSprite';
+import { cursorGlide, cursorSettle, enemyLook } from '../src/render/telegraphLook';
 import * as spriteArtModule from '../src/render/spriteArt';
 import { toneForCrt } from '../src/render/spriteArt';
 import { PLAYER_ROWS, playerBitmap } from '../src/render/playerSprite';
@@ -368,5 +370,46 @@ describe('battle signals', () => {
 
   it('keeps the field steady between waves: only the enemies materialize', () => {
     expect(battleSignal({ ...base, state: 'WAVE_INTRO', elapsed: 10 })).toBe(NO_SIGNAL);
+  });
+});
+
+describe('telegraph look (GDD §8.1)', () => {
+  it('winds up in red, opens the counter window in yellow, dims in recovery', () => {
+    const times = Array.from({ length: 40 }, (_, i) => i / 97);
+    const windup = times.map((s) => enemyLook('LOCK', s));
+    expect(windup.every((l) => l.lift === 2 && !l.flash && l.tint !== 'accent')).toBe(true);
+    expect(windup.some((l) => l.tint === 'red')).toBe(true);
+    expect(windup.some((l) => l.tint === null)).toBe(true);
+
+    const counter = times.map((s) => enemyLook('COUNTER', s));
+    expect(counter.every((l) => l.tint === 'accent' && l.tintAmount > 0)).toBe(true);
+    expect(new Set(counter.map((l) => l.tintAmount)).size).toBe(2);
+
+    expect(enemyLook('STRIKE', 0)).toMatchObject({ flash: true, tint: null });
+    expect(enemyLook('RECOVERY', 0).brightness).toBeLessThan(1);
+    expect(enemyLook('IDLE', 0)).toEqual({ lift: 0, flash: false, tint: null, tintAmount: 0, brightness: 1 });
+  });
+});
+
+describe('Canodron cursor glide', () => {
+  it('flies into its new cell within the step', () => {
+    const c = { x: 1, y: 3, locked: false, stepTick: 100, stepTicks: 15 };
+    expect(cursorGlide(c, 100)).toBe(0);
+    const mid = cursorGlide(c, 104);
+    expect(mid).toBeGreaterThan(0);
+    expect(mid).toBeLessThan(1);
+    expect(cursorGlide(c, 100 + 15)).toBe(1);
+  });
+
+  it('homes in on the target only after the glide, over CURSOR_SETTLE_TIME', () => {
+    mergeTuning(tuning, JSON.parse(JSON.stringify(DEFAULT_TUNING)));
+    tuning.battleVisual.CURSOR_SETTLE_TIME = 0.3;
+    const c = { x: 1, y: 3, locked: false, stepTick: 100, stepTicks: 15 };
+    const glideEnd = 100 + 15 * 0.6;
+    expect(cursorSettle(c, glideEnd)).toBe(0);
+    const half = cursorSettle(c, glideEnd + 9);
+    expect(half).toBeGreaterThan(0.3);
+    expect(half).toBeLessThan(0.7);
+    expect(cursorSettle({ ...c, locked: true }, glideEnd + 18)).toBe(1);
   });
 });

@@ -3,6 +3,7 @@ import type { EnemyLevel } from '../../data/enemies';
 import type { Attack } from '../attacks/attack';
 import { COLS, ROWS, inField, type Cell } from '../grid';
 import { Enemy, type EnemyContext } from './enemyBase';
+import type { TelegraphKind } from './telegraph';
 
 type BladdyIntent =
   | { kind: 'move'; destination: Cell }
@@ -38,9 +39,9 @@ export class Bladdy extends Enemy {
       .filter((c) => inField(c.x, c.y));
   }
 
-  override dangerCells(): Cell[] {
-    if (this.state !== 'LOCK' && this.state !== 'COUNTER') return [];
-    return this.intent?.kind === 'move' ? [] : [...(this.intent?.cells ?? [])];
+  protected override telegraphShape(): { kind: TelegraphKind; cells: Cell[] } | null {
+    if (!this.intent || this.intent.kind === 'move') return null;
+    return { kind: this.intent.kind === 'areaGrab' ? 'grab' : 'area', cells: [...this.intent.cells] };
   }
 
   override forceAttack(tick: number): void {

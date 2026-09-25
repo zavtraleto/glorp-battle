@@ -162,7 +162,7 @@ export class SceneRenderer {
     const worldAlpha = world.worldRenderAlpha(alpha);
     this.playerView.update(world.player, world.playerTick, alpha, dt, world.activeChip !== null, frame);
     this.syncEnemies(world, worldAlpha, dt, frame);
-    this.fx.update(world, alpha);
+    this.fx.update(world, alpha, this.playerView.sprite);
     // Moving enemy attacks light up the cell they are in.
     for (const a of world.attacks) {
       if (a.kind === 'shockwave') {

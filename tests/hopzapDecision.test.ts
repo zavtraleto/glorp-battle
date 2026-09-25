@@ -125,7 +125,6 @@ describe('Hopzap sample-and-commit decisions', () => {
 
     expect(w.pushEnemy(hopzap, { x: 0, y: 1 })).toBe('moved');
     placePlayer(w, 0);
-    expect(w.dangerCells()).toEqual([]);
     run(w, T(tuning.hopzap.INTENTION_TIME));
     expect(w.dangerCells()).toEqual([
       { x: 1, y: 2 },

@@ -9,6 +9,7 @@ import type { Field } from '../field';
 import type { FieldObject, ObjectKind } from '../fieldObject';
 import type { Side } from '../grid';
 import type { SimEvent } from '../events';
+import type { Telegraph, TelegraphKind } from './telegraph';
 
 // Common enemy timing grammar (GDD §8.1):
 // IDLE/MOVE → INTENTION → LOCK → COUNTER → STRIKE → RECOVERY; DEAD is terminal.
@@ -51,6 +52,17 @@ export interface EnemyContext {
   /** One attacker of a kind at a time (GDD §8.1): true if it is (now) this enemy. */
   claimAttack(enemy: Enemy): boolean;
   releaseAttack(enemy: Enemy): void;
+}
+
+/** A tracking cursor (GDD §8.3); `stepTick`/`stepTicks` let the view glide it between cells. */
+export interface CursorView {
+  x: number;
+  y: number;
+  locked: boolean;
+  /** Tick the cursor entered this cell. */
+  stepTick: number;
+  /** Ticks per cell step. */
+  stepTicks: number;
 }
 
 export abstract class Enemy {
@@ -138,13 +150,42 @@ export abstract class Enemy {
   forceAttack(_tick: number): void {}
 
   /** Targeting cursor to draw (Canodron), or null. */
-  cursorCell(): { x: number; y: number; locked: boolean } | null {
+  cursorCell(): CursorView | null {
     return null;
   }
 
-  /** Cells to highlight as dangerous right now (telegraph); ground attacks stop at holes. */
-  dangerCells(_field: Field): Cell[] {
-    return [];
+  /** Phases the telegraph fuse burns through (GDD §8.1); it ends on the strike tick. */
+  protected readonly fusePhases: readonly EnemyState[] = ['INTENTION', 'LOCK', 'COUNTER'];
+
+  /** Shape of the committed attack while it is telegraphed; ground attacks stop at holes. */
+  protected telegraphShape(_field: Field): { kind: TelegraphKind; cells: Cell[] } | null {
+    return null;
+  }
+
+  private phaseTicks(state: EnemyState): number {
+    const g = tuning[this.kind];
+    if (state === 'INTENTION') return this.ticks(g.INTENTION_TIME);
+    if (state === 'LOCK') return this.ticks(g.LOCK_TIME);
+    return this.ticks(g.COUNTER_TIME);
+  }
+
+  /** The attack being telegraphed now: its cells and fuse (GDD §8.1), or null. */
+  telegraph(field: Field): Telegraph | null {
+    const phases = this.fusePhases;
+    const i = phases.indexOf(this.state);
+    if (i < 0 || !Number.isFinite(this.stateEndTick)) return null;
+    const shape = this.telegraphShape(field);
+    if (!shape || shape.cells.length === 0) return null;
+    let end = this.stateEndTick;
+    for (let k = i + 1; k < phases.length; k++) end += this.phaseTicks(phases[k] as EnemyState);
+    let total = 0;
+    for (const phase of phases) total += this.phaseTicks(phase);
+    return { enemyId: this.id, kind: shape.kind, cells: shape.cells, start: end - total, end };
+  }
+
+  /** Cells to highlight as dangerous right now. */
+  dangerCells(field: Field): Cell[] {
+    return this.telegraph(field)?.cells ?? [];
   }
 
   /** True only during the explicit vulnerable phase before Strike. */

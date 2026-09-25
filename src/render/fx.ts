@@ -2,13 +2,16 @@ import * as THREE from 'three';
 import { CHIPS } from '../data/chips';
 import { secondsToTicks, tuning } from '../config/tuning';
 import type { LaneMover } from '../sim/attacks/shockwave';
-import { ROWS, type Cell } from '../sim/grid';
+import { ROWS } from '../sim/grid';
 import type { SimEvent } from '../sim/events';
 import type { World } from '../sim/world';
 import { LineBatch, QuadBatch } from './batch';
 import { CELL_DEPTH, CELL_WIDTH, cellToWorld } from './field';
 import { dimSignal, signal } from './palette';
 import { PLAYER_ID } from '../sim/player';
+import type { CursorView } from '../sim/enemies/enemyBase';
+import { FOOT_OFFSET } from './actors';
+import { cursorGlide, cursorSettle } from './telegraphLook';
 
 // Attacks and hit effects as plain geometry (BATTLE_VISUAL.md §6): lines,
 // strips and dots in palette signals. Floor effects draw under the creatures,
@@ -31,6 +34,11 @@ const AIR_Y = 0.35;
 const FLOOR_Y = 0.004;
 const BLAST_RINGS = 3;
 const CURSOR_LEN = 0.14;
+/** Reticle frame around a standing figure, world units. */
+const CURSOR_HALF_W = 0.62;
+const CURSOR_H = 1.3;
+/** Frame scale once the reticle has homed in on the player. */
+const CURSOR_AIMED = 0.8;
 /** Hit sparks on an enemy: rays, their reach and the height they burst at (world units). */
 const SPARK_RAYS = 8;
 const SPARK_REACH = 0.42;
@@ -111,7 +119,7 @@ export class FxView {
     }
   }
 
-  update(world: World, alpha: number): void {
+  update(world: World, alpha: number, playerSprite: THREE.Sprite | null = null): void {
     signal('accent', 1, col.accent);
     signal('red', 1, col.red);
     signal('phosphor', 1, col.phosphor);
@@ -131,7 +139,7 @@ export class FxView {
     if (world.state === 'ACTION') {
       for (const e of world.enemies) {
         const c = e.alive ? e.cursorCell() : null;
-        if (c) this.cursor(c, c.locked, worldTick);
+        if (c) this.cursor(world, e.y, c, worldTick + worldAlpha, playerSprite);
       }
     }
     this.trail(world, playerTick, alpha);
@@ -367,20 +375,44 @@ export class FxView {
     this.air.line(p.x - s, AIR_Y, z, p.x, AIR_Y + s, z, col.red);
   }
 
-  /** Canodron reticle: red corner brackets; locked ones shrink and blink. */
-  private cursor(c: Cell, locked: boolean, tick: number): void {
-    if (locked && tick % 6 < 2) return;
+  /**
+   * Canodron reticle (GDD §8.1, tracking class): a frame of red corner
+   * brackets standing upright where a figure would stand. It glides down the
+   * lane cell to cell; on the player's panel it then homes in on their sprite
+   * and tightens over CURSOR_SETTLE_TIME. Locked, it blinks; if the player
+   * steps away it stays on the locked panel.
+   */
+  private cursor(world: World, enemyY: number, c: CursorView, now: number, playerSprite: THREE.Sprite | null): void {
+    if (c.locked && Math.floor(now) % 6 < 2) return;
+    const pl = world.player;
+    const onPlayer = pl.alive && pl.x === c.x && pl.y === c.y && playerSprite !== null;
+    // Walk: from the previous cell (the Canodron itself on the first step) into this one.
+    cellToWorld(c.x, Math.max(enemyY, c.y - 1), q);
+    q.z += FOOT_OFFSET * CELL_DEPTH;
     cellToWorld(c.x, c.y, p);
-    const s = locked ? 0.32 : 0.42;
-    const hw = s * CELL_WIDTH;
-    const hd = s * CELL_DEPTH;
+    p.z += FOOT_OFFSET * CELL_DEPTH;
+    const k = cursorGlide(c, now);
+    let x = q.x + (p.x - q.x) * k;
+    let z = q.z + (p.z - q.z) * k;
+    let bottom = q.y + (p.y - q.y) * k;
+    // Aim: on the player's panel (or locked) it homes in on the figure and tightens.
+    const aim = onPlayer || c.locked ? cursorSettle(c, now) : 0;
+    if (onPlayer && aim > 0) {
+      const to = playerSprite!.position;
+      x += (to.x - x) * aim;
+      z += (to.z - z) * aim;
+      bottom += (to.y - bottom) * aim;
+    }
+    const s = 1 - (1 - CURSOR_AIMED) * aim;
+    const hw = CURSOR_HALF_W * s;
+    const y0 = bottom + CURSOR_H * (1 - s) * 0.5;
+    const y1 = bottom + CURSOR_H * (1 - (1 - s) * 0.5);
     const len = CURSOR_LEN;
     for (const sx of [-1, 1]) {
-      for (const sz of [-1, 1]) {
-        const x = p.x + sx * hw;
-        const z = p.z + sz * hd;
-        this.floor.line(x, FLOOR_Y, z, x - sx * len, FLOOR_Y, z, col.red);
-        this.floor.line(x, FLOOR_Y, z, x, FLOOR_Y, z - sz * len * CELL_DEPTH, col.red);
+      for (const [y, sy] of [[y0, 1], [y1, -1]] as const) {
+        const cx = x + sx * hw;
+        this.air.line(cx, y, z, cx - sx * len, y, z, col.red);
+        this.air.line(cx, y, z, cx, y + sy * len, z, col.red);
       }
     }
   }

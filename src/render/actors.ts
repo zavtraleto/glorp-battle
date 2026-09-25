@@ -6,6 +6,8 @@ import { CELL_DEPTH, CELL_WIDTH, cellToWorld } from './field';
 import { PixelSprite } from './pixelSprite';
 import { playerBitmap } from './playerSprite';
 import { enemyArtId, spriteArt } from './spriteArt';
+import { PALETTE } from './palette';
+import { enemyLook } from './telegraphLook';
 import { enemyPlaceholderBitmap } from './spriteBitmap';
 
 // Player and enemy sprites (BATTLE_VISUAL.md §5): pixel bitmaps standing in
@@ -17,7 +19,10 @@ export function rowRenderOrder(y: number): number {
 }
 
 /** Feet sit a bit in front of the cell centre so the figure reads as standing in it. */
-const FOOT_OFFSET = 0.18;
+export const FOOT_OFFSET = 0.18;
+/** Telegraph washes (GDD §8.1): the palette's red and yellow. */
+const TINT_RED = new THREE.Color(PALETTE.red);
+const TINT_ACCENT = new THREE.Color(PALETTE.accent);
 /** Enemies bob by one texel at this rate. */
 const IDLE_BOB_HZ = 1.2;
 /** A hit enemy ripples for this long, seconds (decision 2026-09-19). */
@@ -140,20 +145,10 @@ export class EnemyView {
     );
     const time = (tick + alpha) / tuning.sim.SIM_HZ;
     this.pixels.setTime(time);
-    let lift = Math.sin(time * Math.PI * 2 * IDLE_BOB_HZ + this.phase) > 0.3 ? 1 : 0;
-    let flash = flashing(enemy.lastHitTick, tick);
-
-    if (enemy.state === 'INTENTION' || enemy.state === 'LOCK') {
-      // Early warning and committed target share a readable lifted pose.
-      lift = 2;
-      flash ||= Math.sin(time * Math.PI * 2 * tuning.battleVisual.DANGER_PULSE_HZ) > 0.2;
-    } else if (enemy.state === 'COUNTER') {
-      lift = 2;
-      flash ||= Math.sin(time * Math.PI * 4 * tuning.battleVisual.DANGER_PULSE_HZ) > 0;
-    } else if (enemy.state === 'STRIKE') {
-      lift = 1;
-      flash = true;
-    }
+    const look = enemyLook(enemy.state, time);
+    const bob = Math.sin(time * Math.PI * 2 * IDLE_BOB_HZ + this.phase) > 0.3 ? 1 : 0;
+    const lift = look.lift || bob;
+    const flash = flashing(enemy.lastHitTick, tick) || look.flash;
 
     this.pixels.place(a, CELL_WIDTH * this.widthShare, frame.camera, frame.width, frame.height, lift);
     this.sprite.renderOrder = rowRenderOrder(enemy.y);
@@ -168,6 +163,8 @@ export class EnemyView {
       this.pixels.setDissolve(deathProgress(enemy.deathTick, tick, alpha, dt));
     }
     this.pixels.setFlash(flash);
+    const tint = flash || !look.tint ? null : look.tint === 'red' ? TINT_RED : TINT_ACCENT;
+    this.pixels.setLook(tint, look.tintAmount, look.brightness, look.tint === 'accent');
   }
 
   dispose(): void {

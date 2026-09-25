@@ -145,6 +145,15 @@ export class PixelSprite {
     if (this.material.map !== map) this.material.map = map;
   }
 
+  /**
+   * Phase look (GDD §8.1): a colour wash and a brightness multiplier on art.
+   * A procedural sprite can only swap to its accent texture for a strong accent wash.
+   */
+  setLook(tint: THREE.Color | null, amount: number, brightness: number, accent = false): void {
+    if (this.hologram) this.hologram.setLook(tint, amount, brightness);
+    else if (accent && amount >= 0.5) this.setFlash(true);
+  }
+
   /** Hit ripple strength 0..1; `seconds` drives the wave. */
   setRipple(k: number, seconds: number): void {
     const strength = Math.max(0, Math.min(1, k));

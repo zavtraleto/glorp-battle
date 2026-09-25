@@ -1,7 +1,8 @@
 import { tuning } from '../../config/tuning';
 import type { EnemyLevel } from '../../data/enemies';
 import { ROWS, laneCellsBelow, type Cell } from '../grid';
-import { Enemy, type EnemyContext } from './enemyBase';
+import { Enemy, type CursorView, type EnemyContext } from './enemyBase';
+import type { TelegraphKind } from './telegraph';
 
 interface CanodronIntent {
   kind: 'laneShot';
@@ -26,15 +27,19 @@ export class Canodron extends Enemy {
     super(id, x, y, tuning.canodron.HP, spawnTick, level);
   }
 
-  override cursorCell(): { x: number; y: number; locked: boolean } | null {
+  override cursorCell(): CursorView | null {
     if (!['INTENTION', 'LOCK', 'COUNTER'].includes(this.state) || this.cursorY < 0) return null;
-    if (this.intent) return { x: this.intent.lane, y: this.intent.targetY, locked: true };
-    return { x: this.x, y: this.cursorY, locked: false };
+    const stepTicks = this.ticks(tuning.canodron.CURSOR_STEP);
+    if (this.intent) return { x: this.intent.lane, y: this.intent.targetY, locked: true, stepTick: this.cursorStepTick, stepTicks };
+    return { x: this.x, y: this.cursorY, locked: false, stepTick: this.cursorStepTick, stepTicks };
   }
 
-  override dangerCells(): Cell[] {
-    if ((this.state !== 'LOCK' && this.state !== 'COUNTER') || !this.intent) return [];
-    return laneCellsBelow(this.intent.lane, this.intent.fromY);
+  /** The lane is known only once the cursor locks (GDD §8.3). */
+  protected override readonly fusePhases = ['LOCK', 'COUNTER'] as const;
+
+  protected override telegraphShape(): { kind: TelegraphKind; cells: Cell[] } | null {
+    if (!this.intent) return null;
+    return { kind: 'lane', cells: laneCellsBelow(this.intent.lane, this.intent.fromY) };
   }
 
   protected override onCountered(): void {

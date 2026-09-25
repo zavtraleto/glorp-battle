@@ -4,6 +4,7 @@ import { Shockwave } from '../attacks/shockwave';
 import type { Field } from '../field';
 import { groundCellsBelow, type Cell } from '../grid';
 import { Enemy, type EnemyContext } from './enemyBase';
+import type { TelegraphKind } from './telegraph';
 
 type MettikIntent = { kind: 'move'; destination: Cell } | { kind: 'shockwave'; origin: Cell };
 
@@ -27,10 +28,10 @@ export class Mettik extends Enemy {
     super(id, x, y, tuning.mettik.HP, spawnTick, level);
   }
 
-  override dangerCells(field: Field): Cell[] {
-    if (this.state !== 'LOCK' && this.state !== 'COUNTER') return [];
-    const origin = this.intent?.kind === 'shockwave' ? this.intent.origin : null;
-    return origin ? groundCellsBelow(origin.x, origin.y, (x, y) => field.panel(x, y) === 'BROKEN') : [];
+  protected override telegraphShape(field: Field): { kind: TelegraphKind; cells: Cell[] } | null {
+    if (this.intent?.kind !== 'shockwave') return null;
+    const { x, y } = this.intent.origin;
+    return { kind: 'lane', cells: groundCellsBelow(x, y, (cx, cy) => field.panel(cx, cy) === 'BROKEN') };
   }
 
   protected override onCountered(): void {

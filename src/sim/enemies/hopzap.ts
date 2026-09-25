@@ -3,6 +3,7 @@ import type { EnemyLevel } from '../../data/enemies';
 import { LaneShot } from '../attacks/laneShot';
 import { COLS, ROWS, laneCellsBelow, type Cell } from '../grid';
 import { Enemy, type EnemyContext } from './enemyBase';
+import type { TelegraphKind } from './telegraph';
 
 type HopzapIntent =
   | { kind: 'hop'; landing: Cell }
@@ -19,9 +20,9 @@ export class Hopzap extends Enemy {
     super(id, x, y, tuning.hopzap.HP, spawnTick, level);
   }
 
-  override dangerCells(): Cell[] {
-    if ((this.state !== 'LOCK' && this.state !== 'COUNTER') || this.intent?.kind !== 'zapring') return [];
-    return laneCellsBelow(this.intent.origin.x, this.intent.origin.y);
+  protected override telegraphShape(): { kind: TelegraphKind; cells: Cell[] } | null {
+    if (this.intent?.kind !== 'zapring') return null;
+    return { kind: 'lane', cells: laneCellsBelow(this.intent.origin.x, this.intent.origin.y) };
   }
 
   override forceAttack(tick: number): void {

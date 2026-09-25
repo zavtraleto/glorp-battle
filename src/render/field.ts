@@ -3,6 +3,7 @@ import { secondsToTicks, tuning } from '../config/tuning';
 import { COLS, ROWS, type Cell } from '../sim/grid';
 import type { World } from '../sim/world';
 import type { Aim } from '../sim/chips/aim';
+import { fuseProgress, type Telegraph } from '../sim/enemies/telegraph';
 import { LineBatch, QuadBatch } from './batch';
 import { NO_SIGNAL, type GridSignal } from './battleSignals';
 import { cellKey, cellStates, type AttackMark, type AttackTone, type CellView, type DebugCellState } from './cellStates';
@@ -25,7 +26,12 @@ export function cellToWorld(x: number, y: number, out = new THREE.Vector3()): TH
 const LINE_Y = 0.002;
 const FILL_Y = 0;
 const LINES_CAP = 1200;
-const QUADS_CAP = 120;
+const QUADS_CAP = 200;
+/** Breathing of a telegraphed cell's fill, per second. */
+const FILL_BREATHE_HZ = 2.5;
+/** Inner frame of a telegraphed cell: its scale when the fuse is lit and when it burns out. */
+const FRAME_OPEN = 0.86;
+const FRAME_CLOSED = 0.5;
 const SPAWN_RINGS = 3;
 const OBJECT_HEIGHT = 0.5;
 const DASHES = 12;
@@ -105,8 +111,29 @@ export class FieldView {
     this.labels.visible = visible;
   }
 
+  /** Telegraphs drawn this frame: only while the battle runs. */
+  private telegraphsOf(world: World): Telegraph[] {
+    return world.state === 'ACTION' ? world.telegraphs() : [];
+  }
+
+  /**
+   * Cells that read as danger. A grabbed cell is a field change, not a hit,
+   * unless the player stands on it (GDD §8.1).
+   */
+  private dangerOf(world: World, telegraphs: readonly Telegraph[]): Cell[] {
+    const out: Cell[] = [];
+    for (const t of telegraphs) {
+      for (const c of t.cells) if (t.kind !== 'grab' || this.playerOn(world, c)) out.push(c);
+    }
+    return out;
+  }
+
+  private playerOn(world: World, c: Cell): boolean {
+    return world.player.alive && world.player.x === c.x && world.player.y === c.y;
+  }
+
   /** Current visual state of every cell (for debug and tests). */
-  views(world: World, spawns: ReadonlyMap<number, number>): CellView[] {
+  views(world: World, spawns: ReadonlyMap<number, number>, telegraphs = this.telegraphsOf(world)): CellView[] {
     const v = tuning.battleVisual;
     return cellStates({
       cols: COLS,
@@ -115,7 +142,7 @@ export class FieldView {
       playerTick: world.playerTick,
       player: world.player.alive ? { x: world.player.x, y: world.player.y } : null,
       enemies: world.enemies.filter((enemy) => enemy.alive).map((enemy) => ({ x: enemy.x, y: enemy.y })),
-      danger: world.state === 'ACTION' ? world.dangerCells() : [],
+      danger: this.dangerOf(world, telegraphs),
       attacks: this.marks,
       spawns,
       overrides: this.overrides,
@@ -136,9 +163,9 @@ export class FieldView {
     signal('blue', v.GRID_DIM, col.dimBlue);
     signal('accent', 1, col.accent);
     signal('purple', 1, col.purple);
-    const views = this.views(world, spawns);
+    const telegraphs = this.telegraphsOf(world);
+    const views = this.views(world, spawns, telegraphs);
     const time = world.tick + alpha;
-    const pulse = 0.5 + 0.5 * Math.sin((time / tuning.sim.SIM_HZ) * Math.PI * 2 * v.DANGER_PULSE_HZ);
     const spawnTicks = Math.max(1, secondsToTicks(v.SPAWN_TIME));
     const attackTicks = Math.max(1, secondsToTicks(v.ATTACK_CELL_TIME));
 
@@ -181,9 +208,8 @@ export class FieldView {
             break;
           }
           case 'DANGER':
+            // The telegraph pass draws the fill and inner frame over it.
             this.outline(c, cellHw, cellHd, col.red);
-            this.outline(c, cellHw * 0.9, cellHd * 0.9, col.red);
-            this.fills.flat(c.x, c.z, cellHw, cellHd, FILL_Y, dimSignal(col.red, 0.3 + 0.35 * pulse, col.tmp));
             break;
           case 'SPAWN': {
             this.outline(c, cellHw, cellHd, base);
@@ -221,10 +247,38 @@ export class FieldView {
       }
     }
     this.borders(views, fx);
+    for (const t of telegraphs) this.telegraph(world, t, time);
     if (aim) this.aim(aim, time / tuning.sim.SIM_HZ);
 
     this.lines.end();
     this.fills.end();
+  }
+
+  /**
+   * One enemy telegraph (GDD §8.1.1). Every struck cell has a bright outline
+   * (drawn as DANGER), a quiet fill that breathes and brightens as the strike
+   * nears, and a thin inner frame that closes in toward the centre as the fuse
+   * burns. A grabbed cell is drawn in the enemy territory's blue; the player's
+   * cell under a grab stays red.
+   */
+  private telegraph(world: World, t: Telegraph, now: number): void {
+    const v = tuning.battleVisual;
+    const hw = (CELL_WIDTH * (1 - v.CELL_GAP)) / 2;
+    const hd = (CELL_DEPTH * (1 - v.CELL_GAP)) / 2;
+    const progress = fuseProgress(t, now);
+    const breathe = 0.5 + 0.5 * Math.sin((now / tuning.sim.SIM_HZ) * Math.PI * 2 * FILL_BREATHE_HZ);
+    const level = v.TELEGRAPH_FILL * (0.55 + 0.45 * progress) * (0.8 + 0.2 * breathe);
+    const inset = FRAME_OPEN + (FRAME_CLOSED - FRAME_OPEN) * progress;
+    const c = new THREE.Vector3();
+    const frame = new THREE.Color();
+    for (const cell of t.cells) {
+      const blue = t.kind === 'grab' && !this.playerOn(world, cell);
+      const color = blue ? col.blue : col.red;
+      cellToWorld(cell.x, cell.y, c);
+      this.fills.flat(c.x, c.z, hw, hd, FILL_Y, dimSignal(color, level, col.tmp));
+      if (blue) this.outline(c, hw, hd, color);
+      this.outline(c, hw * inset, hd * inset, dimSignal(color, v.TELEGRAPH_FRAME, frame));
+    }
   }
 
   /**

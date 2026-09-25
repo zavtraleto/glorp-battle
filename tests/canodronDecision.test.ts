@@ -61,7 +61,7 @@ describe('Canodron sample-and-commit decisions', () => {
     run(w, T(tuning.canodron.CURSOR_STEP));
 
     expect(canodron.state).toBe('INTENTION');
-    expect(canodron.cursorCell()).toEqual({ x: 1, y: 3, locked: false });
+    expect(canodron.cursorCell()).toMatchObject({ x: 1, y: 3, locked: false });
   });
 
   it('keeps the committed cursor and firing lane after LOCK', () => {
@@ -69,11 +69,11 @@ describe('Canodron sample-and-commit decisions', () => {
     const canodron = lock(w);
     placePlayer(w, 1, 5);
 
-    expect(canodron.cursorCell()).toEqual({ x: 1, y: 4, locked: true });
+    expect(canodron.cursorCell()).toMatchObject({ x: 1, y: 4, locked: true });
     expect(w.pushEnemy(canodron, { x: 0, y: 1 })).toBe('moved');
     expect(canodron.x).toBe(2);
     step(w);
-    expect(canodron.cursorCell()).toEqual({ x: 1, y: 4, locked: true });
+    expect(canodron.cursorCell()).toMatchObject({ x: 1, y: 4, locked: true });
     expect(w.dangerCells()).toEqual([
       { x: 1, y: 2 },
       { x: 1, y: 3 },
@@ -100,9 +100,9 @@ describe('Canodron sample-and-commit decisions', () => {
     expect(canodron.state).toBe('INTENTION');
 
     step(w);
-    expect(canodron.cursorCell()).toEqual({ x: 1, y: 2, locked: false });
+    expect(canodron.cursorCell()).toMatchObject({ x: 1, y: 2, locked: false });
     step(w);
-    expect(canodron.cursorCell()).toEqual({ x: 1, y: 3, locked: false });
+    expect(canodron.cursorCell()).toMatchObject({ x: 1, y: 3, locked: false });
   });
 
   it('does not aim again during FIRE or RECOVERY', () => {
