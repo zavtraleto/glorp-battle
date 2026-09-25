@@ -356,7 +356,7 @@ export class Terminal {
     }
     // Waves (GDD §10.4): the banner rides the flight, the landing jolts the cabinet.
     if (e.type === 'stateChanged' && e.to === 'WAVE_INTRO') {
-      this.showWaveBanner(world, tuning.wave.FLIGHT_TIME + tuning.wave.SPAWN_TIME);
+      this.showWaveBanner(world, tuning.flow.WAVE_FLIGHT_TIME + tuning.flow.WAVE_SPAWN_TIME);
     }
     if (e.type === 'waveSpawned') {
       this.crt.flash();
@@ -376,7 +376,7 @@ export class Terminal {
     this.folderVersion = this.opts.session.world.chips.folderVersion;
     this.floaters.clear();
     const world = this.opts.session.world;
-    if (world.state === 'BATTLE_INTRO') this.showWaveBanner(world, tuning.fx.INTRO_TIME + WAVE1_BANNER_HOLD);
+    if (world.state === 'BATTLE_INTRO') this.showWaveBanner(world, tuning.flow.INTRO_TIME + WAVE1_BANNER_HOLD);
     else this.waveBanner.hide();
   }
 

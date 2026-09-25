@@ -11,7 +11,7 @@ const T = (seconds: number) => secondsToTicks(seconds);
 beforeEach(() => mergeTuning(tuning, JSON.parse(JSON.stringify(DEFAULT_TUNING))));
 
 function settleTicks(): number {
-  return T(tuning.hopzap.HOP_SETTLE_TIME);
+  return T(tuning.hopzap.SETTLE_TIME);
 }
 
 function world(seed = 41, x = 0, y = 1): World {
@@ -137,7 +137,7 @@ describe('Hopzap sample-and-commit decisions', () => {
     run(w, T(tuning.hopzap.LOCK_TIME + tuning.hopzap.COUNTER_TIME));
     const ring = w.attacks.find((attack): attack is LaneShot => attack instanceof LaneShot);
     expect(ring?.x).toBe(1);
-    expect(ring?.stepTicks).toBe(T(tuning.hopzap.HOP_RING_CELL_TIME));
+    expect(ring?.stepTicks).toBe(T(tuning.hopzap.RING_CELL_TIME));
     for (let i = 0; ring && !ring.done && i < 5 * ring.stepTicks; i++) step(w);
     expect(ring?.done).toBe(true);
     expect(w.player.hp).toBe(w.player.maxHp);
@@ -149,9 +149,9 @@ describe('Hopzap sample-and-commit decisions', () => {
       tuning.hopzap.INTENTION_TIME
       + tuning.hopzap.LOCK_TIME
       + tuning.hopzap.COUNTER_TIME
-      + 2 * tuning.hopzap.HOP_RING_CELL_TIME,
+      + 2 * tuning.hopzap.RING_CELL_TIME,
     ));
-    expect(hitWorld.player.hp).toBe(hitWorld.player.maxHp - tuning.hopzap.HOP_DMG);
+    expect(hitWorld.player.hp).toBe(hitWorld.player.maxHp - tuning.hopzap.DMG);
     expect(hitWorld.player.paralyzeTicks).toBeGreaterThan(0);
 
     const cycleWorld = world(47, 1, 1);

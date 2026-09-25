@@ -28,11 +28,11 @@ function useAtImpact(w: World, id: ChipId, commands: Command[] = []): void {
   for (let i = 0; i < chipTiming(CHIPS[id]).startupTicks; i++) w.step(DT);
 }
 
-const mineRow = () => tuning.player.PLAYER_START_Y - tuning.chips.MINE_TARGET_DISTANCE;
-const breakRow = () => tuning.player.PLAYER_START_Y - tuning.chips.BREAK_TARGET_DISTANCE;
+const mineRow = () => tuning.player.PLAYER_START_Y - tuning.mine.TARGET_DISTANCE;
+const breakRow = () => tuning.player.PLAYER_START_Y - tuning.break.TARGET_DISTANCE;
 
 describe('fixed-distance field chips', () => {
-  it('places Mine exactly MINE_TARGET_DISTANCE cells ahead of the activation cell', () => {
+  it('places Mine exactly mine.TARGET_DISTANCE cells ahead of the activation cell', () => {
     const w = world();
     const y = mineRow();
 
@@ -44,8 +44,8 @@ describe('fixed-distance field chips', () => {
   });
 
   it('reads the Mine and Break distances separately', () => {
-    tuning.chips.MINE_TARGET_DISTANCE = 2;
-    tuning.chips.BREAK_TARGET_DISTANCE = 3;
+    tuning.mine.TARGET_DISTANCE = 2;
+    tuning.break.TARGET_DISTANCE = 3;
     const mined = world();
     const broken = world();
     const py = mined.player.y;
@@ -68,7 +68,7 @@ describe('fixed-distance field chips', () => {
     expect(w.field.hazard(0, mineRow())).toBeNull();
   });
 
-  it('applies Break exactly BREAK_TARGET_DISTANCE cells ahead and destroys OCCUPY there first', () => {
+  it('applies Break exactly break.TARGET_DISTANCE cells ahead and destroys OCCUPY there first', () => {
     const w = world();
     const y = breakRow();
     w.placeBlock(1, y);

@@ -40,9 +40,9 @@ function placePlayerLane(w: World, x: number): void {
 }
 
 describe('Mettik decisions', () => {
-  const D = () => T(tuning.mettik.MET_ACTION_DELAY);
+  const D = () => T(tuning.mettik.ACTION_DELAY);
 
-  it('waits MET_ACTION_DELAY before every step and observes the player again after it', () => {
+  it('waits ACTION_DELAY before every step and observes the player again after it', () => {
     const w = world();
     const m = w.enemies[0] as Mettik;
     placePlayerLane(w, 2);
@@ -74,7 +74,7 @@ describe('Mettik decisions', () => {
 
     const wave = w.attacks.find((attack): attack is Shockwave => attack instanceof Shockwave);
     expect(wave?.x).toBe(1);
-    for (let i = 0; wave && !wave.done && i < 5 * T(tuning.mettik.MET_WAVE_CELL_TIME); i++) step(w);
+    for (let i = 0; wave && !wave.done && i < 5 * T(tuning.mettik.WAVE_CELL_TIME); i++) step(w);
     expect(wave?.done).toBe(true);
     expect(w.player.hp).toBe(w.player.maxHp);
   });
@@ -109,14 +109,14 @@ describe('Mettik decisions', () => {
     expect(back!.x).toBe(0);
   });
 
-  it('hands the turn on after MET_CHASE_STEPS steps without a strike', () => {
+  it('hands the turn on after CHASE_STEPS steps without a strike', () => {
     const w = world([{ x: 0, y: 1 }, { x: 1, y: 0 }]);
     const [chaser, other] = w.enemies as Mettik[];
     // The player keeps leaving the chaser's next lane.
     placePlayerLane(w, 2);
     let steps = 0;
     let last = chaser!.lastMoveTick;
-    for (let i = 0; i < T(10) && steps < tuning.mettik.MET_CHASE_STEPS; i++) {
+    for (let i = 0; i < T(10) && steps < tuning.mettik.CHASE_STEPS; i++) {
       step(w);
       if (chaser!.lastMoveTick !== last) {
         last = chaser!.lastMoveTick;
@@ -124,13 +124,13 @@ describe('Mettik decisions', () => {
         placePlayerLane(w, chaser!.x === 1 ? (w.player.x === 2 ? 0 : 2) : 1);
       }
     }
-    expect(steps).toBe(tuning.mettik.MET_CHASE_STEPS);
+    expect(steps).toBe(tuning.mettik.CHASE_STEPS);
     expect(w.hasTurn(other!)).toBe(false);
     run(w, T(tuning.mettik.MOVE_TIME) + D() + 1);
     expect(w.hasTurn(other!)).toBe(true);
   });
 
-  it('hands the turn on as its wave leaves; the next one strikes MET_ACTION_DELAY later', () => {
+  it('hands the turn on as its wave leaves; the next one strikes ACTION_DELAY later', () => {
     const w = world([{ x: 1, y: 1 }, { x: 1, y: 0 }]);
     const [first, second] = w.enemies as Mettik[];
     run(w, D() + T(tuning.mettik.INTENTION_TIME + tuning.mettik.LOCK_TIME + tuning.mettik.COUNTER_TIME));
@@ -147,7 +147,7 @@ describe('Mettik Shockwave travels on the ground', () => {
     const m = w.enemies[0] as Mettik;
     if (w.player.x !== 1) placePlayerLane(w, 1);
     w.field.breakPanel(1, holeY, w.tick, T(30));
-    run(w, T(tuning.mettik.MET_ACTION_DELAY) + T(tuning.mettik.INTENTION_TIME + tuning.mettik.LOCK_TIME));
+    run(w, T(tuning.mettik.ACTION_DELAY) + T(tuning.mettik.INTENTION_TIME + tuning.mettik.LOCK_TIME));
     expect(m.state).toBe('COUNTER');
     return { w, m };
   }
@@ -158,7 +158,7 @@ describe('Mettik Shockwave travels on the ground', () => {
     run(w, T(tuning.mettik.COUNTER_TIME));
     expect(m.state).toBe('STRIKE');
     expect(w.attacks.filter((a) => a.kind === 'shockwave')).toHaveLength(0);
-    run(w, 5 * T(tuning.mettik.MET_WAVE_CELL_TIME));
+    run(w, 5 * T(tuning.mettik.WAVE_CELL_TIME));
     expect(w.player.hp).toBe(w.player.maxHp);
   });
 
@@ -168,7 +168,7 @@ describe('Mettik Shockwave travels on the ground', () => {
       Array.from({ length: tuning.player.PLAYER_START_Y - 3 }, (_, i) => ({ x: 1, y: 2 + i })),
     );
     // Long enough to reach the hole, short of the next strike.
-    run(w, T(tuning.mettik.COUNTER_TIME) + 3 * T(tuning.mettik.MET_WAVE_CELL_TIME));
+    run(w, T(tuning.mettik.COUNTER_TIME) + 3 * T(tuning.mettik.WAVE_CELL_TIME));
     expect(w.attacks.filter((a) => a.kind === 'shockwave')).toHaveLength(0);
     expect(w.player.hp).toBe(w.player.maxHp);
   });
@@ -181,7 +181,7 @@ describe('enemies treat player mines as walls', () => {
     placePlayerLane(w, 2);
     w.field.arm(1, 1, { kind: 'mine', side: 'player', damage: 6 });
 
-    run(w, 4 * T(tuning.mettik.MET_ACTION_DELAY));
+    run(w, 4 * T(tuning.mettik.ACTION_DELAY));
     expect([m.x, m.y, m.hp]).toEqual([0, 1, m.maxHp]);
     expect(w.field.hazard(1, 1)).not.toBeNull();
   });

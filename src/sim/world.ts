@@ -301,7 +301,7 @@ export class World implements EnemyContext, AttackContext {
 
   /** WAVE_INTRO: flight, field swap halfway, then the spawn (GDD §10.4). */
   private updateWaveIntro(): void {
-    const flight = secondsToTicks(tuning.wave.FLIGHT_TIME);
+    const flight = secondsToTicks(tuning.flow.WAVE_FLIGHT_TIME);
     const elapsed = this.stateElapsed;
     if (this.wavePhase === 'flight' && elapsed >= Math.floor(flight / 2)) {
       this.resetFieldForWave();
@@ -312,7 +312,7 @@ export class World implements EnemyContext, AttackContext {
       this.wavePhase = 'spawned';
       this.events.push({ type: 'waveSpawned', wave: this.waveIndex + 1, count: this.enemies.length });
     }
-    if (this.wavePhase === 'spawned' && elapsed >= flight + secondsToTicks(tuning.wave.SPAWN_TIME)) {
+    if (this.wavePhase === 'spawned' && elapsed >= flight + secondsToTicks(tuning.flow.WAVE_SPAWN_TIME)) {
       this.setState('ACTION');
     }
   }
@@ -575,8 +575,8 @@ export class World implements EnemyContext, AttackContext {
     if (!this.occupancy.isFree(x, y) || this.field.panel(x, y) === 'BROKEN') return null;
     this.field.takeHazard(x, y);
     const block = new FieldObject(
-      this.nextEnemyId++, 'block', x, y, 'player', tuning.field.BLOCK_HP,
-      this.playerTick + secondsToTicks(tuning.field.BLOCK_DURATION), 'player',
+      this.nextEnemyId++, 'block', x, y, 'player', tuning.block.HP,
+      this.playerTick + secondsToTicks(tuning.block.DURATION), 'player',
     );
     this.occupancy.place(block.id, x, y);
     this.objects.push(block);
@@ -914,11 +914,11 @@ export class World implements EnemyContext, AttackContext {
     switch (action) {
       case 'claim': {
         const free = (x: number, y: number) => this.occupancy.isFree(x, y);
-        const claim = f.claimNextRow(this.playerTick, secondsToTicks(tuning.chips.AREA_GRAB_DURATION), 'player', free);
+        const claim = f.claimNextRow(this.playerTick, secondsToTicks(tuning.areagrab.DURATION), 'player', free);
         // Enemies keep the panel they stand on and take a small hit (GDD §6).
         for (const c of claim?.held ?? []) {
           const enemy = this.enemyAt(c.x, c.y);
-          if (enemy?.alive) this.resolveHit({ target: enemy, damage: tuning.chips.AREA_GRAB_OCCUPANT_DMG });
+          if (enemy?.alive) this.resolveHit({ target: enemy, damage: tuning.areagrab.OCCUPANT_DMG });
         }
         return;
       }
@@ -933,7 +933,7 @@ export class World implements EnemyContext, AttackContext {
         }
         return;
       case 'break':
-        this.breakCell(px, py - fieldTargetDistance('break'), secondsToTicks(tuning.chips.BREAK_DURATION));
+        this.breakCell(px, py - fieldTargetDistance('break'), secondsToTicks(tuning.break.DURATION));
         return;
     }
   }
@@ -1000,7 +1000,7 @@ export class World implements EnemyContext, AttackContext {
 
     switch (this.state) {
       case 'BATTLE_INTRO':
-        if (this.stateElapsed >= secondsToTicks(tuning.fx.INTRO_TIME)) {
+        if (this.stateElapsed >= secondsToTicks(tuning.flow.INTRO_TIME)) {
           // The hand is dealt into the rail and the battle starts; there is no
           // Custom Screen to stop for (GDD §7.6).
           this.dealStartingHand();
@@ -1012,7 +1012,7 @@ export class World implements EnemyContext, AttackContext {
         this.tick++;
         this.time += dt;
         this.removeDeletedEnemies();
-        if (this.stateElapsed >= secondsToTicks(tuning.wave.CLEAR_TIME)) {
+        if (this.stateElapsed >= secondsToTicks(tuning.flow.WAVE_CLEAR_TIME)) {
           this.waveIndex++;
           this.wavePhase = 'flight';
           this.setState('WAVE_INTRO');

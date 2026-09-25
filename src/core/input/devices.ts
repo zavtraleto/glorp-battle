@@ -85,7 +85,7 @@ export function attachKeyboard(input: InputState, target: Window = window): () =
  * browsers). Touch moves are cancelled everywhere except inside scrollable UI.
  */
 export function blockBrowserGestures(doc: Document = document): void {
-  const allowScroll = (t: EventTarget | null) => t instanceof Element && t.closest('.lil-gui') !== null;
+  const allowScroll = (t: EventTarget | null) => t instanceof Element && t.closest('.debug-panel') !== null;
   doc.addEventListener(
     'touchmove',
     (e) => {

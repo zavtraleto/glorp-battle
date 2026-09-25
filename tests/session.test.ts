@@ -28,7 +28,7 @@ const run = (s: Session, n: number) => {
 
 /** Intro → action; the hand is dealt on the way (GDD §7.6). */
 function enterAction(s: Session): void {
-  run(s, T(tuning.fx.INTRO_TIME) + 1);
+  run(s, T(tuning.flow.INTRO_TIME) + 1);
   expect(s.world.state).toBe('ACTION');
 }
 
@@ -41,7 +41,7 @@ function win(s: Session): void {
     expect(s.world.state).toBe('WAVE_CLEAR');
     while (s.world.state !== 'ACTION') tick(s);
   }
-  run(s, T(tuning.fx.RESULT_DELAY_WIN));
+  run(s, T(tuning.flow.RESULT_DELAY_WIN));
 }
 
 function die(s: Session): void {
@@ -51,7 +51,7 @@ function die(s: Session): void {
   s.world.spawnAttack(new Shockwave(1, p.x, p.y, s.world.tick));
   tick(s);
   expect(s.world.state).toBe('PLAYER_DEAD');
-  run(s, T(tuning.fx.RESULT_DELAY_LOSE));
+  run(s, T(tuning.flow.RESULT_DELAY_LOSE));
 }
 
 describe('Session', () => {
@@ -187,7 +187,7 @@ describe('pause', () => {
     expect(s.screen).toBe('TITLE');
     s.start();
     s.fight();
-    run(s, T(tuning.fx.INTRO_TIME) - 1);
+    run(s, T(tuning.flow.INTRO_TIME) - 1);
     expect(s.world.state).toBe('BATTLE_INTRO');
     s.pause();
     expect(s.screen).toBe('BATTLE');

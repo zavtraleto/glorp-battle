@@ -95,15 +95,15 @@ export class SceneRenderer {
   /** 0..1 through the wave flight, or -1 outside it. */
   private flightProgress(world: World): number {
     if (world.state !== 'WAVE_INTRO') return -1;
-    const t = world.stateElapsed / Math.max(1, secondsToTicks(tuning.wave.FLIGHT_TIME));
+    const t = world.stateElapsed / Math.max(1, secondsToTicks(tuning.flow.WAVE_FLIGHT_TIME));
     return t < 1 ? t : -1;
   }
 
   /** 0 → 1 while the new wave materializes (GDD §10.4); 1 otherwise. */
   private spawnProgress(world: World): number {
     if (world.state !== 'WAVE_INTRO') return 1;
-    const since = world.stateElapsed - secondsToTicks(tuning.wave.FLIGHT_TIME);
-    return Math.max(0, Math.min(1, since / Math.max(1, secondsToTicks(tuning.wave.SPAWN_TIME))));
+    const since = world.stateElapsed - secondsToTicks(tuning.flow.WAVE_FLIGHT_TIME);
+    return Math.max(0, Math.min(1, since / Math.max(1, secondsToTicks(tuning.flow.WAVE_SPAWN_TIME))));
   }
 
   /**
@@ -229,18 +229,17 @@ export class SceneRenderer {
     if (world.state === 'BATTLE_INTRO') {
       for (const e of world.enemies) this.spawns.set(cellKey(e.x, e.y, COLS), world.stateElapsed);
     } else if (world.state === 'WAVE_INTRO') {
-      const since = world.stateElapsed - secondsToTicks(tuning.wave.FLIGHT_TIME);
+      const since = world.stateElapsed - secondsToTicks(tuning.flow.WAVE_FLIGHT_TIME);
       if (since >= 0) for (const e of world.enemies) this.spawns.set(cellKey(e.x, e.y, COLS), since);
     }
-    const fx = tuning.fx;
     const signal = battleSignal({
       state: world.state,
       elapsed: world.stateElapsed,
       player: { x: world.player.x, y: world.player.y },
-      introTicks: secondsToTicks(fx.INTRO_TIME),
-      wonTicks: secondsToTicks(fx.RESULT_DELAY_WIN),
-      deadTicks: secondsToTicks(fx.RESULT_DELAY_LOSE),
-      flightTicks: secondsToTicks(tuning.wave.FLIGHT_TIME),
+      introTicks: secondsToTicks(tuning.flow.INTRO_TIME),
+      wonTicks: secondsToTicks(tuning.flow.RESULT_DELAY_WIN),
+      deadTicks: secondsToTicks(tuning.flow.RESULT_DELAY_LOSE),
+      flightTicks: secondsToTicks(tuning.flow.WAVE_FLIGHT_TIME),
     });
     this.field.update(world, worldAlpha, this.spawns, signal, world.aimPreview());
   }

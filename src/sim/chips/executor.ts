@@ -28,9 +28,9 @@ export interface ActiveChip {
 }
 
 export function chipTiming(def: ChipDef): ChipTiming {
-  const values = tuning.chips as unknown as Record<string, number>;
-  const startupTicks = Math.max(0, secondsToTicks(values[`CHIP_STARTUP_${def.useTime}`] ?? 0));
-  const recoveryTicks = Math.max(0, secondsToTicks(values[`CHIP_RECOVERY_${def.useTime}`] ?? 0));
+  const t = tuning[def.id];
+  const startupTicks = secondsToTicks(t.STARTUP);
+  const recoveryTicks = secondsToTicks(t.RECOVERY);
   return {
     startupTicks,
     recoveryTicks,

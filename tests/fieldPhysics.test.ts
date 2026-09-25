@@ -96,7 +96,7 @@ describe('OCCUPY physics', () => {
     w.setWorldTimeScale(0.5, 0);
     expect(w.placeBlock(0, 1)).not.toBeNull();
 
-    run(w, T(tuning.field.BLOCK_DURATION));
+    run(w, T(tuning.block.DURATION));
 
     expect(w.objectAt(0, 1)).toBeNull();
   });
@@ -105,10 +105,10 @@ describe('OCCUPY physics', () => {
     const w = world();
     const block = w.placeBlock(0, 1);
     expect(block).not.toBeNull();
-    expect(block?.hp).toBe(tuning.field.BLOCK_HP);
+    expect(block?.hp).toBe(tuning.block.HP);
     expect(w.occupancy.isFree(0, 1)).toBe(false);
 
-    run(w, T(tuning.field.BLOCK_DURATION));
+    run(w, T(tuning.block.DURATION));
 
     expect(w.objectAt(0, 1)).toBeNull();
     expect(w.occupancy.isFree(0, 1)).toBe(true);

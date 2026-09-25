@@ -42,7 +42,7 @@ describe('tutorial script', () => {
         expect(at).toBeGreaterThanOrEqual(0);
         pool.splice(at, 1);
       }
-      expect(s.hand.length).toBeLessThanOrEqual(tuning.chips.HAND_SIZE);
+      expect(s.hand.length).toBeLessThanOrEqual(tuning.hand.SIZE);
     }
   });
 
@@ -76,7 +76,7 @@ describe('tutorial script', () => {
       const step1 = TUTORIAL[0]!;
       const mettik = TUTORIAL_ENCOUNTER.waves[0]!.enemies[0];
       expect(mettik).toBeDefined();
-      const mettikHp = Math.round(tuning.mettik.MET_HP * ENEMY_LEVELS[mettik!.level ?? 1].hp);
+      const mettikHp = Math.round(tuning.mettik.HP * ENEMY_LEVELS[mettik!.level ?? 1].hp);
       const cannon = step1.folder[0];
       expect(cannon).toBeDefined();
       expect(CHIPS[cannon!.defId].power).toBe(mettikHp);
@@ -86,7 +86,7 @@ describe('tutorial script', () => {
       const step3 = TUTORIAL[2]!;
       const enemy = TUTORIAL_ENCOUNTER.waves[2]!.enemies[0];
       expect(enemy).toBeDefined();
-      const swordDefId = step3.folder.find((c) => CHIPS[c.defId].kind === 'attack' && CHIPS[c.defId].useTime === 'SWORD')?.defId;
+      const swordDefId = step3.folder.find((c) => CHIPS[c.defId].kind === 'attack' && CHIPS[c.defId].shape.t === 'near')?.defId;
       expect(swordDefId).toBeDefined();
       const sword = CHIPS[swordDefId!];
       const noTarget: TargetRow = () => -1;
@@ -106,7 +106,7 @@ describe('tutorial script', () => {
     it('lesson 2 holds exactly two Cannons for the queue lesson', () => {
       const [first, second, third] = TUTORIAL[1]!.hand;
       expect([first?.defId, second?.defId, third]).toEqual(['cannon', 'cannon', null]);
-      expect(canAddToSelection([first!], second!, tuning.chips.HAND_SIZE)).toBe(true);
+      expect(canAddToSelection([first!], second!, tuning.hand.SIZE)).toBe(true);
     });
   });
 });

@@ -154,7 +154,7 @@ describe('Combo State manual execution', () => {
   });
 
   it('does not create Combo State for a debug chain longer than five', () => {
-    tuning.chips.HAND_SIZE = 6;
+    tuning.hand.SIZE = 6;
     const w = world();
     give(w, 'cannon', 'sword', 'mine', 'block', 'break', 'guard');
 
@@ -343,7 +343,7 @@ describe('Selection slow-mo (GDD §6.7)', () => {
     run(w, T(tuning.combo.SELECT_SLOW_MO_TIME) / 2);
     step(w, true);
     expect(w.selectTimeLeft).toBeNull();
-    run(w, T(tuning.chips.HAND_REFILL_COOLDOWN) + T(1));
+    run(w, T(tuning.hand.REFILL_COOLDOWN) + T(1));
     expect(w.chips.phase).toBe('selecting');
     expect(w.selectBudget).toBe(T(tuning.combo.SELECT_SLOW_MO_TIME));
     expect(w.selectTimeLeft).toBeNull();

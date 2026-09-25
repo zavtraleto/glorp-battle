@@ -104,17 +104,17 @@ describe('EventBus', () => {
 describe('tuning', () => {
   it('merges only known keys with matching types', () => {
     const dst = JSON.parse(JSON.stringify(DEFAULT_TUNING)) as Tuning;
-    mergeTuning(dst, { player: { CELL_MOVE_TIME: 0.5, UNKNOWN: 1 }, chips: { HAND_SIZE: 'five' }, nope: { A: 1 } });
+    mergeTuning(dst, { player: { CELL_MOVE_TIME: 0.5, UNKNOWN: 1 }, hand: { SIZE: 'five' }, nope: { A: 1 } });
     expect(dst.player.CELL_MOVE_TIME).toBe(0.5);
-    expect(dst.chips.HAND_SIZE).toBe(5);
+    expect(dst.hand.SIZE).toBe(5);
     expect('UNKNOWN' in dst.player).toBe(false);
   });
 
   it('uses the compact combat-point scale from the GDD', () => {
     expect(DEFAULT_TUNING.player.PLAYER_MAX_HP).toBe(10);
-    expect(DEFAULT_TUNING.chips.HAND_SIZE).toBe(5);
-    expect(DEFAULT_TUNING.mettik.MET_HP).toBe(4);
-    expect(DEFAULT_TUNING.hopzap.HOP_DMG).toBe(1);
+    expect(DEFAULT_TUNING.hand.SIZE).toBe(5);
+    expect(DEFAULT_TUNING.mettik.HP).toBe(4);
+    expect(DEFAULT_TUNING.hopzap.DMG).toBe(1);
   });
 });
 

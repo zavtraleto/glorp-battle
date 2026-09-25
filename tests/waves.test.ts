@@ -38,7 +38,7 @@ function clearWave(w: World, log: SimEvent[] = []): SimEvent[] {
   w.killAllEnemies();
   run(w, 1, log);
   expect(w.state).toBe('WAVE_CLEAR');
-  run(w, T(tuning.wave.CLEAR_TIME) + T(tuning.wave.FLIGHT_TIME) + T(tuning.wave.SPAWN_TIME) + 1, log);
+  run(w, T(tuning.flow.WAVE_CLEAR_TIME) + T(tuning.flow.WAVE_FLIGHT_TIME) + T(tuning.flow.WAVE_SPAWN_TIME) + 1, log);
   expect(w.state).toBe('ACTION');
   return log;
 }
@@ -99,11 +99,11 @@ describe('waves (GDD §10.4)', () => {
 
     w.killAllEnemies();
     run(w, 1);
-    run(w, T(tuning.wave.CLEAR_TIME) + 1);
+    run(w, T(tuning.flow.WAVE_CLEAR_TIME) + 1);
     expect(w.state).toBe('WAVE_INTRO');
     // The old field is still there while the player flies off it.
     expect(w.field.panel(1, 3)).toBe('BROKEN');
-    run(w, Math.floor(T(tuning.wave.FLIGHT_TIME) / 2));
+    run(w, Math.floor(T(tuning.flow.WAVE_FLIGHT_TIME) / 2));
     expect(w.field.panel(1, 3)).toBe('NORMAL');
     expect(w.field.owner(0, 2)).toBe('enemy');
     expect(w.field.hazard(2, 1)).toBeNull();
@@ -118,7 +118,7 @@ describe('waves (GDD §10.4)', () => {
   it('the new wave is frozen through the flight and the spawn', () => {
     const w = make();
     w.killAllEnemies();
-    run(w, 1 + T(tuning.wave.CLEAR_TIME) + T(tuning.wave.FLIGHT_TIME) + 1);
+    run(w, 1 + T(tuning.flow.WAVE_CLEAR_TIME) + T(tuning.flow.WAVE_FLIGHT_TIME) + 1);
     expect(w.state).toBe('WAVE_INTRO');
     expect(w.simFrozen).toBe(true);
     expect(w.enemies).toHaveLength(2);
@@ -126,7 +126,7 @@ describe('waves (GDD §10.4)', () => {
     w.step(DT, { commands: [{ type: 'move', dir: 'left' }], held: null });
     expect(w.tick).toBe(tick);
     expect(w.player.x).toBe(tuning.player.PLAYER_START_X);
-    run(w, T(tuning.wave.SPAWN_TIME));
+    run(w, T(tuning.flow.WAVE_SPAWN_TIME));
     expect(w.state).toBe('ACTION');
   });
 
@@ -141,7 +141,7 @@ describe('waves (GDD §10.4)', () => {
     expect(w.combo).not.toBeNull();
     clearWave(w);
     expect(w.combo).toBeNull();
-    run(w, T(tuning.chips.HAND_REFILL_COOLDOWN) + 1);
+    run(w, T(tuning.hand.REFILL_COOLDOWN) + 1);
     expect(w.chips.phase).toBe('selecting');
     expect(w.chips.hand.some((chip, slot) => chip && w.chips.canSelect(slot))).toBe(true);
   });

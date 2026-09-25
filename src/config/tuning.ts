@@ -12,7 +12,7 @@ export const DEFAULT_TUNING = {
     TIME_SCALE: 1,
   },
   combo: {
-    WORLD_TIME_SCALE: 0.7,
+    WORLD_TIME_SCALE: 0.85,
     SLOW_MO_ENTER: 0.1,
     SLOW_MO_EXIT: 0.15,
     COMBO_BREAK_EXIT: 0.08,
@@ -24,6 +24,21 @@ export const DEFAULT_TUNING = {
     SELECT_SLOW_MO_TIME: 3,
     /** Unscaled seconds for an empty budget to refill while the queue is empty. */
     SELECT_SLOW_MO_RECHARGE: 6,
+  },
+  /** Battle flow around the fight: intro, waves (GDD §10.4), result delays. */
+  flow: {
+    /** Enemies appear and the hand rides into the rail before the battle runs. */
+    INTRO_TIME: 0.6,
+    /** Last enemy of a wave deleted → flight starts; covers the deletion animation. */
+    WAVE_CLEAR_TIME: 0.4,
+    /** The player flies to the next field; the field is swapped halfway. */
+    WAVE_FLIGHT_TIME: 0.7,
+    /** New enemies materialize; nothing acts yet. */
+    WAVE_SPAWN_TIME: 0.3,
+    /** "ENEMY DELETED!" banner before the result screen. */
+    RESULT_DELAY_WIN: 0.9,
+    /** Player deletion before the GAME OVER screen. */
+    RESULT_DELAY_LOSE: 1.0,
   },
   player: {
     PLAYER_MAX_HP: 10,
@@ -39,42 +54,71 @@ export const DEFAULT_TUNING = {
     STEAL_RESTORE_TIME: 15,
     ROCK_HP: 10,
     STAGGER_TIME: 0.25,
-    BLOCK_HP: 2,
-    BLOCK_DURATION: 6,
   },
-  chips: {
+  hand: {
     /** Hand slots visible in the rail for the whole battle (GDD §5). */
-    HAND_SIZE: 5,
-    CHIP_STARTUP_CANNON: 0.1,
-    CHIP_RECOVERY_CANNON: 0.15,
-    CHIP_STARTUP_SWORD: 0.15,
-    CHIP_RECOVERY_SWORD: 0.2,
-    CHIP_STARTUP_FIELD: 0.15,
-    CHIP_RECOVERY_FIELD: 0.15,
+    SIZE: 5,
     /** Shared delay from the first charged shot until the next hand may activate. */
-    HAND_REFILL_COOLDOWN: 4.0,
-    CHIP_DAMAGE_CANNON: 4,
-    CHIP_DAMAGE_SWORD: 6,
-    CHIP_DAMAGE_MINE: 6,
-    CHIP_DAMAGE_AIRSHOT: 2,
-    CHIP_DAMAGE_SPREADER_MAIN: 3,
-    CHIP_DAMAGE_SPREADER_SPLASH: 1,
-    CHIP_DAMAGE_WIDESWORD: 4,
-    /** Rows ahead of the player that Mine arms and Break breaks. */
-    MINE_TARGET_DISTANCE: 3,
-    BREAK_TARGET_DISTANCE: 3,
-    BREAK_DURATION: 5,
-    AREA_GRAB_DURATION: 8,
+    REFILL_COOLDOWN: 4.0,
+  },
+  // Chips (GDD §6): one group per chip id; STARTUP → impact → RECOVERY (GDD §6.5).
+  cannon: {
+    DAMAGE: 4,
+    STARTUP: 0.1,
+    RECOVERY: 0.15,
+  },
+  airshot: {
+    DAMAGE: 2,
+    STARTUP: 0.1,
+    RECOVERY: 0.15,
+  },
+  spreader: {
+    DAMAGE: 3,
+    /** Damage to the cells beside the hit. */
+    SPLASH_DAMAGE: 1,
+    STARTUP: 0.1,
+    RECOVERY: 0.15,
+  },
+  sword: {
+    DAMAGE: 6,
+    STARTUP: 0.15,
+    RECOVERY: 0.2,
+  },
+  widesword: {
+    DAMAGE: 4,
+    STARTUP: 0.15,
+    RECOVERY: 0.2,
+  },
+  areagrab: {
+    STARTUP: 0.15,
+    RECOVERY: 0.15,
+    DURATION: 8,
     /** AreaGrab skips occupied cells and deals this to whoever stands there. */
-    AREA_GRAB_OCCUPANT_DMG: 1,
+    OCCUPANT_DMG: 1,
   },
-  /** Projectile speed in designer-facing seconds per cell. */
-  projectile: {
-    CELL_TRAVEL_TIME: 0.2,
-    FAST_CELL_TRAVEL_TIME: 0.15,
+  mine: {
+    DAMAGE: 6,
+    STARTUP: 0.15,
+    RECOVERY: 0.15,
+    /** Rows ahead of the player that Mine arms. */
+    TARGET_DISTANCE: 3,
   },
-  counter: {
-    COUNTER_STAGGER_TIME: 0.5,
+  block: {
+    STARTUP: 0.15,
+    RECOVERY: 0.15,
+    HP: 2,
+    DURATION: 6,
+  },
+  break: {
+    STARTUP: 0.15,
+    RECOVERY: 0.15,
+    /** Rows ahead of the player that Break breaks. */
+    TARGET_DISTANCE: 3,
+    DURATION: 5,
+  },
+  guard: {
+    STARTUP: 0.15,
+    RECOVERY: 0.15,
   },
   /** Tutorial (GDD §10.5). */
   tutorial: {
@@ -83,8 +127,13 @@ export const DEFAULT_TUNING = {
     /** Least time between one callout closing and the next opening. */
     TUT_CALLOUT_GAP: 1,
   },
+  /** Shared by every enemy (GDD §8.1). */
+  enemy: {
+    COUNTER_STAGGER_TIME: 0.5,
+  },
   // Enemy timings follow MMBN6 as the Hub-OS mods recreate it (GDD §8.2–8.4):
-  // frame counts / 60, rounded. Bunny has no frame data: Hopzap is [оценка].
+  // frame counts / 60, rounded, then shortened for tempo (2026-09-25). Bunny has
+  // no frame data: Hopzap is [оценка].
   mettik: {
     /** Pickaxe raised (0.34 s in BN6), then the counter window up to the wave (0.72 s). */
     INTENTION_TIME: 0.2,
@@ -94,16 +143,16 @@ export const DEFAULT_TUNING = {
     RECOVERY_TIME: 0.32,
     /** Slide between cells on screen. */
     MOVE_TIME: 0.2,
-    /** Wait before every action: each step, each strike, and on getting the turn (38 frames). */
-    MET_ACTION_DELAY: 0.63,
+    /** Wait before every action: each step, each strike, and on getting the turn (38 frames in BN6). */
+    ACTION_DELAY: 0.4,
     /** Shockwave speed: 21 frames per cell. */
-    MET_WAVE_CELL_TIME: 0.35,
+    WAVE_CELL_TIME: 0.35,
     /** Steps the turn holder may chase the player's lane before handing the turn on. */
-    MET_CHASE_STEPS: 3,
+    CHASE_STEPS: 3,
     /** true: the turn goes on as the wave leaves; false: after recovery (BN6). */
-    MET_HANDOFF_ON_WAVE: true,
-    MET_HP: 4,
-    MET_DMG: 1,
+    HANDOFF_ON_WAVE: true,
+    HP: 4,
+    DMG: 1,
   },
   canodron: {
     /** Least time the cursor is on screen before it can lock. */
@@ -112,29 +161,29 @@ export const DEFAULT_TUNING = {
     LOCK_TIME: 0.2,
     COUNTER_TIME: 0.17,
     STRIKE_TIME: 0.1,
-    /** The cursor smoke clears ~2 s after a shot before it aims again. */
-    RECOVERY_TIME: 1.9,
+    /** Cursor smoke before it aims again (~2 s in BN3). */
+    RECOVERY_TIME: 1.0,
     MOVE_TIME: 0.2,
-    CANO_HP: 6,
-    CANO_DMG: 1,
+    HP: 6,
+    DMG: 1,
     /** Cursor speed: 15 frames per cell. */
-    CANO_CURSOR_STEP: 0.25,
+    CURSOR_STEP: 0.25,
   },
   hopzap: {
     INTENTION_TIME: 0.3,
     LOCK_TIME: 0.2,
     COUNTER_TIME: 0.2,
     STRIKE_TIME: 0.1,
-    RECOVERY_TIME: 0.4,
+    RECOVERY_TIME: 0.3,
     MOVE_TIME: 0.15,
-    HOP_HP: 4,
-    HOP_DMG: 1,
-    HOP_PARALYZE: 1.0,
+    HP: 4,
+    DMG: 1,
+    PARALYZE: 1.0,
     /** Stop between hops. */
-    HOP_SETTLE_TIME: 0.5,
-    HOP_ALIGN_CHANCE: 0.6,
+    SETTLE_TIME: 0.3,
+    ALIGN_CHANCE: 0.6,
     /** ZapRing speed. */
-    HOP_RING_CELL_TIME: 0.2,
+    RING_CELL_TIME: 0.2,
   },
   bladdy: {
     /** Warned cells flash 64 frames before the swing. */
@@ -142,18 +191,18 @@ export const DEFAULT_TUNING = {
     LOCK_TIME: 0.3,
     COUNTER_TIME: 0.27,
     STRIKE_TIME: 0.15,
-    /** Holds after the swing (~64–80 frames). */
-    RECOVERY_TIME: 1.1,
+    /** Holds after the swing (~64–80 frames in BN6). */
+    RECOVERY_TIME: 0.7,
     MOVE_TIME: 0.4,
-    BLD_HP: 9,
-    BLD_DMG: 3,
-    /** With MOVE_TIME: one step per ~1.2 s (72 frames). */
-    BLD_SETTLE_TIME: 0.8,
-    BLD_AREA_GRAB_DECISIONS: 3,
+    HP: 9,
+    DMG: 3,
+    /** Stop after each step (0.8 in BN6: one step per ~1.2 s with MOVE_TIME). */
+    SETTLE_TIME: 0.45,
+    AREA_GRAB_DECISIONS: 3,
     /** Damage to the player standing in the row Bladdy's AreaGrab takes. */
-    BLD_AREA_GRAB_DMG: 1,
+    AREA_GRAB_DMG: 1,
     /** AreaGrab never leaves the player fewer rows than this behind the grabbed one. */
-    BLD_MIN_PLAYER_ROWS: 2,
+    MIN_PLAYER_ROWS: 2,
   },
   fx: {
     HIT_FLASH: 0.1,
@@ -163,21 +212,6 @@ export const DEFAULT_TUNING = {
     WARP_FX_TIME: 0.15,
     DAMAGE_NUMBER_TIME: 0.6,
     DELETE_ANIM_TIME: 0.4,
-    /** Enemies appear and the hand rides into the rail before the battle runs. */
-    INTRO_TIME: 0.8,
-    /** "ENEMY DELETED!" banner before the result screen. */
-    RESULT_DELAY_WIN: 1.2,
-    /** Player deletion before the GAME OVER screen. */
-    RESULT_DELAY_LOSE: 1.0,
-  },
-  /** Waves inside an encounter (GDD §10.4). */
-  wave: {
-    /** Last enemy of a wave deleted → flight starts; covers the deletion animation. */
-    CLEAR_TIME: 0.5,
-    /** The player flies to the next field; the field is swapped halfway. */
-    FLIGHT_TIME: 1.0,
-    /** New enemies materialize; nothing acts yet. */
-    SPAWN_TIME: 0.5,
   },
   input: {
     SWIPE_MIN_PX: 24,
@@ -348,7 +382,9 @@ export const DEFAULT_TUNING = {
 
 export type Tuning = typeof DEFAULT_TUNING;
 
-const STORAGE_KEY = "glorp.tuning.v1";
+const STORAGE_KEY = "glorp.tuning.v2";
+/** Overrides saved before the 2026-09-25 regrouping; dropped on load. */
+const LEGACY_STORAGE_KEY = "glorp.tuning.v1";
 
 function clone<T>(v: T): T {
   return JSON.parse(JSON.stringify(v)) as T;
@@ -376,6 +412,7 @@ export function mergeTuning(dst: Tuning, src: unknown): void {
 
 export function loadTuningOverrides(): void {
   try {
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) mergeTuning(tuning, JSON.parse(raw));
   } catch {

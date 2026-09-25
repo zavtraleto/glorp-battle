@@ -37,11 +37,11 @@ const FIVE: FolderChip[] = [
 const TEN: FolderChip[] = [...FIVE, ...FIVE.map((c) => ({ ...c }))];
 
 describe('hand', () => {
-  it('deals exactly HAND_SIZE chips at the start of the battle', () => {
+  it('deals exactly hand.SIZE chips at the start of the battle', () => {
     const s = sys(TEN);
-    expect(s.hand).toHaveLength(tuning.chips.HAND_SIZE);
+    expect(s.hand).toHaveLength(tuning.hand.SIZE);
     expect(s.hand.every((c) => c !== null)).toBe(true);
-    expect(s.drawRemaining).toBe(TEN.length - tuning.chips.HAND_SIZE);
+    expect(s.drawRemaining).toBe(TEN.length - tuning.hand.SIZE);
   });
 
   it('leaves slots empty when the folder runs short', () => {
@@ -89,7 +89,7 @@ describe('attack queue', () => {
   it('can hold the whole hand', () => {
     const s = sys([chip('cannon'), chip('airshot'), chip('spreader'), chip('mine'), chip('guard')]);
     for (let i = 0; i < 5; i++) s.toggleSelect(i);
-    expect(s.attack).toHaveLength(tuning.chips.HAND_SIZE);
+    expect(s.attack).toHaveLength(tuning.hand.SIZE);
     for (let i = 0; i < 5; i++) expect(s.slotState(i)).toBe('queued');
   });
 

@@ -16,7 +16,7 @@ export class Hopzap extends Enemy {
   private intent: HopzapIntent | null = null;
 
   constructor(id: number, x: number, y: number, spawnTick: number, level: EnemyLevel = 1) {
-    super(id, x, y, tuning.hopzap.HOP_HP, spawnTick, level);
+    super(id, x, y, tuning.hopzap.HP, spawnTick, level);
   }
 
   override dangerCells(): Cell[] {
@@ -52,7 +52,7 @@ export class Hopzap extends Enemy {
     if (aligned.length === 0 && other.length === 0) return null;
     if (aligned.length === 0) return ctx.rngAi.pick(other);
     if (other.length === 0) return ctx.rngAi.pick(aligned);
-    return ctx.rngAi.pick(ctx.rngAi.next() < tuning.hopzap.HOP_ALIGN_CHANCE ? aligned : other);
+    return ctx.rngAi.pick(ctx.rngAi.next() < tuning.hopzap.ALIGN_CHANCE ? aligned : other);
   }
 
   private decide(ctx: EnemyContext): void {
@@ -75,7 +75,7 @@ export class Hopzap extends Enemy {
     const t = ctx.tick;
     switch (this.state) {
       case 'IDLE':
-        if (this.elapsed(t) < this.ticks(h.HOP_SETTLE_TIME)) return;
+        if (this.elapsed(t) < this.ticks(h.SETTLE_TIME)) return;
         this.decide(ctx);
         return;
       case 'MOVE': {
@@ -100,9 +100,9 @@ export class Hopzap extends Enemy {
         }
         ctx.spawnAttack(
           new LaneShot(ctx.nextAttackId(), 'zapring', this.intent.origin.x, this.intent.origin.y, t, {
-            damage: this.dmg(h.HOP_DMG),
-            stepTicks: this.ticks(h.HOP_RING_CELL_TIME),
-            paralyze: this.ticks(h.HOP_PARALYZE),
+            damage: this.dmg(h.DMG),
+            stepTicks: this.ticks(h.RING_CELL_TIME),
+            paralyze: this.ticks(h.PARALYZE),
           }),
         );
         this.setTimedState('STRIKE', t, this.ticks(h.STRIKE_TIME));

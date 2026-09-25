@@ -47,11 +47,11 @@ describe('time-based combat timing', () => {
     const shot = new Shockwave(1, 1, 1, 0, {
       dir: 1,
       damage: 10,
-      stepTicks: T(tuning.projectile.CELL_TRAVEL_TIME),
+      stepTicks: T(tuning.mettik.WAVE_CELL_TIME),
     });
     const w = timingWorld();
     w.attacks = [shot];
-    for (let i = 0; i < T(tuning.projectile.CELL_TRAVEL_TIME) - 1; i++) w.step(DT);
+    for (let i = 0; i < T(tuning.mettik.WAVE_CELL_TIME) - 1; i++) w.step(DT);
     expect(shot.y).toBe(1);
     w.step(DT);
     expect(shot.y).toBe(2);

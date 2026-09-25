@@ -71,13 +71,13 @@ describe('Canodron', () => {
     expect(c.state).toBe('INTENTION');
     expect(c.cursorCell()).toEqual({ x: 1, y: 2, locked: false });
     // Cursor needs two steps (2→3→4) to reach the player.
-    run(w, 2 * T(tuning.canodron.CANO_CURSOR_STEP));
+    run(w, 2 * T(tuning.canodron.CURSOR_STEP));
     expect(c.cursorCell()).toEqual({ x: 1, y: 4, locked: true });
     expect(w.dangerCells().length).toBe(4);
     run(w, T(tuning.canodron.LOCK_TIME + tuning.canodron.COUNTER_TIME) - 1);
     expect(w.player.hp).toBe(w.player.maxHp);
     run(w, 1);
-    expect(w.player.hp).toBe(w.player.maxHp - tuning.canodron.CANO_DMG);
+    expect(w.player.hp).toBe(w.player.maxHp - tuning.canodron.DMG);
     expect(events.some((e) => e.type === 'enemyShot' && e.toY === 4)).toBe(true);
     expect(c.state).toBe('STRIKE');
   });
@@ -85,7 +85,7 @@ describe('Canodron', () => {
   it('the locked shot misses if the player dodges during the fire delay', () => {
     const w = world(2);
     step(w);
-    run(w, 2 * T(tuning.canodron.CANO_CURSOR_STEP));
+    run(w, 2 * T(tuning.canodron.CURSOR_STEP));
     expect(cano(w).cursorCell()?.locked).toBe(true);
     move(w, 'left');
     run(w, T(tuning.canodron.LOCK_TIME + tuning.canodron.COUNTER_TIME));
@@ -106,8 +106,8 @@ describe('Canodron', () => {
 
   it('cools down after firing', () => {
     const w = world(2);
-    run(w, 1 + 2 * T(tuning.canodron.CANO_CURSOR_STEP) + T(tuning.canodron.LOCK_TIME + tuning.canodron.COUNTER_TIME));
-    expect(w.player.hp).toBe(w.player.maxHp - tuning.canodron.CANO_DMG);
+    run(w, 1 + 2 * T(tuning.canodron.CURSOR_STEP) + T(tuning.canodron.LOCK_TIME + tuning.canodron.COUNTER_TIME));
+    expect(w.player.hp).toBe(w.player.maxHp - tuning.canodron.DMG);
     run(w, T(tuning.canodron.STRIKE_TIME + tuning.canodron.RECOVERY_TIME) - 2);
     expect(cano(w).state).toBe('RECOVERY');
     run(w, 2);
@@ -117,9 +117,9 @@ describe('Canodron', () => {
   it('holds the cursor on the player row until Intention completes, then locks', () => {
     const w = world(2);
     move(w, 'up'); // (1,3)
-    run(w, T(tuning.canodron.CANO_CURSOR_STEP));
+    run(w, T(tuning.canodron.CURSOR_STEP));
     expect(cano(w).cursorCell()).toEqual({ x: 1, y: 3, locked: false });
-    run(w, T(tuning.canodron.INTENTION_TIME - tuning.canodron.CANO_CURSOR_STEP));
+    run(w, T(tuning.canodron.INTENTION_TIME - tuning.canodron.CURSOR_STEP));
     expect(cano(w).cursorCell()).toEqual({ x: 1, y: 3, locked: true });
   });
 
@@ -133,10 +133,10 @@ describe('Canodron', () => {
     placePlayer(3);
     step(w); // cursor starts at y=2
     placePlayer(5);
-    run(w, 2 * T(tuning.canodron.CANO_CURSOR_STEP)); // cursor passes y=3 and reaches y=4
+    run(w, 2 * T(tuning.canodron.CURSOR_STEP)); // cursor passes y=3 and reaches y=4
     placePlayer(3); // now behind the cursor
     let reset = false;
-    for (let i = 0; i < 3 * T(tuning.canodron.CANO_CURSOR_STEP); i++) {
+    for (let i = 0; i < 3 * T(tuning.canodron.CURSOR_STEP); i++) {
       step(w);
       if (cano(w).state === 'IDLE') reset = true;
     }
@@ -181,7 +181,7 @@ describe('levels and player paralysis', () => {
   it('scales HP, damage and timings by level', () => {
     const one = withMettik(1);
     const two = withMettik(2);
-    expect(two.m.hp).toBe(Math.round(tuning.mettik.MET_HP * ENEMY_LEVELS[2].hp));
+    expect(two.m.hp).toBe(Math.round(tuning.mettik.HP * ENEMY_LEVELS[2].hp));
     const firstWave = (w: World) => {
       for (let i = 0; i < T(5); i++) {
         step(w);
@@ -192,8 +192,8 @@ describe('levels and player paralysis', () => {
     };
     const a = firstWave(one.w);
     const b = firstWave(two.w);
-    expect(b.damage).toBe(Math.round(tuning.mettik.MET_DMG * ENEMY_LEVELS[2].damage));
-    expect(a.damage).toBe(tuning.mettik.MET_DMG);
+    expect(b.damage).toBe(Math.round(tuning.mettik.DMG * ENEMY_LEVELS[2].damage));
+    expect(a.damage).toBe(tuning.mettik.DMG);
     expect(b.at).toBeGreaterThan(0);
     expect(b.at).toBeLessThan(a.at);
   });

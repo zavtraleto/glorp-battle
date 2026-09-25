@@ -46,7 +46,7 @@ function placePlayer(w: World, x: number, y: number): void {
 function lock(w: World): Canodron {
   const canodron = w.enemies[0] as Canodron;
   step(w);
-  run(w, 2 * T(tuning.canodron.CANO_CURSOR_STEP));
+  run(w, 2 * T(tuning.canodron.CURSOR_STEP));
   expect(canodron.state).toBe('LOCK');
   return canodron;
 }
@@ -58,7 +58,7 @@ describe('Canodron sample-and-commit decisions', () => {
     step(w);
     placePlayer(w, 1, 3);
 
-    run(w, T(tuning.canodron.CANO_CURSOR_STEP));
+    run(w, T(tuning.canodron.CURSOR_STEP));
 
     expect(canodron.state).toBe('INTENTION');
     expect(canodron.cursorCell()).toEqual({ x: 1, y: 3, locked: false });
@@ -91,7 +91,7 @@ describe('Canodron sample-and-commit decisions', () => {
     const w = world();
     const canodron = w.enemies[0] as Canodron;
     step(w);
-    run(w, T(tuning.canodron.CANO_CURSOR_STEP) - 2);
+    run(w, T(tuning.canodron.CURSOR_STEP) - 2);
     w.field.breakPanel(1, 0, w.tick, T(2));
 
     expect(w.pushEnemy(canodron, { x: 1, y: 2 })).toBe('blocked');

@@ -22,7 +22,7 @@ export class Bladdy extends Enemy {
   private releasePending = false;
 
   constructor(id: number, x: number, y: number, spawnTick: number, level: EnemyLevel = 1) {
-    super(id, x, y, tuning.bladdy.BLD_HP, spawnTick, level);
+    super(id, x, y, tuning.bladdy.HP, spawnTick, level);
   }
 
   private longSwordCells(): Cell[] {
@@ -71,11 +71,11 @@ export class Bladdy extends Enemy {
 
   /**
    * Player-owned cells of the nearest row with a free one, never closer than
-   * BLD_MIN_PLAYER_ROWS to the back edge. The player's own cell is included:
+   * MIN_PLAYER_ROWS to the back edge. The player's own cell is included:
    * it stays theirs, but the grab hurts them.
    */
   private areaGrabCells(ctx: EnemyContext): Cell[] {
-    const lastRow = ROWS - 1 - tuning.bladdy.BLD_MIN_PLAYER_ROWS;
+    const lastRow = ROWS - 1 - tuning.bladdy.MIN_PLAYER_ROWS;
     for (let y = this.y + 1; y <= lastRow; y++) {
       const cells: Cell[] = [];
       for (let x = 0; x < COLS; x++) if (ctx.field.owner(x, y) === 'player') cells.push({ x, y });
@@ -108,7 +108,7 @@ export class Bladdy extends Enemy {
     }
 
     this.outOfRangeDecisions++;
-    if (this.outOfRangeDecisions >= tuning.bladdy.BLD_AREA_GRAB_DECISIONS) {
+    if (this.outOfRangeDecisions >= tuning.bladdy.AREA_GRAB_DECISIONS) {
       const cells = this.areaGrabCells(ctx);
       if (cells.length > 0 && ctx.claimAttack(this)) {
         this.commitAttack({ kind: 'areaGrab', cells }, ctx.tick);
@@ -127,7 +127,7 @@ export class Bladdy extends Enemy {
     }
     switch (this.state) {
       case 'IDLE':
-        if (this.elapsed(t) < this.ticks(b.BLD_SETTLE_TIME)) return;
+        if (this.elapsed(t) < this.ticks(b.SETTLE_TIME)) return;
         this.decide(ctx);
         return;
       case 'MOVE':
@@ -153,14 +153,14 @@ export class Bladdy extends Enemy {
           for (const cell of this.intent.cells) {
             if (ctx.field.owner(cell.x, cell.y) !== 'player') continue;
             if (ctx.occupancy.isFree(cell.x, cell.y)) ctx.field.setOwner(cell.x, cell.y, 'enemy', t, 'world');
-            else ctx.hitPlayerAt(grab, cell.x, cell.y, this.dmg(b.BLD_AREA_GRAB_DMG));
+            else ctx.hitPlayerAt(grab, cell.x, cell.y, this.dmg(b.AREA_GRAB_DMG));
           }
           this.setTimedState('STRIKE', t, this.ticks(b.STRIKE_TIME));
           return;
         }
         const swing: Attack = { id: ctx.nextAttackId(), kind: 'slash', hitIds: new Set(), done: true, update: () => undefined };
         const cells = this.intent.cells;
-        for (const c of cells) ctx.hitPlayerAt(swing, c.x, c.y, this.dmg(b.BLD_DMG));
+        for (const c of cells) ctx.hitPlayerAt(swing, c.x, c.y, this.dmg(b.DMG));
         ctx.emit({ type: 'enemySlash', cells });
         this.setTimedState('STRIKE', t, this.ticks(b.STRIKE_TIME));
         return;

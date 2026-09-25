@@ -220,7 +220,7 @@ export class Session {
     }
     if (this.screen !== 'BATTLE' || !this.run) return;
     const w = this.world;
-    if (w.state === 'BATTLE_WON' && w.stateElapsed >= secondsToTicks(tuning.fx.RESULT_DELAY_WIN)) {
+    if (w.state === 'BATTLE_WON' && w.stateElapsed >= secondsToTicks(tuning.flow.RESULT_DELAY_WIN)) {
       this.results.push({ battle: this.run.depth, time: w.time, hits: w.player.hitsTaken, hpLeft: w.player.hp });
       this.run.finishBattle(true, w.player.hp);
       if (this.run.complete) {
@@ -228,7 +228,7 @@ export class Session {
         return;
       }
       this.screen = 'PATH';
-    } else if (w.state === 'PLAYER_DEAD' && w.stateElapsed >= secondsToTicks(tuning.fx.RESULT_DELAY_LOSE)) {
+    } else if (w.state === 'PLAYER_DEAD' && w.stateElapsed >= secondsToTicks(tuning.flow.RESULT_DELAY_LOSE)) {
       this.run.finishBattle(false, 0);
       this.screen = 'GAME_OVER';
     }
@@ -240,7 +240,7 @@ export class Session {
     if (!d || this.screen !== 'BATTLE') return;
     const w = this.world;
     d.update(w, events);
-    if (w.state === 'BATTLE_WON' && w.stateElapsed >= secondsToTicks(tuning.fx.RESULT_DELAY_WIN)) this.screen = 'COMPLETE';
+    if (w.state === 'BATTLE_WON' && w.stateElapsed >= secondsToTicks(tuning.flow.RESULT_DELAY_WIN)) this.screen = 'COMPLETE';
   }
 
   /** COMPLETE / GAME_OVER → TITLE. */

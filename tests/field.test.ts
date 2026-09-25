@@ -219,7 +219,7 @@ describe('panels in battle', () => {
     w.field.breakPanel(1, 3, w.tick, false);
     const wave = new Shockwave(w.nextAttackId(), 1, 2, w.tick);
     w.spawnAttack(wave);
-    wait(w, T(tuning.projectile.CELL_TRAVEL_TIME) * 4);
+    wait(w, T(tuning.mettik.WAVE_CELL_TIME) * 4);
     expect(wave.done).toBe(true);
     expect(w.player.hitsTaken).toBe(0);
   });
@@ -242,7 +242,7 @@ describe('field objects', () => {
     const met = w.enemies[0]!; // (1,1), behind the rock in the player's lane
     useNow(w, 'cannon');
     wait(w, chipTiming(CHIPS.cannon).startupTicks + 1);
-    expect(met.hp).toBe(tuning.mettik.MET_HP);
+    expect(met.hp).toBe(tuning.mettik.HP);
     expect(rock.hp).toBe(tuning.field.ROCK_HP - CHIPS.cannon.power!);
     expect(w.shootLane(1, 2, 500)).toBe(3);
     expect(rock.alive).toBe(false);
@@ -256,9 +256,9 @@ describe('field objects', () => {
     const rock = w.placeObject('rock', 1, 3, 'player')!;
     const wave = new Shockwave(w.nextAttackId(), 1, 2, w.tick);
     w.spawnAttack(wave);
-    wait(w, T(tuning.projectile.CELL_TRAVEL_TIME) * 4);
+    wait(w, T(tuning.mettik.WAVE_CELL_TIME) * 4);
     expect(wave.done).toBe(true);
-    expect(rock.hp).toBe(tuning.field.ROCK_HP - tuning.mettik.MET_DMG);
+    expect(rock.hp).toBe(tuning.field.ROCK_HP - tuning.mettik.DMG);
     expect(w.player.hitsTaken).toBe(0);
   });
 });

@@ -9,8 +9,8 @@ type MettikIntent = { kind: 'move'; destination: Cell } | { kind: 'shockwave'; o
 
 // Mettik (Mettaur, MMBN6) — GDD §8.2. Mettik take turns (`EnemyContext.hasTurn`):
 // only the holder acts, the rest stand. Before every action the holder waits
-// MET_ACTION_DELAY, then steps one cell toward the player's lane or, on it,
-// strikes. The turn goes on with the wave, after MET_CHASE_STEPS steps without
+// ACTION_DELAY, then steps one cell toward the player's lane or, on it,
+// strikes. The turn goes on with the wave, after CHASE_STEPS steps without
 // a strike, when it cannot step, and when it is countered.
 
 export class Mettik extends Enemy {
@@ -24,7 +24,7 @@ export class Mettik extends Enemy {
   private waiting = false;
 
   constructor(id: number, x: number, y: number, spawnTick: number, level: EnemyLevel = 1) {
-    super(id, x, y, tuning.mettik.MET_HP, spawnTick, level);
+    super(id, x, y, tuning.mettik.HP, spawnTick, level);
   }
 
   override dangerCells(field: Field): Cell[] {
@@ -64,7 +64,7 @@ export class Mettik extends Enemy {
       return;
     }
     const destination = { x: this.x + Math.sign(lane - this.x), y: this.y };
-    if (this.chased < tuning.mettik.MET_CHASE_STEPS && this.tryStep(ctx, destination.x, destination.y)) {
+    if (this.chased < tuning.mettik.CHASE_STEPS && this.tryStep(ctx, destination.x, destination.y)) {
       this.chased++;
       this.intent = { kind: 'move', destination };
       this.setTimedState('MOVE', ctx.tick, this.ticks(tuning.mettik.MOVE_TIME));
@@ -90,7 +90,7 @@ export class Mettik extends Enemy {
           this.waiting = false;
           this.setState('IDLE', t);
         }
-        if (this.elapsed(t) < this.ticks(m.MET_ACTION_DELAY)) return;
+        if (this.elapsed(t) < this.ticks(m.ACTION_DELAY)) return;
         this.decide(ctx);
         return;
       }
@@ -114,11 +114,11 @@ export class Mettik extends Enemy {
         ctx.spawnAttack(
           new Shockwave(ctx.nextAttackId(), this.intent.origin.x, this.intent.origin.y, t, {
             dir: 1,
-            damage: this.dmg(m.MET_DMG),
-            stepTicks: this.ticks(m.MET_WAVE_CELL_TIME),
+            damage: this.dmg(m.DMG),
+            stepTicks: this.ticks(m.WAVE_CELL_TIME),
           }),
         );
-        if (m.MET_HANDOFF_ON_WAVE) this.handOn(ctx);
+        if (m.HANDOFF_ON_WAVE) this.handOn(ctx);
         this.setTimedState('STRIKE', t, this.ticks(m.STRIKE_TIME));
         return;
       case 'STRIKE':
@@ -127,7 +127,7 @@ export class Mettik extends Enemy {
       case 'RECOVERY':
         if (!this.phaseDone(t)) return;
         this.intent = null;
-        if (!m.MET_HANDOFF_ON_WAVE) this.handOn(ctx);
+        if (!m.HANDOFF_ON_WAVE) this.handOn(ctx);
         this.setState('IDLE', t);
         return;
       case 'STAGGER':

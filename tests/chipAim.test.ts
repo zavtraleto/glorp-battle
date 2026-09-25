@@ -48,11 +48,11 @@ describe('chip aim preview', () => {
     expect(w.aimPreview()?.cells).toEqual([{ x: 1, y: 1 }, { x: 0, y: 1 }, { x: 2, y: 1 }]);
   });
 
-  it('shows Mine fixed MINE_TARGET_DISTANCE cells ahead', () => {
+  it('shows Mine fixed mine.TARGET_DISTANCE cells ahead', () => {
     const w = world();
     addEnemy(w, 2, 0);
     give(w, 'mine');
-    expect(w.aimPreview()?.cells).toEqual([{ x: 1, y: w.player.y - tuning.chips.MINE_TARGET_DISTANCE }]);
+    expect(w.aimPreview()?.cells).toEqual([{ x: 1, y: w.player.y - tuning.mine.TARGET_DISTANCE }]);
     expect(w.aimPreview()?.beam).toBeNull();
   });
 });

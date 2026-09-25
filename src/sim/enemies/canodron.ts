@@ -23,7 +23,7 @@ export class Canodron extends Enemy {
   private intent: CanodronIntent | null = null;
 
   constructor(id: number, x: number, y: number, spawnTick: number, level: EnemyLevel = 1) {
-    super(id, x, y, tuning.canodron.CANO_HP, spawnTick, level);
+    super(id, x, y, tuning.canodron.HP, spawnTick, level);
   }
 
   override cursorCell(): { x: number; y: number; locked: boolean } | null {
@@ -95,7 +95,7 @@ export class Canodron extends Enemy {
           if (this.elapsed(t) >= this.ticks(c.INTENTION_TIME)) this.lock(t);
           return;
         }
-        if (t - this.cursorStepTick >= this.ticks(c.CANO_CURSOR_STEP)) {
+        if (t - this.cursorStepTick >= this.ticks(c.CURSOR_STEP)) {
           this.cursorY++;
           this.cursorStepTick = t;
           if (this.cursorY >= ROWS) {
@@ -115,7 +115,7 @@ export class Canodron extends Enemy {
           this.resetCursor(t);
           return;
         }
-        ctx.shootLane(this.intent.lane, this.intent.fromY, this.dmg(c.CANO_DMG));
+        ctx.shootLane(this.intent.lane, this.intent.fromY, this.dmg(c.DMG));
         this.cursorY = -1;
         this.setTimedState('STRIKE', t, this.ticks(c.STRIKE_TIME));
         return;

@@ -21,8 +21,8 @@ export interface WaveOptions {
 function mettikWave(): WaveOptions {
   return {
     dir: 1,
-    damage: tuning.mettik.MET_DMG,
-    stepTicks: Math.max(1, secondsToTicks(tuning.projectile.CELL_TRAVEL_TIME)),
+    damage: tuning.mettik.DMG,
+    stepTicks: Math.max(1, secondsToTicks(tuning.mettik.WAVE_CELL_TIME)),
   };
 }
 

@@ -61,7 +61,6 @@ describe('chip catalogue (compact MMBN3 scale)', () => {
       id: 'guard',
       power: null,
       kind: 'support',
-      useTime: 'FIELD',
       guard: true,
       shape: { t: 'self' },
     });
@@ -70,7 +69,7 @@ describe('chip catalogue (compact MMBN3 scale)', () => {
 
 describe('selection rule', () => {
   it('combines any of the ten chips up to the cap', () => {
-    const max = tuning.chips.HAND_SIZE;
+    const max = tuning.hand.SIZE;
     expect(canAddToSelection([{ defId: 'cannon' }, { defId: 'mine' }], { defId: 'airshot' }, max)).toBe(true);
     expect(canAddToSelection([{ defId: 'areagrab' }, { defId: 'break' }], { defId: 'sword' }, max)).toBe(true);
     const full = Array.from({ length: max }, () => ({ defId: 'cannon' as const }));
@@ -90,16 +89,16 @@ describe('battle flow', () => {
   it('goes straight from the intro into ACTION with a dealt hand', () => {
     const w = new World({ seed: 1, battleIndex: 1 });
     expect(w.state).toBe('BATTLE_INTRO');
-    run(w, T(tuning.fx.INTRO_TIME));
+    run(w, T(tuning.flow.INTRO_TIME));
     expect(w.state).toBe('ACTION');
-    expect(w.chips.hand).toHaveLength(tuning.chips.HAND_SIZE);
+    expect(w.chips.hand).toHaveLength(tuning.hand.SIZE);
     expect(w.chips.hand.every((c) => c !== null)).toBe(true);
     expect(w.tick).toBe(0);
   });
 
   it('freezes the battle only during the intro', () => {
     const w = new World({ seed: 1, battleIndex: 1 });
-    run(w, T(tuning.fx.INTRO_TIME) - 1);
+    run(w, T(tuning.flow.INTRO_TIME) - 1);
     const m = w.enemies[0] as Mettik;
     expect(w.state).toBe('BATTLE_INTRO');
     expect(w.tick).toBe(0);
@@ -111,7 +110,7 @@ describe('battle flow', () => {
     // The battle must outlive the chips being fired at it.
     for (const e of w.enemies) e.hp = 100_000;
     for (let i = 0; i < 600; i++) {
-      step(w, [{ type: 'selectChip', slot: i % tuning.chips.HAND_SIZE }, { type: 'useChip' }]);
+      step(w, [{ type: 'selectChip', slot: i % tuning.hand.SIZE }, { type: 'useChip' }]);
       expect(w.state).toBe('ACTION');
     }
     expect(w.tick).toBe(600);
@@ -134,7 +133,7 @@ describe('battle flow', () => {
     const slot = w.chips.hand.findIndex((c) => c !== null);
     step(w, [{ type: 'selectChip', slot }, { type: 'useChip' }]);
     expect(w.chips.hand[slot]).toBeNull();
-    run(w, T(tuning.chips.HAND_REFILL_COOLDOWN) - 1);
+    run(w, T(tuning.hand.REFILL_COOLDOWN) - 1);
     expect(w.chips.hand[slot]).toBeNull();
     run(w, 1);
     expect(w.state).toBe('ACTION');
@@ -161,7 +160,7 @@ describe('battle flow', () => {
     }
     expect(w.chips.reshuffles).toBe(1);
     expect(seenReshuffled).toBe(true);
-    run(w, T(tuning.chips.HAND_REFILL_COOLDOWN));
+    run(w, T(tuning.hand.REFILL_COOLDOWN));
     expect(w.chips.hand.every((c) => c !== null)).toBe(true);
   });
 

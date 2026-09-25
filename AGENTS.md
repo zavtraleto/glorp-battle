@@ -6,7 +6,7 @@ Vite + TypeScript (strict) + Three.js. The whole interface is a 3D physical term
 - Spec: `docs/GDD.md` (Russian). It is the contract: read the relevant section before changing gameplay.
 - Interface spec: `docs/TERMINAL.md` (Russian) — the physical terminal NET-01 (stages T1–T3). It wins over the GDD for controls and presentation.
 - Battle look: `docs/BATTLE_VISUAL.md` (Russian). **Before changing how anything looks, read its §10.1–10.2 and TERMINAL.md §9.1–9.2**: the code map (which file owns which part of the look) and the pitfalls we already hit.
-- Current plan: `docs/superpowers/specs/2026-09-25-core-loop-plan.md` — core-loop tasks T0–T6 after the 2026-09-25 playtest; each task records its status and decisions there.
+- Current plan: `docs/superpowers/specs/2026-09-25-battle-feel-plan.md` — tasks 1–5 after the 2026-09-25 playtest (tempo, hand, telegraphs, encounter lab, enemies); each task records its status and decisions there.
 - Live build: https://zavtraleto.github.io/glorp-battle/ (public repo `zavtraleto/glorp-battle`).
 
 ## Language
@@ -31,7 +31,7 @@ Before every commit: `npm test` and `npm run build` must pass. Pushing to `main`
 - **Source of truth for anything the GDD leaves open: MMBN6 as the combat base, MMBN3 for content and systemic depth** (chips, virus stats, folder content). If BN3 lacks something, use BN6 and say so. MMBN1 is no longer a reference. Labels in docs: `[MMBN3]`, `[MMBN6]`, `[оценка]`, `[решение]`.
 - **Deliberate deviations — do not undo them:**
   - There is no Buster (GDD §4): only chips deal damage. Spent chips reshuffle into the draw pile when it runs dry (GDD §5).
-  - The run is linear and the folder never changes during it: no path choice, rewards, legacy or saves between runs (GDD §10). Task T6 of the plan will replace this with a new chip after each battle; until then it holds.
+  - The run is linear and the folder never changes during it: no path choice, rewards, legacy or saves between runs (GDD §10).
   - One trackball micro-swipe = exactly one panel. After each accepted step, the current finger position becomes the next gesture anchor; a stationary finger never repeats movement. No hold-to-repeat on gestures (keyboard keeps it).
   - A `DBG` button (bottom-right) toggles debug tools in every build; the pause key sits bottom-left on the control panel.
   - Working names replace Capcom names: Mettik, Canodron, Hopzap, Bladdy, … (see GDD §0.1).
@@ -47,7 +47,7 @@ src/terminal/ 3D physical terminal: CRT (battle render target + HUD/menu canvas)
 src/core/     fixed-step loop, seeded RNG, input (commands, swipe, keyboard, browser-gesture guards)
 src/data/     encounters, chips, folders (starter, debug all), tutorial, enemy looks and levels — content is data, not code
 src/config/tuning.ts   every gameplay number (seconds), live-editable in the debug panel
-src/debug/    lil-gui panel, stats overlay, URL params
+src/debug/    Tweakpane panel (lazy-loaded; folder tree in tuningLayout.ts), stats overlay, dead-time meter, URL params
 ```
 
 Invariants:
@@ -58,7 +58,7 @@ Invariants:
 - **Sim → view via events.** The sim pushes `SimEvent`s; `main.ts` drains them each tick into FX, the terminal (CRT flash, damage numbers) and the debug log. Add an event instead of letting render peek at transient sim state.
 - **Determinism.** All sim randomness uses `world.rngFolder` / `world.rngAi` (seeded, forked streams). No `Math.random()` in `src/sim`. Session derives a seed per run; the run derives its folder, each step's encounter pick and each step's battle from it.
 - **Enemies** extend `Enemy` (`src/sim/enemies/enemyBase.ts`), act only through `EnemyContext`, register in `factory.ts`, get a seed in `data/enemies.ts`, and are placed in `data/encounters.ts`. Scale damage and timings with `this.dmg()` / `this.ticks()` so levels work. Lane attacks implement `LaneMover` so FX can interpolate them.
-- **New tunables** go into the right group in `tuning.ts`; the debug panel picks them up automatically (add a slider range in `RANGES` if the auto range is wrong).
+- **New tunables** go into the right group in `tuning.ts` (one flat group per chip, per enemy, …; keys without a group prefix: `mettik.HP`, `cannon.DAMAGE`); the debug panel picks them up automatically (add a slider range in `RANGES` in `debug/tuningLayout.ts` if the auto range is wrong). A new group must be placed in `TUNE_LAYOUT` — a test checks it.
 - **Battle palette.** Battle materials emit a signal, not a colour: G = phosphor, R = red, B = accent (`render/palette.ts`); the palette pass maps each pixel to its palette colour dimmed by the signal's brightness (no dithering since 2026-09-19). The CRT picture is drawn 1:1 with the glass's render pixels; `CRT_RES_W/H` only set its aspect. No text in battle: HUD shows only HP segments, damage numbers and menus.
 - **Panels live in the sim.** `world.field` owns panel state and ownership; movement, warps and waves ask `field.canStand` / `field.panel`, and anything leaving a cell calls `field.onLeave`. Objects (`world.objects`) sit in `Occupancy` and stop shots.
 - **New chips** are data: a `shape`, a `color`, optional `onHit` / `field` / `guard` in `data/chips.ts`; a new shape or field action goes into `sim/chips/patterns.ts` / `World.applyFieldAction`. Add strings to `i18n/en.ts`, an icon to `terminal/chips/chipIcons.ts`, and a test in `tests/chipUse.test.ts`.

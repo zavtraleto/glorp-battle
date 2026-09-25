@@ -50,7 +50,7 @@ export class ChipSystem {
   /** Draw order: shuffled once per battle, then reshuffled from spent chips when it runs dry. */
   private drawPile: ChipInstance[];
   private drawIndex = 0;
-  /** Hand slots; null = spent or the folder ran out. Length is HAND_SIZE. */
+  /** Hand slots; null = spent or the folder ran out. Length is hand.SIZE. */
   hand: (ChipInstance | null)[] = [];
   /** Hand slot indices in firing order — the Attack Queue. */
   attack: number[] = [];
@@ -81,9 +81,9 @@ export class ChipSystem {
   ) {
     this.drawPile = [];
     this.fill(typeof folder === 'string' ? folderChips(folder) : folder);
-    this.hand = new Array<ChipInstance | null>(tuning.chips.HAND_SIZE).fill(null);
-    this.pendingRefills = new Array<PendingRefill | null>(tuning.chips.HAND_SIZE).fill(null);
-    this.spentSlots = new Array<boolean>(tuning.chips.HAND_SIZE).fill(false);
+    this.hand = new Array<ChipInstance | null>(tuning.hand.SIZE).fill(null);
+    this.pendingRefills = new Array<PendingRefill | null>(tuning.hand.SIZE).fill(null);
+    this.spentSlots = new Array<boolean>(tuning.hand.SIZE).fill(false);
   }
 
   private fill(list: readonly FolderChip[]): void {
@@ -102,9 +102,9 @@ export class ChipSystem {
   replaceFolder(list: readonly FolderChip[]): void {
     this.folderVersion++;
     this.fill(list);
-    this.hand = new Array<ChipInstance | null>(tuning.chips.HAND_SIZE).fill(null);
-    this.pendingRefills = new Array<PendingRefill | null>(tuning.chips.HAND_SIZE).fill(null);
-    this.spentSlots = new Array<boolean>(tuning.chips.HAND_SIZE).fill(false);
+    this.hand = new Array<ChipInstance | null>(tuning.hand.SIZE).fill(null);
+    this.pendingRefills = new Array<PendingRefill | null>(tuning.hand.SIZE).fill(null);
+    this.spentSlots = new Array<boolean>(tuning.hand.SIZE).fill(false);
     this.resetCycle();
   }
 
@@ -148,17 +148,17 @@ export class ChipSystem {
 
   /** Fills the hand at the start of the battle (GDD §7.6). */
   dealHand(): void {
-    this.hand = Array.from({ length: tuning.chips.HAND_SIZE }, () => this.draw());
-    this.pendingRefills = new Array<PendingRefill | null>(tuning.chips.HAND_SIZE).fill(null);
-    this.spentSlots = new Array<boolean>(tuning.chips.HAND_SIZE).fill(false);
+    this.hand = Array.from({ length: tuning.hand.SIZE }, () => this.draw());
+    this.pendingRefills = new Array<PendingRefill | null>(tuning.hand.SIZE).fill(null);
+    this.spentSlots = new Array<boolean>(tuning.hand.SIZE).fill(false);
     this.resetCycle();
   }
 
   /** Tutorial (GDD §10.5): the exact hand by slot; null leaves the slot empty. */
   dealHandExact(spec: readonly (FolderChip | null)[]): void {
-    this.hand = new Array<ChipInstance | null>(tuning.chips.HAND_SIZE).fill(null);
-    this.pendingRefills = new Array<PendingRefill | null>(tuning.chips.HAND_SIZE).fill(null);
-    this.spentSlots = new Array<boolean>(tuning.chips.HAND_SIZE).fill(false);
+    this.hand = new Array<ChipInstance | null>(tuning.hand.SIZE).fill(null);
+    this.pendingRefills = new Array<PendingRefill | null>(tuning.hand.SIZE).fill(null);
+    this.spentSlots = new Array<boolean>(tuning.hand.SIZE).fill(false);
     this.resetCycle();
     for (let i = 0; i < Math.min(spec.length, this.hand.length); i++) {
       const want = spec[i];
@@ -209,7 +209,7 @@ export class ChipSystem {
 
   /** Whether this chip could join the current series (GDD §7.3). */
   private fitsSeries(chip: ChipKey): boolean {
-    return canAddToSelection(this.series, chip, tuning.chips.HAND_SIZE);
+    return canAddToSelection(this.series, chip, tuning.hand.SIZE);
   }
 
   /** Whether tapping this slot would add it to the Attack Queue. */
@@ -248,7 +248,7 @@ export class ChipSystem {
   startCooldown(tick = 0): void {
     if (this.refillStartedAt !== null) return;
     this.refillStartedAt = tick;
-    this.refillReadyAt = tick + secondsToTicks(tuning.chips.HAND_REFILL_COOLDOWN);
+    this.refillReadyAt = tick + secondsToTicks(tuning.hand.REFILL_COOLDOWN);
   }
 
   /** Existing single-chip entry point: commit and start cooldown immediately. */

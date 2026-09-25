@@ -55,11 +55,11 @@ describe('player damage', () => {
     const wave = new Shockwave(1, 1, 4, w.tick);
     w.spawnAttack(wave);
     step(w);
-    expect(w.player.hp).toBe(w.player.maxHp - tuning.mettik.MET_DMG);
+    expect(w.player.hp).toBe(w.player.maxHp - tuning.mettik.DMG);
     expect(w.player.flinched).toBe(true);
     expect(w.player.invulnerable).toBe(true);
     run(w, 5);
-    expect(w.player.hp).toBe(w.player.maxHp - tuning.mettik.MET_DMG);
+    expect(w.player.hp).toBe(w.player.maxHp - tuning.mettik.DMG);
     expect(w.player.hitsTaken).toBe(1);
   });
 
@@ -91,8 +91,8 @@ describe('Mettik', () => {
   it('attacks the player lane with a wave that arrives on schedule', () => {
     const w = makeWorld();
     const m = w.enemies[0] as Mettik;
-    const moveI = T(tuning.mettik.MET_ACTION_DELAY);
-    const waveStep = T(tuning.mettik.MET_WAVE_CELL_TIME);
+    const moveI = T(tuning.mettik.ACTION_DELAY);
+    const waveStep = T(tuning.mettik.WAVE_CELL_TIME);
     run(w, moveI);
     expect(m.state).toBe('INTENTION');
     expect(w.dangerCells()).toEqual([]);
@@ -111,12 +111,12 @@ describe('Mettik', () => {
     run(w, 2 * waveStep - 1);
     expect(w.player.hp).toBe(w.player.maxHp);
     run(w, 1);
-    expect(w.player.hp).toBe(w.player.maxHp - tuning.mettik.MET_DMG);
+    expect(w.player.hp).toBe(w.player.maxHp - tuning.mettik.DMG);
   });
 
   it('the wave can be dodged by leaving the lane before Strike', () => {
     const w = makeWorld();
-    run(w, T(tuning.mettik.MET_ACTION_DELAY) + 5);
+    run(w, T(tuning.mettik.ACTION_DELAY) + 5);
     move(w, 'left');
     run(w, T(2));
     expect(w.player.hp).toBe(w.player.maxHp);
@@ -126,7 +126,7 @@ describe('Mettik', () => {
     const w = makeWorld();
     const m = w.enemies[0] as Mettik;
     move(w, 'right');
-    run(w, T(tuning.mettik.MET_ACTION_DELAY));
+    run(w, T(tuning.mettik.ACTION_DELAY));
     expect([m.x, m.y]).toEqual([2, 1]);
     expect(m.state).toBe('MOVE');
   });
@@ -135,7 +135,7 @@ describe('Mettik', () => {
     const w = makeWorld();
     const m = w.enemies[0] as Mettik;
     m.hp = 999;
-    run(w, T(tuning.mettik.MET_ACTION_DELAY));
+    run(w, T(tuning.mettik.ACTION_DELAY));
     w.damageEnemy(m, 1);
     expect(m.state).toBe('INTENTION');
     run(w, T(tuning.mettik.INTENTION_TIME + tuning.mettik.LOCK_TIME + tuning.mettik.COUNTER_TIME));
@@ -146,12 +146,12 @@ describe('Mettik', () => {
     const w = makeWorld();
     const a = w.enemies[0] as Mettik;
     const b = addMettik(w, 1, 0, 501);
-    run(w, T(tuning.mettik.MET_ACTION_DELAY));
+    run(w, T(tuning.mettik.ACTION_DELAY));
     expect([a.state, b.state]).toEqual(['INTENTION', 'IDLE']);
     run(w, T(tuning.mettik.INTENTION_TIME + tuning.mettik.LOCK_TIME + tuning.mettik.COUNTER_TIME));
     expect(w.attacks.filter((attack) => attack.kind === 'shockwave')).toHaveLength(1);
     expect(b.state).toBe('IDLE');
-    run(w, T(tuning.mettik.MET_ACTION_DELAY) - 1);
+    run(w, T(tuning.mettik.ACTION_DELAY) - 1);
     expect(b.state).toBe('IDLE');
     run(w, 1);
     expect(b.state).toBe('INTENTION');
@@ -161,7 +161,7 @@ describe('Mettik', () => {
     const w = makeWorld({ ai: false });
     move(w, 'left');
     w.spawnAttack(new Shockwave(1, 1, 2, w.tick));
-    run(w, 4 * T(tuning.projectile.CELL_TRAVEL_TIME) + 1);
+    run(w, 4 * T(tuning.mettik.WAVE_CELL_TIME) + 1);
     expect(w.attacks).toHaveLength(0);
   });
 });
@@ -186,9 +186,9 @@ describe('battle outcome', () => {
     cannon(w);
     expect(w.state).toBe('BATTLE_WON');
     const [tick, playerTick] = [w.tick, w.playerTick];
-    run(w, T(tuning.fx.RESULT_DELAY_WIN));
-    expect(w.tick - tick).toBe(T(tuning.fx.RESULT_DELAY_WIN));
-    expect(w.playerTick - playerTick).toBe(T(tuning.fx.RESULT_DELAY_WIN));
+    run(w, T(tuning.flow.RESULT_DELAY_WIN));
+    expect(w.tick - tick).toBe(T(tuning.flow.RESULT_DELAY_WIN));
+    expect(w.playerTick - playerTick).toBe(T(tuning.flow.RESULT_DELAY_WIN));
   });
 
   it('player death ends the battle and freezes the simulation', () => {

@@ -184,7 +184,7 @@ export abstract class Enemy {
     if (this.state !== 'STAGGER') return;
     const duration = this.collisionResume
       ? Math.max(0, this.stateEndTick - this.stateTick)
-      : secondsToTicks(tuning.counter.COUNTER_STAGGER_TIME);
+      : secondsToTicks(tuning.enemy.COUNTER_STAGGER_TIME);
     if (this.elapsed(ctx.tick) < duration) return;
     if (this.collisionResume) {
       const resume = this.collisionResume;

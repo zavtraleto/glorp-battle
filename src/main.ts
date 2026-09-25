@@ -9,7 +9,8 @@ import { GameLoop } from './core/loop';
 import { randomSeed } from './core/rng';
 import { BenchAutopilot, formatBench } from './debug/bench';
 import { DebugOverlay, enemyTimingLines, gestureLines } from './debug/overlay';
-import { DebugPanel } from './debug/debugPanel';
+import { DeadTimeMeter, formatDeadTime } from './debug/deadTime';
+import type { DebugActions, DebugPanel } from './debug/debugPanel';
 import { parseDebugParams } from './debug/params';
 import { PerfProbe } from './debug/perfProbe';
 import { t } from './i18n';
@@ -45,6 +46,7 @@ else if (query.has('battle')) session.debugJump(params.battle);
 
 // ?bench=1: autopilot on battle 1 for the frame budget check (TERMINAL.md §10).
 const perf = new PerfProbe();
+const deadTime = new DeadTimeMeter();
 const bench = params.bench ? new BenchAutopilot(params.seed ?? 1) : null;
 let benchReport = '';
 if (bench) {
@@ -120,7 +122,7 @@ function afterWorldChange(): void {
   input.clear();
   sceneRenderer.reset();
   terminal.resetWorld();
-  panel.syncSeed(session.seed, Math.min(4, session.battleIndex));
+  panel?.syncSeed(session.seed, Math.min(4, session.battleIndex));
   events.emit('seedChanged', { seed: session.world.seed });
 }
 
@@ -164,6 +166,7 @@ const loop = new GameLoop(
     tick: (dt) => {
       const world = session.world;
       world.step(dt, { commands: input.drain(), held: input.heldDir });
+      deadTime.observe(world);
       const drained = world.drainEvents();
       for (const e of drained) {
         sceneRenderer.handleEvent(e, world);
@@ -192,6 +195,7 @@ const loop = new GameLoop(
         paused: loop.clock.paused,
         simTime: world.time,
         perf: perf.snapshot(),
+        deadTime: formatDeadTime(deadTime.stats),
         extra:
           (benchReport ? `${benchReport}\n` : '') +
           `player ${p.x},${p.y} hp ${p.hp} hits ${p.hitsTaken} ${p.flinched ? 'FLINCH ' : ''}${p.invulnerable ? 'IFR' : ''}\n` +
@@ -214,7 +218,7 @@ terminal.movesProbe = () => session.world.player.moves;
 // ---------- Debug tools ----------
 const overlay = new DebugOverlay(ui);
 let debugChipUid = 10_000;
-const panel = new DebugPanel(loop.clock, {
+const debugActions: DebugActions = {
   getSeed: () => session.seed,
   restart: ({ seed, battle }) => {
     session.debugJump(battle ?? 1, seed === 'random' ? randomSeed() : seed);
@@ -268,24 +272,40 @@ const panel = new DebugPanel(loop.clock, {
     f.markAttack([{ x: 2, y: 3 }], w.tick, 'accent');
     f.markAttack([{ x: 0, y: 3 }], w.tick, 'red');
   },
-});
-panel.syncSeed(session.seed, Math.min(4, session.battleIndex));
+};
+// Tweakpane loads on the first DBG press, off the startup path (GDD §15.5).
+let panel: DebugPanel | null = null;
+let panelLoad: Promise<DebugPanel> | null = null;
+let debugVisible = false;
+function loadPanel(): Promise<DebugPanel> {
+  panelLoad ??= import('./debug/debugPanel').then(({ DebugPanel }) => {
+    panel = new DebugPanel(loop.clock, debugActions);
+    panel.syncSeed(session.seed, Math.min(4, session.battleIndex));
+    return panel;
+  });
+  // A failed chunk load (offline, a dev-server restart) retries on the next press.
+  panelLoad.catch(() => (panelLoad = null));
+  return panelLoad;
+}
 
 // Small toggle in the bottom-left corner: debug tools on phones and in the published build.
 const debugToggle = document.createElement('button');
 debugToggle.className = 'debug-toggle';
 debugToggle.textContent = t('btn.debug');
 ui.appendChild(debugToggle);
-debugToggle.addEventListener('click', () => setDebugVisible(!panel.visible));
+debugToggle.addEventListener('click', () => setDebugVisible(!debugVisible));
 
 function setDebugVisible(v: boolean): void {
-  panel.visible = v;
+  debugVisible = v;
   overlay.visible = v;
   debugToggle.classList.toggle('on', v);
+  if (panel) panel.visible = v;
+  else if (v) void loadPanel().then((p) => (p.visible = debugVisible));
 }
 setDebugVisible(params.debug || import.meta.env.DEV);
 window.addEventListener('keydown', (e) => {
-  if (e.key === '`' || e.key === 'F2') setDebugVisible(!panel.visible);
+  if (e.target instanceof HTMLInputElement) return;
+  if (e.key === '`' || e.key === 'F2') setDebugVisible(!debugVisible);
 });
 
 // ---------- Layout ----------

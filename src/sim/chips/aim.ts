@@ -26,7 +26,7 @@ export interface Aim {
 
 /** Rows ahead of the player that Mine (`arm`) and Break target (GDD §6.4). */
 export function fieldTargetDistance(action: 'arm' | 'break'): number {
-  return action === 'arm' ? tuning.chips.MINE_TARGET_DISTANCE : tuning.chips.BREAK_TARGET_DISTANCE;
+  return action === 'arm' ? tuning.mine.TARGET_DISTANCE : tuning.break.TARGET_DISTANCE;
 }
 
 function fieldCells(def: ChipDef, l: AimLookup): Cell[] {

@@ -51,6 +51,21 @@ describe('ten-chip geometry', () => {
   });
 });
 
+describe('chip timing', () => {
+  it('reads startup and recovery from the chip\'s own tuning group', () => {
+    const T = (s: number) => Math.round(s * tuning.sim.SIM_HZ);
+    for (const id of Object.keys(CHIPS) as ChipId[]) {
+      expect(chipTiming(CHIPS[id]), id).toMatchObject({
+        startupTicks: T(tuning[id].STARTUP),
+        recoveryTicks: T(tuning[id].RECOVERY),
+      });
+    }
+    tuning.airshot.STARTUP = 0.5;
+    expect(chipTiming(CHIPS.airshot).startupTicks).toBe(T(0.5));
+    expect(chipTiming(CHIPS.cannon).startupTicks).toBe(T(DEFAULT_TUNING.cannon.STARTUP));
+  });
+});
+
 describe('ten-chip execution', () => {
   it('resolves Cannon after startup and releases its lock after recovery', () => {
     const w = makeWorld();

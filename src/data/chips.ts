@@ -21,8 +21,6 @@ export type ChipId =
   | 'widesword'
   | 'guard';
 
-export type UseTimeGroup = 'CANNON' | 'SWORD' | 'FIELD';
-
 export interface Offset {
   x: number;
   y: number;
@@ -46,7 +44,6 @@ export interface ChipDef {
   power: number | null;
   splashPower?: number;
   kind: 'attack' | 'support' | 'field';
-  useTime: UseTimeGroup;
   color: ChipColor;
   shape: Shape;
   onHit?: OnHit;
@@ -63,41 +60,41 @@ const BASE = { color: 'red' } as const;
 
 export const CHIPS: Record<ChipId, ChipDef> = {
   cannon: {
-    id: 'cannon', get power() { return tuning.chips.CHIP_DAMAGE_CANNON; },
-    kind: 'attack', useTime: 'CANNON', shape: LANE, ...BASE,
+    id: 'cannon', get power() { return tuning.cannon.DAMAGE; },
+    kind: 'attack', shape: LANE, ...BASE,
   },
   sword: {
-    id: 'sword', get power() { return tuning.chips.CHIP_DAMAGE_SWORD; },
-    kind: 'attack', useTime: 'SWORD', shape: { t: 'near', cells: AHEAD }, ...BASE,
+    id: 'sword', get power() { return tuning.sword.DAMAGE; },
+    kind: 'attack', shape: { t: 'near', cells: AHEAD }, ...BASE,
   },
   areagrab: {
-    id: 'areagrab', power: null, kind: 'field', useTime: 'FIELD', shape: SELF, field: 'claim', ...BASE,
+    id: 'areagrab', power: null, kind: 'field', shape: SELF, field: 'claim', ...BASE,
   },
   mine: {
-    id: 'mine', get power() { return tuning.chips.CHIP_DAMAGE_MINE; },
-    kind: 'field', useTime: 'FIELD', shape: SELF, field: 'arm', ...BASE,
+    id: 'mine', get power() { return tuning.mine.DAMAGE; },
+    kind: 'field', shape: SELF, field: 'arm', ...BASE,
   },
   block: {
-    id: 'block', power: null, kind: 'field', useTime: 'FIELD', shape: SELF, field: 'occupy', ...BASE,
+    id: 'block', power: null, kind: 'field', shape: SELF, field: 'occupy', ...BASE,
   },
   break: {
-    id: 'break', power: null, kind: 'field', useTime: 'FIELD', shape: SELF, field: 'break', ...BASE,
+    id: 'break', power: null, kind: 'field', shape: SELF, field: 'break', ...BASE,
   },
   airshot: {
-    id: 'airshot', get power() { return tuning.chips.CHIP_DAMAGE_AIRSHOT; },
-    kind: 'attack', useTime: 'CANNON', shape: LANE,
+    id: 'airshot', get power() { return tuning.airshot.DAMAGE; },
+    kind: 'attack', shape: LANE,
     onHit: { push: true, pushRequiresDamage: true }, ...BASE,
   },
   spreader: {
-    id: 'spreader', get power() { return tuning.chips.CHIP_DAMAGE_SPREADER_MAIN; },
-    get splashPower() { return tuning.chips.CHIP_DAMAGE_SPREADER_SPLASH; },
-    kind: 'attack', useTime: 'CANNON', shape: { t: 'lane', around: SIDES }, ...BASE,
+    id: 'spreader', get power() { return tuning.spreader.DAMAGE; },
+    get splashPower() { return tuning.spreader.SPLASH_DAMAGE; },
+    kind: 'attack', shape: { t: 'lane', around: SIDES }, ...BASE,
   },
   widesword: {
-    id: 'widesword', get power() { return tuning.chips.CHIP_DAMAGE_WIDESWORD; },
-    kind: 'attack', useTime: 'SWORD', shape: { t: 'near', cells: WIDE }, ...BASE,
+    id: 'widesword', get power() { return tuning.widesword.DAMAGE; },
+    kind: 'attack', shape: { t: 'near', cells: WIDE }, ...BASE,
   },
   guard: {
-    id: 'guard', power: null, kind: 'support', useTime: 'FIELD', shape: SELF, guard: true, ...BASE,
+    id: 'guard', power: null, kind: 'support', shape: SELF, guard: true, ...BASE,
   },
 };

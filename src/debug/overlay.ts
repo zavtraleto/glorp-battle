@@ -35,20 +35,43 @@ export interface OverlayInfo {
   timeScale: number;
   paused: boolean;
   simTime: number;
+  /** Dead-time line (debug/deadTime.ts). */
+  deadTime: string;
   extra?: string;
   perf?: PerfSnapshot;
 }
 
-/** Text overlay with FPS and simulation info (GDD §15.5). Updated a few times per second. */
+const EXPANDED_KEY = 'glorp.debug.overlay.expanded';
+
+/**
+ * Stats overlay (GDD §15.5): two lines (FPS, state, dead time) over the CRT
+ * bezel; a tap expands the full diagnostics. Updated a few times per second.
+ */
 export class DebugOverlay {
   private readonly el: HTMLElement;
   private accum = Infinity;
   private minFps = Infinity;
   private minFpsWindow = 0;
+  private expanded = false;
 
   constructor(parent: HTMLElement) {
     this.el = document.createElement('div');
     this.el.className = 'debug-overlay';
+    try {
+      this.expanded = localStorage.getItem(EXPANDED_KEY) === '1';
+    } catch {
+      // storage unavailable
+    }
+    this.el.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      this.expanded = !this.expanded;
+      this.accum = Infinity;
+      try {
+        localStorage.setItem(EXPANDED_KEY, this.expanded ? '1' : '0');
+      } catch {
+        // storage unavailable
+      }
+    });
     parent.appendChild(this.el);
   }
 
@@ -73,11 +96,19 @@ export class DebugOverlay {
     this.accum = 0;
 
     const s = info.stats;
-    const dpr = window.devicePixelRatio || 1;
     const fpsClass = s.fps > 0 && s.fps < 55 ? 'warn' : '';
     const minFps = Number.isFinite(this.minFps) ? this.minFps.toFixed(0) : '-';
+    const head =
+      `<span class="${fpsClass}">FPS ${s.fps.toFixed(0)} min ${minFps}</span>` +
+      ` · ${info.state}${info.paused ? ' [PAUSED]' : ''} · x${info.timeScale} ${this.expanded ? '▴' : '▾'}\n` +
+      info.deadTime;
+    if (!this.expanded) {
+      this.el.innerHTML = head;
+      return;
+    }
+    const dpr = window.devicePixelRatio || 1;
     this.el.innerHTML =
-      `<span class="${fpsClass}">FPS ${s.fps.toFixed(0)} (min5s ${minFps})</span>\n` +
+      head + '\n' +
       `frame ${s.frameMs.toFixed(2)} ms  ticks/f ${s.ticksLastFrame}\n` +
       (info.perf
         ? `cpu p50 ${info.perf.cpuP50.toFixed(2)} p95 ${info.perf.cpuP95.toFixed(2)} ms  ` +
@@ -86,10 +117,8 @@ export class DebugOverlay {
           `canvas ${info.perf.renderW}×${info.perf.renderH}\n`
         : '') +
       `ticks ${s.totalTicks}  sim ${info.simTime.toFixed(2)} s\n` +
-      `state ${info.state}${info.paused ? ' [PAUSED]' : ''}  x${info.timeScale}\n` +
       `battle ${info.battle}  seed ${info.seed}\n` +
       `view ${window.innerWidth}×${window.innerHeight} @${dpr.toFixed(2)}` +
-      (info.extra ? `
-${info.extra}` : '');
+      (info.extra ? `\n${info.extra}` : '');
   }
 }

@@ -1,10 +1,10 @@
-import GUI from 'lil-gui';
+import type { BindingApi } from '@tweakpane/core';
+import { Pane, type FolderApi, type TabPageApi } from 'tweakpane';
 import {
   DEFAULT_TUNING,
   resetTuning,
   saveTuningOverrides,
   tuning,
-  type Tuning,
 } from '../config/tuning';
 import { events } from '../core/events';
 import type { FixedStepClock } from '../core/loop';
@@ -12,6 +12,18 @@ import { CHIPS, type ChipId } from '../data/chips';
 import { FOLDERS } from '../data/folders';
 import type { DebugCellState } from '../render/cellStates';
 import type { Cheats } from '../sim/world';
+import {
+  TUNE_LAYOUT,
+  changedValues,
+  formatChanges,
+  layoutGroups,
+  matchesFilter,
+  resetGroups,
+  sliderRange,
+  tuningControlKind,
+  type GroupKey,
+  type TuneFolder,
+} from './tuningLayout';
 
 export interface DebugActions {
   getSeed(): number;
@@ -37,269 +49,307 @@ export interface DebugActions {
   simPanel(x: number, y: number, action: 'crack' | 'break' | 'repair' | 'grab' | 'rock'): void;
 }
 
-// Slider ranges for numeric tunables; anything not listed gets an auto range.
-const RANGES: Record<string, [number, number, number]> = {
-  SIM_HZ: [30, 240, 1],
-  TIME_SCALE: [0.05, 4, 0.05],
-  WORLD_TIME_SCALE: [0.1, 1, 0.05],
-  SLOW_MO_ENTER: [0, 1, 0.01],
-  SLOW_MO_EXIT: [0, 1, 0.01],
-  COMBO_BREAK_EXIT: [0, 0.5, 0.01],
-  CHIP_INPUT_BUFFER: [0, 0.5, 0.01],
-  SELECT_TIME_SCALE: [0.02, 1, 0.01],
-  SELECT_SLOW_MO_ENTER: [0, 1, 0.01],
-  SELECT_SLOW_MO_TIME: [0.5, 10, 0.1],
-  SELECT_SLOW_MO_RECHARGE: [0.5, 20, 0.1],
-  HOP_ALIGN_CHANCE: [0, 1, 0.05],
-  BLD_AREA_GRAB_DECISIONS: [1, 10, 1],
-  MINE_TARGET_DISTANCE: [1, 5, 1],
-  SWIPE_REARM_TIME: [0, 0.3, 0.01],
-  SWIPE_REST_PX: [0, 12, 1],
-  SWIPE_CONTINUE_TIME: [0, 0.4, 0.01],
-  SWIPE_CONTINUE_PX: [24, 150, 1],
-  BLD_MIN_PLAYER_ROWS: [1, 3, 1],
-  BREAK_TARGET_DISTANCE: [1, 5, 1],
-  VIEW_PITCH: [5, 80, 1],
-  VIEW_FOV: [15, 90, 1],
-  VIEW_FILL: [0.5, 1.5, 0.01],
-  VIEW_OFFSET_X: [-1, 1, 0.01],
-  VIEW_OFFSET_Y: [-1, 1, 0.01],
-  CELL_GAP: [0, 0.4, 0.01],
-  GRID_DIM: [0, 1, 0.01],
-  ACTIVE_FILL: [0, 1, 0.01],
-  CRT_FLASH_TIME: [0, 0.5, 0.01],
-  RENDER_SCALE_SHORT: [120, 1440, 10],
-  CRT_RES_W: [80, 720, 10],
-  CRT_RES_H: [120, 960, 10],
-  CAMERA_FOV: [5, 60, 1],
-  CRT_SCANLINES: [0, 1, 0.01],
-  CRT_CURVATURE: [0, 0.4, 0.01],
-  CRT_BLEED: [0, 1, 0.01],
-  CRT_GHOSTING: [0, 0.9, 0.01],
-  CRT_PHOSPHOR: [0, 1, 0.01],
-  CRT_GLOW: [0, 1, 0.01],
-  CRT_NOISE: [0, 0.3, 0.01],
-  CRT_ABERRATION: [0, 2, 0.05],
-  CRT_SHAKE: [0, 1, 0.01],
-  AMBIENT: [0, 0.5, 0.01],
-  LIGHT_CRT: [0, 2, 0.05],
-  LIGHT_RING: [0, 2, 0.05],
-  LIGHT_CHIP: [0, 2, 0.05],
-  VIGNETTE: [0, 1, 0.01],
-  CONTROL_TILT: [0, 45, 1],
-  CRT_TILT: [0, 20, 1],
-  BALL_W: [0.1, 0.5, 0.01],
-  RING_W: [0.15, 0.6, 0.01],
-  CHIP_ACTIVE_PUSH: [0, 0.5, 0.01],
-  CHIP_TILT_DEG: [0, 60, 1],
-  CHIP_ACTIVE_GLOW: [0, 2, 0.05],
-  CHIP_CANCEL_FLASH_TIME: [0, 2, 0.05],
-  HUD_BAND: [0, 0.3, 0.01],
-  LAYOUT_DRAW: [0, 0.12, 0.01],
-  COUNTER_STAGGER_TIME: [0, 2, 0.01],
-  HAND_REFILL_COOLDOWN: [0, 10, 0.1],
-  HAND_SIZE: [3, 8, 1],
-  ORIGINAL_COLOR_RETENTION: [0, 1, 0.01],
-  BASE_BRIGHTNESS: [0, 1, 0.01],
-  SCANLINE_SPACING: [1, 12, 0.1],
-  SCANLINE_WIDTH: [0.05, 0.95, 0.01],
-  SCANLINE_CURVATURE: [0, 2.4, 0.01],
-  SCANLINE_STRENGTH: [0, 1, 0.01],
-  EMISSION_STRENGTH: [0, 2, 0.01],
-  HALO_STRENGTH: [0, 1.5, 0.01],
-  BLOOM_STRENGTH: [0, 0.5, 0.01],
-  GLITCH_AMOUNT: [0, 0.5, 0.01],
-  EDGE_PARTICLE_AMOUNT: [0, 1, 0.01],
-  BRIGHT_SWEEP_STRENGTH: [0, 2, 0.01],
-  BRIGHT_SWEEP_SPEED: [0, 0.5, 0.01],
-  BRIGHT_SWEEP_WIDTH: [0.01, 0.5, 0.01],
-  THIN_SWEEP_STRENGTH: [0, 2, 0.01],
-  THIN_SWEEP_WIDTH: [0.002, 0.1, 0.001],
-  THIN_SWEEP_SPEED_MIN: [0, 0.5, 0.01],
-  THIN_SWEEP_SPEED_MAX: [0, 0.5, 0.01],
-  DROPOUT_AMOUNT: [0, 0.3, 0.005],
-  DROPOUT_SIZE: [1, 4, 0.1],
-  DROPOUT_SPEED: [0, 0.5, 0.01],
-  DROPOUT_ANGLE: [-180, 180, 1],
-};
+/** Folder expansion, panel expansion and the selected tab survive reloads. */
+const UI_STORAGE_KEY = 'glorp.debug.ui.v1';
 
-/** Stable display order for debug names, independent of object declaration order. */
-export function alphabeticalKeys(values: Record<string, unknown>): string[] {
-  return Object.keys(values).sort((a, b) => a.localeCompare(b));
+interface UiState {
+  folds: Record<string, boolean>;
+  expanded: boolean;
+  tab: number;
 }
 
-export function tuningControlKind(
-  _key: string,
-  value: unknown,
-): 'number' | 'boolean' | 'color' | 'string' {
-  if (typeof value === 'number') return 'number';
-  if (typeof value === 'boolean') return 'boolean';
-  if (typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)) return 'color';
-  return 'string';
+function loadUi(): UiState {
+  const fallback: UiState = { folds: {}, expanded: window.innerWidth >= 600, tab: 0 };
+  try {
+    const raw = localStorage.getItem(UI_STORAGE_KEY);
+    return raw ? { ...fallback, ...(JSON.parse(raw) as Partial<UiState>) } : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
-/** lil-gui debug panel (GDD §15.5). Every tunable is editable live and persisted. */
+type Groups = Record<string, Record<string, number | boolean | string>>;
+
+/** One tunable on screen. */
+interface Entry {
+  group: GroupKey;
+  key: string;
+  title: string;
+  binding: BindingApi;
+  folders: readonly FolderNode[];
+}
+
+interface FolderNode {
+  path: string;
+  api: FolderApi;
+}
+
+/** Tweakpane debug panel (GDD §15.5): Tune (every tunable, live and persisted) and Tools. */
 export class DebugPanel {
-  readonly gui: GUI;
-  private readonly state = {
-    seed: 0,
-    battle: 1,
-    timeScale: 1,
-    paused: false,
-    showCoords: false,
-    showOverlay: true,
-    logEvents: false,
-  };
+  private readonly root: HTMLElement;
+  private readonly pane: Pane;
+  private readonly ui = loadUi();
+  private readonly entries: Entry[] = [];
+  private readonly folders: FolderNode[] = [];
+  private readonly filterInput: HTMLInputElement;
+  private readonly changedButton: HTMLButtonElement;
+  private readonly copyButton: HTMLButtonElement;
+  private onlyChanged = false;
+  /** Folder expansion is being set by the panel, not the user: do not remember it. */
+  private folding = false;
+  private readonly state = { seed: 0, battle: 1, timeScale: 1, paused: false, showCoords: false, showOverlay: true, logEvents: false };
 
   constructor(private clock: FixedStepClock, private actions: DebugActions) {
-    this.gui = new GUI({ title: 'Debug' });
-    // Desktop sizes on phones too: lil-gui's touch styles blow the panel up to 13–16px text.
-    this.gui.domElement.classList.remove('lil-allow-touch-styles');
+    this.root = document.createElement('div');
+    this.root.className = 'debug-panel';
+    document.body.appendChild(this.root);
+    this.pane = new Pane({ container: this.root, title: 'Debug', expanded: this.ui.expanded });
+    this.pane.on('fold', (ev) => {
+      if (ev.target !== (this.pane as unknown)) return;
+      this.ui.expanded = ev.expanded;
+      this.saveUi();
+    });
+
+    const bar = document.createElement('div');
+    bar.className = 'debug-panel-bar';
+    this.filterInput = document.createElement('input');
+    this.filterInput.type = 'search';
+    this.filterInput.placeholder = 'filter: cano recov';
+    this.filterInput.addEventListener('input', () => this.refreshVisibility());
+    this.changedButton = this.barButton('changed', () => {
+      this.onlyChanged = !this.onlyChanged;
+      this.refreshVisibility();
+    });
+    this.copyButton = this.barButton('copy', () => this.copyChanges());
+    const reset = this.barButton('reset all', () => this.resetAll());
+    bar.append(this.filterInput, this.changedButton, this.copyButton, reset);
+
     this.state.seed = actions.getSeed();
     this.state.timeScale = tuning.sim.TIME_SCALE;
-    this.buildSession();
-    this.buildTuning();
-    if (window.innerWidth < 600) this.gui.close();
+    const tab = this.pane.addTab({ pages: [{ title: 'Tune' }, { title: 'Tools' }] });
+    tab.pages[Math.min(1, Math.max(0, this.ui.tab))]!.selected = true;
+    tab.on('select', (ev) => {
+      this.ui.tab = ev.index;
+      this.saveUi();
+    });
+    for (const f of TUNE_LAYOUT) this.buildTune(tab.pages[0]!, f, []);
+    this.buildTools(tab.pages[1]!);
+    // After the blades: Tweakpane inserts its own blades at the start of the content.
+    (this.pane.element.querySelector('.tp-rotv_c') ?? this.pane.element).prepend(bar);
+    this.refreshVisibility();
   }
 
   set visible(v: boolean) {
-    this.gui.show(v);
+    this.root.style.display = v ? '' : 'none';
   }
 
   get visible(): boolean {
-    return !this.gui._hidden;
+    return this.root.style.display !== 'none';
   }
 
   syncSeed(seed: number, battle: number): void {
     this.state.seed = seed;
     this.state.battle = battle;
-    this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
+    this.pane.refresh();
   }
 
-  private buildSession(): void {
-    const s = this.state;
-    const f = this.gui.addFolder('Session');
-    f.add({ folder: new URLSearchParams(location.search).get('folder') ?? 'starter' }, 'folder', Object.keys(FOLDERS))
-      .name('folder (reloads)')
-      .onChange((v: string) => {
-        const url = new URL(location.href);
-        url.searchParams.set('folder', v);
-        location.href = url.toString();
-      });
-    f.add(s, 'battle', [1, 2, 3, 4]).name('battle').onChange((b: number) => this.actions.restart({ battle: b }));
-    f.add(s, 'seed').name('seed').step(1);
-    f.add({ apply: () => this.actions.restart({ seed: s.seed >>> 0 }) }, 'apply').name('restart with seed');
-    f.add({ random: () => this.actions.restart({ seed: 'random' }) }, 'random').name('restart random seed');
-    f.add({ copy: () => this.copyLink() }, 'copy').name('copy repro link');
-    const run = { depth: 1 };
-    f.add(run, 'depth', 1, 10, 1).name('run step');
-    f.add({ go: () => this.actions.runDepth(run.depth) }, 'go').name('go to step');
+  // ---------- Tune ----------
 
-    const tf = this.gui.addFolder('Time');
-    tf.add(s, 'timeScale', [0.25, 0.5, 1, 2]).name('time scale').onChange((v: number) => {
-      tuning.sim.TIME_SCALE = v;
-      this.clock.timeScale = v;
-      saveTuningOverrides();
+  /** `parentPath` keys the remembered expansion: `Chips/Cannon`, `Tools/Cheats`. */
+  private addFolder(parent: FolderApi | TabPageApi, title: string, parentPath: string): FolderNode {
+    const path = parentPath ? `${parentPath}/${title}` : title;
+    const api = parent.addFolder({ title, expanded: this.ui.folds[path] ?? false });
+    const node = { path, api };
+    api.on('fold', (ev) => {
+      if (ev.target !== api || this.folding) return;
+      this.ui.folds[path] = ev.expanded;
+      this.saveUi();
     });
-    tf.add(s, 'paused').name('pause sim').onChange((v: boolean) => (this.clock.paused = v));
-    tf.add({ step: () => this.clock.stepOnce(1) }, 'step').name('step 1 tick');
-    tf.add({ step: () => this.clock.stepOnce(tuning.sim.SIM_HZ) }, 'step').name('step 1 second');
-
-    const vf = this.gui.addFolder('View');
-    vf.add(s, 'showCoords').name('cell coords').onChange((v: boolean) => this.actions.setCoordsVisible(v));
-    vf.add(s, 'showOverlay').name('stats overlay').onChange((v: boolean) => this.actions.setOverlayVisible(v));
-    vf.add(s, 'logEvents').name('log events').onChange((v: boolean) => (events.logEnabled = v));
-
-    // More cheats arrive with their systems (fill gauge, give chip...).
-    const cf = this.gui.addFolder('Cheats');
-    const a = this.actions;
-    const hp = { value: tuning.player.PLAYER_MAX_HP };
-    cf.add(a.cheats, 'god').name('god mode (no damage)');
-    cf.add(a.cheats, 'aiEnabled').name('enemy AI');
-    cf.add({ kill: () => a.killAll() }, 'kill').name('kill wave');
-    cf.add({ force: () => a.forceAttack() }, 'force').name('force enemy attack');
-    const give = { chip: 'cannon' as ChipId };
-    cf.add(give, 'chip', Object.keys(CHIPS)).name('chip to give');
-    cf.add({ give: () => a.giveChip(give.chip) }, 'give').name('add chip to queue');
-    cf.add(hp, 'value', 0, tuning.player.PLAYER_MAX_HP, 1).name('player HP');
-    cf.add({ set: () => a.setPlayerHp(hp.value) }, 'set').name('set player HP');
-    cf.add({ retry: () => a.restart({}) }, 'retry').name('restart battle');
-    cf.close();
-
-    const tut = this.gui.addFolder('Tutorial');
-    const lesson = { n: 1 };
-    tut.add(tuning.tutorial, 'TUT_FREE_MOVE', 0, 15, 0.5).name('free move, s').onFinishChange(() => saveTuningOverrides());
-    tut.add(lesson, 'n', { '1 move + cannon': 1, '2 two cannons': 2, '3 grab + sword': 3, '4 final': 4 }).name('lesson');
-    tut.add({ go: () => a.tutorial(lesson.n) }, 'go').name('start from lesson');
-    tut.add({ restart: () => a.tutorial(1) }, 'restart').name('restart tutorial');
-    tut.add({ skip: () => a.skipTutorialBeat() }, 'skip').name('skip current step');
-    tut.close();
-
-    const ff = this.gui.addFolder('Field');
-    const cell = { x: 1, y: 1, state: 'BROKEN' as DebugCellState | 'NONE' };
-    ff.add(cell, 'x', 0, 2, 1).name('cell x');
-    ff.add(cell, 'y', 0, 5, 1).name('cell y');
-    ff.add(cell, 'state', ['BROKEN', 'EMPTY', 'OBJECT', 'NONE']).name('state');
-    ff.add({ apply: () => a.setCellState(cell.x, cell.y, cell.state) }, 'apply').name('apply to cell');
-    const sim = { action: 'crack' as 'crack' | 'break' | 'repair' | 'grab' | 'rock' };
-    ff.add(sim, 'action', ['crack', 'break', 'repair', 'grab', 'rock']).name('sim action');
-    ff.add({ run: () => a.simPanel(cell.x, cell.y, sim.action) }, 'run').name('apply to sim');
-    ff.add({ clear: () => a.clearCellStates() }, 'clear').name('clear cell states');
-    ff.add({ demo: () => a.demoCellStates() }, 'demo').name('demo all states');
-    ff.close();
+    this.folders.push(node);
+    return node;
   }
 
-  private buildTuning(): void {
-    const root = this.gui.addFolder('Tuning');
-    root.add({ reset: () => this.resetAll() }, 'reset').name('reset to defaults');
-    root.add({ exp: () => this.exportJson() }, 'exp').name('export JSON');
-    const groups = tuning as unknown as Record<string, Record<string, number | boolean | string>>;
-    const defaults = DEFAULT_TUNING as unknown as Record<string, Record<string, number | boolean | string>>;
-    for (const group of alphabeticalKeys(groups) as (keyof Tuning)[]) {
-      const values = groups[group] as Record<string, number | boolean | string>;
-      const f = root.addFolder(group);
-      for (const key of alphabeticalKeys(values)) {
-        const def = defaults[group]?.[key];
-        let c;
-        const kind = tuningControlKind(key, values[key]);
-        if (kind === 'number') {
-          const range = RANGES[key];
-          if (range) {
-            c = f.add(values, key, range[0], range[1], range[2]);
-          } else {
-            const d = Math.abs(def as number);
-            const max = d === 0 ? 10 : d * 4;
-            const step = Number.isInteger(def) && d >= 1 ? 1 : 0.01;
-            c = f.add(values, key, 0, max, step);
-          }
-        } else if (kind === 'color') {
-          c = f.addColor(values, key);
-        } else {
-          c = f.add(values, key);
-        }
-        c.onFinishChange(() => {
-          if (key === 'TIME_SCALE') this.clock.timeScale = tuning.sim.TIME_SCALE;
-          if (key === 'SIM_HZ') this.clock.options.hz = tuning.sim.SIM_HZ;
-          saveTuningOverrides();
-        });
+  private buildTune(parent: FolderApi | TabPageApi, folder: TuneFolder, trail: readonly FolderNode[]): void {
+    const node = this.addFolder(parent, folder.title, trail.at(-1)?.path ?? '');
+    const chain = [...trail, node];
+    const groups = layoutGroups([folder]);
+    node.api.addButton({ title: `reset ${folder.title}` }).on('click', () => this.resetFolder(groups));
+    for (const group of folder.groups ?? []) this.bindGroup(node.api, group, folder.title, chain);
+    for (const child of folder.children ?? []) this.buildTune(node.api, child, chain);
+  }
+
+  private bindGroup(folder: FolderApi, group: GroupKey, title: string, chain: readonly FolderNode[]): void {
+    const values = (tuning as unknown as Groups)[group]!;
+    const defaults = (DEFAULT_TUNING as unknown as Groups)[group]!;
+    for (const key of Object.keys(defaults)) {
+      const def = defaults[key]!;
+      const kind = tuningControlKind(def);
+      let binding: BindingApi;
+      if (kind === 'number') {
+        const [min, max, step] = sliderRange(key, def as number);
+        binding = folder.addBinding(values, key, { min, max, step });
+      } else if (kind === 'color') {
+        binding = folder.addBinding(values, key, { view: 'color' });
+      } else {
+        binding = folder.addBinding(values, key);
       }
-      f.close();
+      binding.on('change', (ev) => {
+        if (!ev.last) return;
+        this.applyClock(key);
+        saveTuningOverrides();
+        this.refreshVisibility();
+      });
+      this.entries.push({ group, key, title, binding, folders: chain });
     }
-    root.close();
+  }
+
+  private applyClock(key?: string): void {
+    if (!key || key === 'TIME_SCALE') {
+      this.clock.timeScale = tuning.sim.TIME_SCALE;
+      this.state.timeScale = tuning.sim.TIME_SCALE;
+    }
+    if (!key || key === 'SIM_HZ') this.clock.options.hz = tuning.sim.SIM_HZ;
+  }
+
+  /** Filter and "changed only" hide bindings and empty folders; changed values are marked. */
+  private refreshVisibility(): void {
+    const query = this.filterInput.value.trim();
+    const narrowing = query !== '' || this.onlyChanged;
+    const changed = new Set(changedValues(tuning, DEFAULT_TUNING).map((c) => `${c.group}.${c.key}`));
+    const shown = new Set<FolderNode>();
+    for (const e of this.entries) {
+      const isChanged = changed.has(`${e.group}.${e.key}`);
+      e.binding.element.classList.toggle('debug-changed', isChanged);
+      const visible = matchesFilter(query, e.group, e.key, e.title) && (!this.onlyChanged || isChanged);
+      e.binding.hidden = !visible;
+      if (visible) for (const f of e.folders) shown.add(f);
+    }
+    this.folding = true;
+    for (const f of this.folders) {
+      // A narrowed view opens every folder with a match and hides the rest.
+      f.api.hidden = narrowing && !shown.has(f);
+      f.api.expanded = narrowing ? shown.has(f) : this.ui.folds[f.path] ?? false;
+    }
+    this.folding = false;
+    this.changedButton.classList.toggle('on', this.onlyChanged);
+    this.changedButton.textContent = `changed ${changed.size}`;
+  }
+
+  private resetFolder(groups: readonly GroupKey[]): void {
+    resetGroups(tuning, DEFAULT_TUNING, groups);
+    saveTuningOverrides();
+    this.afterReset();
   }
 
   private resetAll(): void {
     resetTuning();
-    this.clock.timeScale = tuning.sim.TIME_SCALE;
-    this.clock.options.hz = tuning.sim.SIM_HZ;
-    this.state.timeScale = tuning.sim.TIME_SCALE;
-    this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
+    this.afterReset();
   }
 
-  private exportJson(): void {
-    const json = JSON.stringify(tuning, null, 2);
-    console.info('[tuning]\n' + json);
-    navigator.clipboard?.writeText(json).catch(() => undefined);
+  private afterReset(): void {
+    this.applyClock();
+    this.pane.refresh();
+    this.refreshVisibility();
+  }
+
+  private copyChanges(): void {
+    const changes = changedValues(tuning, DEFAULT_TUNING);
+    const text = formatChanges(changes);
+    console.info('[tuning]\n' + text);
+    navigator.clipboard?.writeText(text).catch(() => undefined);
+    this.copyButton.textContent = `copied ${changes.length}`;
+    setTimeout(() => (this.copyButton.textContent = 'copy'), 1200);
+  }
+
+  private barButton(label: string, onClick: () => void): HTMLButtonElement {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  private saveUi(): void {
+    try {
+      localStorage.setItem(UI_STORAGE_KEY, JSON.stringify(this.ui));
+    } catch {
+      // storage unavailable
+    }
+  }
+
+  // ---------- Tools ----------
+
+  private buildTools(page: TabPageApi): void {
+    const s = this.state;
+    const a = this.actions;
+    const folder = (title: string) => this.addFolder(page, title, 'Tools').api;
+
+    const f = folder('Session');
+    const folderParam = { folder: new URLSearchParams(location.search).get('folder') ?? 'starter' };
+    f.addBinding(folderParam, 'folder', { label: 'folder (reloads)', options: Object.fromEntries(Object.keys(FOLDERS).map((k) => [k, k])) })
+      .on('change', (ev) => {
+        const url = new URL(location.href);
+        url.searchParams.set('folder', String(ev.value));
+        location.href = url.toString();
+      });
+    f.addBinding(s, 'battle', { options: { 1: 1, 2: 2, 3: 3, 4: 4 } }).on('change', (ev) => a.restart({ battle: ev.value }));
+    f.addBinding(s, 'seed', { step: 1 });
+    f.addButton({ title: 'restart with seed' }).on('click', () => a.restart({ seed: s.seed >>> 0 }));
+    f.addButton({ title: 'restart random seed' }).on('click', () => a.restart({ seed: 'random' }));
+    f.addButton({ title: 'restart battle' }).on('click', () => a.restart({}));
+    f.addButton({ title: 'copy repro link' }).on('click', () => this.copyLink());
+    const run = { step: 1 };
+    f.addBinding(run, 'step', { label: 'run step', min: 1, max: 10, step: 1 });
+    f.addButton({ title: 'go to run step' }).on('click', () => a.runDepth(run.step));
+
+    const tf = folder('Time');
+    tf.addBinding(s, 'timeScale', { label: 'time scale', options: { '0.25×': 0.25, '0.5×': 0.5, '1×': 1, '2×': 2 } })
+      .on('change', (ev) => {
+        tuning.sim.TIME_SCALE = ev.value;
+        this.clock.timeScale = ev.value;
+        saveTuningOverrides();
+        this.pane.refresh();
+        this.refreshVisibility();
+      });
+    tf.addBinding(s, 'paused', { label: 'pause sim' }).on('change', (ev) => (this.clock.paused = ev.value));
+    tf.addButton({ title: 'step 1 tick' }).on('click', () => this.clock.stepOnce(1));
+    tf.addButton({ title: 'step 1 second' }).on('click', () => this.clock.stepOnce(tuning.sim.SIM_HZ));
+
+    const vf = folder('View');
+    vf.addBinding(s, 'showCoords', { label: 'cell coords' }).on('change', (ev) => a.setCoordsVisible(ev.value));
+    vf.addBinding(s, 'showOverlay', { label: 'stats overlay' }).on('change', (ev) => a.setOverlayVisible(ev.value));
+    vf.addBinding(s, 'logEvents', { label: 'log events' }).on('change', (ev) => (events.logEnabled = ev.value));
+
+    const cf = folder('Cheats');
+    cf.addBinding(a.cheats, 'god', { label: 'god mode' });
+    cf.addBinding(a.cheats, 'aiEnabled', { label: 'enemy AI' });
+    cf.addButton({ title: 'kill wave' }).on('click', () => a.killAll());
+    cf.addButton({ title: 'force enemy attack' }).on('click', () => a.forceAttack());
+    const give = { chip: 'cannon' as ChipId };
+    cf.addBinding(give, 'chip', { label: 'chip', options: Object.fromEntries(Object.keys(CHIPS).map((k) => [k, k])) });
+    cf.addButton({ title: 'add chip to queue' }).on('click', () => a.giveChip(give.chip));
+    const hp = { hp: tuning.player.PLAYER_MAX_HP };
+    cf.addBinding(hp, 'hp', { label: 'player HP', min: 0, max: tuning.player.PLAYER_MAX_HP, step: 1 });
+    cf.addButton({ title: 'set player HP' }).on('click', () => a.setPlayerHp(hp.hp));
+
+    const tutNode = this.addFolder(page, 'Tutorial', 'Tools');
+    const lesson = { lesson: 1 };
+    tutNode.api.addBinding(lesson, 'lesson', { options: { '1 move + cannon': 1, '2 two cannons': 2, '3 grab + sword': 3, '4 final': 4 } });
+    tutNode.api.addButton({ title: 'start from lesson' }).on('click', () => a.tutorial(lesson.lesson));
+    tutNode.api.addButton({ title: 'skip current step' }).on('click', () => a.skipTutorialBeat());
+    this.bindGroup(tutNode.api, 'tutorial', 'Tutorial', [tutNode]);
+
+    const ff = folder('Field debug');
+    const cell = { x: 1, y: 1, state: 'BROKEN' as DebugCellState | 'NONE' };
+    ff.addBinding(cell, 'x', { min: 0, max: 2, step: 1 });
+    ff.addBinding(cell, 'y', { min: 0, max: 5, step: 1 });
+    ff.addBinding(cell, 'state', { options: { BROKEN: 'BROKEN', EMPTY: 'EMPTY', OBJECT: 'OBJECT', NONE: 'NONE' } });
+    ff.addButton({ title: 'apply look to cell' }).on('click', () => a.setCellState(cell.x, cell.y, cell.state));
+    const sim = { action: 'crack' as 'crack' | 'break' | 'repair' | 'grab' | 'rock' };
+    ff.addBinding(sim, 'action', { label: 'sim action', options: { crack: 'crack', break: 'break', repair: 'repair', grab: 'grab', rock: 'rock' } });
+    ff.addButton({ title: 'apply to sim' }).on('click', () => a.simPanel(cell.x, cell.y, sim.action));
+    ff.addButton({ title: 'clear cell looks' }).on('click', () => a.clearCellStates());
+    ff.addButton({ title: 'demo all looks' }).on('click', () => a.demoCellStates());
   }
 
   private copyLink(): void {

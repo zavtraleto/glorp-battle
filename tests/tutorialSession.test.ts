@@ -153,7 +153,7 @@ describe('tutorial mode', () => {
     run(s, 60);
     expect(s.tutorialCallout()).toBeNull();
     s.world.killAllEnemies();
-    run(s, T(tuning.fx.RESULT_DELAY_WIN) + 2);
+    run(s, T(tuning.flow.RESULT_DELAY_WIN) + 2);
     expect(s.screen).toBe('COMPLETE');
     s.toTitle();
     expect(s.screen).toBe('TITLE');
@@ -212,7 +212,7 @@ describe('tutorial mode', () => {
     attack(s);
     run(s, 30);
     expect(s.world.enemies[0]?.alive).toBe(true);
-    untilCallout(s, T(tuning.chips.HAND_REFILL_COOLDOWN) + 120);
+    untilCallout(s, T(tuning.hand.REFILL_COOLDOWN) + 120);
     expect(s.tutorialCallout()?.text).toBe('SELECT');
   });
 

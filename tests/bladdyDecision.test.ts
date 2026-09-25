@@ -49,13 +49,13 @@ describe('Bladdy sample-and-commit decisions', () => {
     const bladdy = w.enemies[0] as Bladdy;
     placePlayer(w, 2, 4);
 
-    run(w, T(tuning.bladdy.BLD_SETTLE_TIME));
+    run(w, T(tuning.bladdy.SETTLE_TIME));
     expect({ state: bladdy.state, x: bladdy.x, y: bladdy.y }).toEqual({ state: 'MOVE', x: 0, y: 1 });
 
     placePlayer(w, 0, 4);
     run(w, T(tuning.bladdy.MOVE_TIME));
     expect({ state: bladdy.state, x: bladdy.x, y: bladdy.y }).toEqual({ state: 'IDLE', x: 0, y: 1 });
-    run(w, T(tuning.bladdy.BLD_SETTLE_TIME) - 1);
+    run(w, T(tuning.bladdy.SETTLE_TIME) - 1);
     expect({ state: bladdy.state, x: bladdy.x, y: bladdy.y }).toEqual({ state: 'IDLE', x: 0, y: 1 });
     step(w);
     expect({ state: bladdy.state, x: bladdy.x, y: bladdy.y }).toEqual({ state: 'MOVE', x: 0, y: 2 });
@@ -66,11 +66,11 @@ describe('Bladdy sample-and-commit decisions', () => {
     const bladdy = w.enemies[0] as Bladdy;
     placePlayer(w, 2, 4);
 
-    run(w, T(tuning.bladdy.BLD_SETTLE_TIME));
+    run(w, T(tuning.bladdy.SETTLE_TIME));
     expect({ state: bladdy.state, x: bladdy.x, y: bladdy.y }).toEqual({ state: 'MOVE', x: 1, y: 2 });
-    run(w, T(tuning.bladdy.MOVE_TIME + tuning.bladdy.BLD_SETTLE_TIME));
+    run(w, T(tuning.bladdy.MOVE_TIME + tuning.bladdy.SETTLE_TIME));
     expect({ state: bladdy.state, x: bladdy.x, y: bladdy.y }).toEqual({ state: 'MOVE', x: 2, y: 2 });
-    run(w, T(tuning.bladdy.MOVE_TIME + tuning.bladdy.BLD_SETTLE_TIME));
+    run(w, T(tuning.bladdy.MOVE_TIME + tuning.bladdy.SETTLE_TIME));
     expect({ state: bladdy.state, x: bladdy.x, y: bladdy.y }).toEqual({ state: 'INTENTION', x: 2, y: 2 });
   });
 
@@ -79,7 +79,7 @@ describe('Bladdy sample-and-commit decisions', () => {
     const bladdy = w.enemies[0] as Bladdy;
     placePlayer(w, 2, 3);
 
-    run(w, T(tuning.bladdy.BLD_SETTLE_TIME));
+    run(w, T(tuning.bladdy.SETTLE_TIME));
     expect(bladdy.state).toBe('INTENTION');
     placePlayer(w, 0, 5);
     expect(w.pushEnemy(bladdy, { x: 0, y: 2 })).toBe('moved');
@@ -103,7 +103,7 @@ describe('Bladdy sample-and-commit decisions', () => {
     const bladdy = w.enemies[0] as Bladdy;
     placePlayer(w, 1, 4);
 
-    run(w, T(tuning.bladdy.BLD_SETTLE_TIME + tuning.bladdy.INTENTION_TIME));
+    run(w, T(tuning.bladdy.SETTLE_TIME + tuning.bladdy.INTENTION_TIME));
     expect(w.dangerCells()).toEqual([{ x: 1, y: 3 }, { x: 1, y: 4 }]);
     placePlayer(w, 2, 5);
     const events = run(w, T(tuning.bladdy.LOCK_TIME + tuning.bladdy.COUNTER_TIME));
@@ -119,14 +119,14 @@ describe('Bladdy sample-and-commit decisions', () => {
   });
 
   it('uses committed AreaGrab after repeated out-of-range decisions, then advances', () => {
-    tuning.bladdy.BLD_AREA_GRAB_DECISIONS = 2;
+    tuning.bladdy.AREA_GRAB_DECISIONS = 2;
     const w = world(1, 2);
     const bladdy = w.enemies[0] as Bladdy;
     placePlayer(w, 1, 5);
 
-    run(w, T(tuning.bladdy.BLD_SETTLE_TIME));
+    run(w, T(tuning.bladdy.SETTLE_TIME));
     expect(bladdy.state).toBe('IDLE');
-    run(w, T(tuning.bladdy.BLD_SETTLE_TIME));
+    run(w, T(tuning.bladdy.SETTLE_TIME));
     expect(bladdy.state).toBe('INTENTION');
     run(w, T(tuning.bladdy.INTENTION_TIME));
     expect(w.dangerCells()).toEqual([{ x: 0, y: 3 }, { x: 1, y: 3 }, { x: 2, y: 3 }]);
@@ -135,29 +135,29 @@ describe('Bladdy sample-and-commit decisions', () => {
     expect([w.field.owner(0, 3), w.field.owner(1, 3), w.field.owner(2, 3)]).toEqual([
       'enemy', 'enemy', 'enemy',
     ]);
-    run(w, T(tuning.bladdy.STRIKE_TIME + tuning.bladdy.RECOVERY_TIME + tuning.bladdy.BLD_SETTLE_TIME));
+    run(w, T(tuning.bladdy.STRIKE_TIME + tuning.bladdy.RECOVERY_TIME + tuning.bladdy.SETTLE_TIME));
     expect({ state: bladdy.state, x: bladdy.x, y: bladdy.y }).toEqual({ state: 'MOVE', x: 1, y: 3 });
   });
 
-  it('AreaGrab leaves the player their cell and hurts them for BLD_AREA_GRAB_DMG', () => {
-    tuning.bladdy.BLD_AREA_GRAB_DECISIONS = 1;
+  it('AreaGrab leaves the player their cell and hurts them for AREA_GRAB_DMG', () => {
+    tuning.bladdy.AREA_GRAB_DECISIONS = 1;
     const w = world(0, 2);
     const bladdy = w.enemies[0] as Bladdy;
     w.placeObject('rock', 1, 2, 'enemy');
     placePlayer(w, 2, 3);
 
-    run(w, T(tuning.bladdy.BLD_SETTLE_TIME));
+    run(w, T(tuning.bladdy.SETTLE_TIME));
     expect(bladdy.state).toBe('INTENTION');
     run(w, T(tuning.bladdy.INTENTION_TIME));
     expect(w.dangerCells()).toEqual([{ x: 0, y: 3 }, { x: 1, y: 3 }, { x: 2, y: 3 }]);
 
     run(w, T(tuning.bladdy.LOCK_TIME + tuning.bladdy.COUNTER_TIME));
     expect([w.field.owner(0, 3), w.field.owner(1, 3), w.field.owner(2, 3)]).toEqual(['enemy', 'enemy', 'player']);
-    expect(w.player.hp).toBe(w.player.maxHp - tuning.bladdy.BLD_AREA_GRAB_DMG);
+    expect(w.player.hp).toBe(w.player.maxHp - tuning.bladdy.AREA_GRAB_DMG);
   });
 
-  it('never grabs past the front player row (BLD_MIN_PLAYER_ROWS)', () => {
-    tuning.bladdy.BLD_AREA_GRAB_DECISIONS = 1;
+  it('never grabs past the front player row (MIN_PLAYER_ROWS)', () => {
+    tuning.bladdy.AREA_GRAB_DECISIONS = 1;
     const w = world(0, 2);
     const bladdy = w.enemies[0] as Bladdy;
     for (let x = 0; x < 3; x++) w.field.setOwner(x, 3, 'enemy', w.tick);
@@ -191,15 +191,15 @@ describe('Bladdy attack lock', () => {
     const [a, b] = w.enemies as Bladdy[];
     // Both have the player in WideSword reach.
     placePlayer(w, 1, 3);
-    run(w, T(tuning.bladdy.BLD_SETTLE_TIME));
+    run(w, T(tuning.bladdy.SETTLE_TIME));
     expect([a!.state, b!.state].sort()).toEqual(['IDLE', 'INTENTION']);
     const first = a!.state === 'INTENTION' ? a! : b!;
     const second = first === a ? b! : a!;
     const b_ = tuning.bladdy;
     run(w, T(b_.INTENTION_TIME + b_.LOCK_TIME + b_.COUNTER_TIME + b_.STRIKE_TIME + b_.RECOVERY_TIME) - 1);
     expect(second.state).toBe('IDLE');
-    // It retries every BLD_SETTLE_TIME, so it starts within one settle.
-    run(w, T(b_.BLD_SETTLE_TIME) + 2);
+    // It retries every SETTLE_TIME, so it starts within one settle.
+    run(w, T(b_.SETTLE_TIME) + 2);
     expect(['INTENTION', 'LOCK']).toContain(second.state);
   });
 });
