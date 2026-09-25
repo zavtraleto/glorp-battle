@@ -112,7 +112,7 @@ export class PlayerView {
     // Blink while invulnerable.
     const blinkTicks = Math.max(1, Math.round(tuning.sim.SIM_HZ / Math.max(1, tuning.fx.IFRAME_BLINK_HZ) / 2));
     this.sprite.visible = !player.invulnerable || Math.floor(tick / blinkTicks) % 2 === 0;
-    this.pixels.setDissolve(!player.alive ? 0.6 : player.invisTicks > 0 ? 0.5 : 0);
+    this.pixels.setDissolve(!player.alive ? 0.6 : 0);
     this.pixels.setRipple(player.guard ? 0.2 : 0, time);
   }
 }
@@ -171,8 +171,6 @@ export class EnemyView {
     if (spawn < 1) a.y += (1 - spawn) * (1 - spawn) * SPAWN_DROP;
     this.pixels.place(a, CELL_WIDTH * this.widthShare, frame.camera, frame.width, frame.height, lift);
     this.sprite.renderOrder = rowRenderOrder(enemy.y);
-    // Paralysis: a steady flicker.
-    if (enemy.paralyzeTicks > 0 && Math.floor(tick / 4) % 2 === 0) flash = true;
     const sinceHit = (tick - enemy.lastHitTick + alpha) / tuning.sim.SIM_HZ;
     const hitRipple = sinceHit >= 0 && sinceHit < HIT_RIPPLE_TIME ? 1 - sinceHit / HIT_RIPPLE_TIME : 0;
     this.pixels.setRipple(Math.max(hitRipple, 1 - spawn), time);

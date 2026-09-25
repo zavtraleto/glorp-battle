@@ -9,7 +9,7 @@ type BladdyIntent =
   | { kind: 'wideSword' | 'longSword'; cells: Cell[] }
   | { kind: 'areaGrab'; cells: Cell[] };
 
-// Bladdy (Swordy, MMBN3; timings MMBN6) — GDD §8.6.
+// Bladdy (Swordy, MMBN3; timings MMBN6) — GDD §8.4.
 // Commits one positional step or one fixed sword/AreaGrab action per decision.
 // Only one Bladdy attacks at a time (`EnemyContext.claimAttack`); the others
 // stand while it swings.

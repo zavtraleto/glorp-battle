@@ -262,27 +262,11 @@ describe('Combo Break', () => {
     step(w, true);
     w.player.iframeTicks = 2;
     const attack = new Shockwave(901, w.player.x, w.player.y, w.tick, {
-      dir: 1, damage: 1, stepTicks: 99, owner: 'enemy',
+      dir: 1, damage: 1, stepTicks: 99,
     });
 
     expect(w.hitPlayerAt(attack, w.player.x, w.player.y, 1)).toBe(false);
     expect(w.combo?.status).toBe('active');
-  });
-
-  it('leaves an already spawned player projectile alive after Combo Break', () => {
-    const w = world();
-    give(w, 'cannon', 'sword');
-    step(w, true);
-    const wave = new Shockwave(902, 0, 5, w.playerTick, {
-      dir: -1, damage: 1, stepTicks: 6, owner: 'player',
-    });
-    w.attacks.push(wave);
-
-    w.resolveHit({ target: w.player, damage: 1 });
-    run(w, 6);
-
-    expect(w.attacks).toContain(wave);
-    expect(wave.y).toBe(4);
   });
 });
 

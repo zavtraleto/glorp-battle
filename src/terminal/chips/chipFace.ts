@@ -57,11 +57,10 @@ export function cooldownBodyLevel(progress: number): number {
   return 0.18 + p * 0.82;
 }
 
-/** The number on the top panel: damage, healing with a `+`, or nothing. */
+/** The number on the top panel: damage, or nothing. */
 export function faceNumber(defId: ChipId): string {
-  const def = CHIPS[defId];
-  if (def.power !== null) return String(def.power);
-  return def.heal ? `+${def.heal}` : '';
+  const power = CHIPS[defId].power;
+  return power === null ? '' : String(power);
 }
 
 /** One texel of shadow along the top and left, one of lit plastic below and right. */

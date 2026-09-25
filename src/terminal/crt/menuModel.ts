@@ -39,7 +39,6 @@ export interface MenuSession {
   maxHp: number;
   folderSize: number;
   next: NextBattle;
-  healed: boolean;
   results: readonly MenuResult[];
   lastResult: MenuResult | undefined;
   totalTime: number;

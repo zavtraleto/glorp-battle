@@ -14,7 +14,7 @@ beforeEach(() => {
 });
 
 function make(): Session {
-  return new Session({ seed: 42, cheats: { god: false, aiEnabled: false }, folder: 'basic' });
+  return new Session({ seed: 42, cheats: { god: false, aiEnabled: false }, folder: 'starter' });
 }
 
 function tick(s: Session, commands: Command[] = []): void {
@@ -65,7 +65,7 @@ describe('Session', () => {
 
   it('Start opens the path with the next encounter; Fight starts it', () => {
     const s = make();
-    s.start('basic');
+    s.start();
     expect(s.screen).toBe('PATH');
     expect(s.folderSize).toBe(8);
     const encounter = s.run!.encounter;
@@ -80,7 +80,7 @@ describe('Session', () => {
 
   it('a win goes straight to the next step with HP and the folder carried over', () => {
     const s = make();
-    s.start('basic');
+    s.start();
     s.fight();
     enterAction(s);
     s.world.player.hp = 6;
@@ -96,7 +96,7 @@ describe('Session', () => {
 
   it('death leads to GAME OVER, then back to the title', () => {
     const s = make();
-    s.start('basic');
+    s.start();
     s.fight();
     enterAction(s);
     die(s);
@@ -107,7 +107,7 @@ describe('Session', () => {
 
   it('clearing every Play stage completes the run', () => {
     const s = make();
-    s.start('basic');
+    s.start();
     for (let step = 1; step <= RUN_STEPS; step++) {
       expect(s.screen).toBe('PATH');
       s.fight();
@@ -123,7 +123,7 @@ describe('Session', () => {
 
   it('abandoning from the pause menu counts as a death', () => {
     const s = make();
-    s.start('basic');
+    s.start();
     s.fight();
     enterAction(s);
     s.pause();
@@ -134,8 +134,8 @@ describe('Session', () => {
   it('battle seeds are stable for the same session seed', () => {
     const a = make();
     const b = make();
-    a.start('basic');
-    b.start('basic');
+    a.start();
+    b.start();
     a.fight();
     b.fight();
     expect(a.world.seed).toBe(b.world.seed);
@@ -147,7 +147,7 @@ describe('Session', () => {
     s.debugJump(3);
     expect(s.screen).toBe('BATTLE');
     expect(s.world.encounter.id).toBe('n3');
-    expect(s.world.chips.chips).toHaveLength(30);
+    expect(s.world.chips.chips).toHaveLength(folderChips('starter').length);
     expect(s.debugEncounter('e1')).toBe(true);
     expect(s.world.enemies.map((e) => e.kind)).toEqual(['bladdy', 'mettik']);
     expect(s.debugEncounter('nope')).toBe(false);
@@ -159,20 +159,12 @@ describe('Session', () => {
     expect(s.folderSize).toBe(folderChips('all').length);
     expect(s.world.chips.chips).toHaveLength(s.folderSize);
   });
-
-  it('debugDepth clears the heal note', () => {
-    const s = make();
-    s.start('basic');
-    s.run!.healed = true;
-    s.debugDepth(7);
-    expect(s.healed).toBe(false);
-  });
 });
 
 describe('pause', () => {
   it('freezes the battle and resumes where it left off', () => {
     const s = make();
-    s.start('basic');
+    s.start();
     s.fight();
     enterAction(s);
     run(s, 30);
@@ -193,7 +185,7 @@ describe('pause', () => {
     const s = make();
     s.pause();
     expect(s.screen).toBe('TITLE');
-    s.start('basic');
+    s.start();
     s.fight();
     run(s, T(tuning.fx.INTRO_TIME) - 1);
     expect(s.world.state).toBe('BATTLE_INTRO');

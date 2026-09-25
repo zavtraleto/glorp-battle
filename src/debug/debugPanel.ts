@@ -98,7 +98,6 @@ const RANGES: Record<string, [number, number, number]> = {
   LAYOUT_DRAW: [0, 0.12, 0.01],
   COUNTER_STAGGER_TIME: [0, 2, 0.01],
   HAND_REFILL_COOLDOWN: [0, 10, 0.1],
-  DRAW_PREVIEW: [0, 6, 1],
   HAND_SIZE: [3, 8, 1],
   ORIGINAL_COLOR_RETENTION: [0, 1, 0.01],
   BASE_BRIGHTNESS: [0, 1, 0.01],
@@ -180,7 +179,7 @@ export class DebugPanel {
   private buildSession(): void {
     const s = this.state;
     const f = this.gui.addFolder('Session');
-    f.add({ folder: new URLSearchParams(location.search).get('folder') ?? 'basic' }, 'folder', Object.keys(FOLDERS))
+    f.add({ folder: new URLSearchParams(location.search).get('folder') ?? 'starter' }, 'folder', Object.keys(FOLDERS))
       .name('folder (reloads)')
       .onChange((v: string) => {
         const url = new URL(location.href);

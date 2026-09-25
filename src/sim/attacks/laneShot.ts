@@ -12,7 +12,6 @@ export interface LaneShotOptions {
 }
 
 export class LaneShot implements LaneMover {
-  readonly timeDomain = 'world' as const;
   readonly hitIds = new Set<number>();
   done = false;
   lastStepTick: number;

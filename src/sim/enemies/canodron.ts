@@ -47,11 +47,6 @@ export class Canodron extends Enemy {
     this.startCursor(tick);
   }
 
-  override freezePhase(ticks = 1): void {
-    super.freezePhase(ticks);
-    this.cursorStepTick += ticks;
-  }
-
   override updateStagger(ctx: EnemyContext): void {
     if (this.cursorY >= 0 && !this.intent) this.cursorStepTick++;
     super.updateStagger(ctx);

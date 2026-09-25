@@ -22,8 +22,6 @@ export type ChipId =
   | 'guard';
 
 export type UseTimeGroup = 'CANNON' | 'SWORD' | 'FIELD';
-export type HitStepKey = 'VULCAN_HIT_STEP';
-export type Rarity = 'common' | 'uncommon' | 'rare';
 
 export interface Offset {
   x: number;
@@ -33,15 +31,12 @@ export interface Offset {
 export type Shape =
   | { t: 'lane'; around?: readonly Offset[] }
   | { t: 'near'; cells: readonly Offset[] }
-  | { t: 'lob'; depth: number; area: readonly Offset[] }
-  | { t: 'wave' }
   | { t: 'self' };
 export type ShapeKind = Shape['t'];
 
 export interface OnHit {
   push?: true;
   pushRequiresDamage?: true;
-  paralyze?: true;
 }
 
 export type FieldAction = 'claim' | 'arm' | 'occupy' | 'break';
@@ -53,15 +48,10 @@ export interface ChipDef {
   kind: 'attack' | 'support' | 'field';
   useTime: UseTimeGroup;
   color: ChipColor;
-  rarity: Rarity;
   shape: Shape;
-  hits?: number;
-  hitStep?: HitStepKey;
   onHit?: OnHit;
   field?: FieldAction;
   guard?: true;
-  heal?: number;
-  invis?: true;
 }
 
 const AHEAD: readonly Offset[] = [{ x: 0, y: -1 }];
@@ -69,7 +59,7 @@ const WIDE: readonly Offset[] = [{ x: -1, y: -1 }, { x: 0, y: -1 }, { x: 1, y: -
 const SIDES: readonly Offset[] = [{ x: -1, y: 0 }, { x: 1, y: 0 }];
 const LANE: Shape = { t: 'lane' };
 const SELF: Shape = { t: 'self' };
-const BASE = { color: 'red', rarity: 'common' } as const;
+const BASE = { color: 'red' } as const;
 
 export const CHIPS: Record<ChipId, ChipDef> = {
   cannon: {

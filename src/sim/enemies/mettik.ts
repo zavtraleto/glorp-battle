@@ -116,7 +116,6 @@ export class Mettik extends Enemy {
             dir: 1,
             damage: this.dmg(m.MET_DMG),
             stepTicks: this.ticks(m.MET_WAVE_CELL_TIME),
-            owner: 'enemy',
           }),
         );
         if (m.MET_HANDOFF_ON_WAVE) this.handOn(ctx);

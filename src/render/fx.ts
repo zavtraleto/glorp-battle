@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { CHIPS } from '../data/chips';
 import { secondsToTicks, tuning } from '../config/tuning';
-import type { PlayerBomb } from '../sim/attacks/bomb';
 import type { LaneMover } from '../sim/attacks/shockwave';
 import { ROWS, type Cell } from '../sim/grid';
 import type { SimEvent } from '../sim/events';
@@ -15,7 +14,7 @@ import { PLAYER_ID } from '../sim/player';
 // strips and dots in palette signals. Floor effects draw under the creatures,
 // air effects over them.
 
-type TimedKind = 'tracer' | 'enemyTracer' | 'slash' | 'enemySlash' | 'heal' | 'blast' | 'warp' | 'spark' | 'kill';
+type TimedKind = 'tracer' | 'enemyTracer' | 'slash' | 'enemySlash' | 'warp' | 'spark' | 'kill';
 
 interface Timed {
   kind: TimedKind;
@@ -31,7 +30,6 @@ interface Timed {
 const AIR_Y = 0.35;
 const FLOOR_Y = 0.004;
 const BLAST_RINGS = 3;
-const HEAL_DOTS = 9;
 const CURSOR_LEN = 0.14;
 /** Hit sparks on an enemy: rays, their reach and the height they burst at (world units). */
 const SPARK_RAYS = 8;
@@ -87,12 +85,7 @@ export class FxView {
           this.push('tracer', 'player', playerTick, fx.CANNON_TRACER_TIME, e.x, e.fromY, e.toY);
         } else if (e.shape === 'near') {
           for (const c of e.cells) this.push('slash', 'player', playerTick, fx.SLASH_TIME, c.x, c.y);
-        } else if (CHIPS[e.defId].heal) {
-          this.push('heal', 'player', playerTick, fx.HEAL_FX_TIME, e.x, e.fromY);
         }
-        break;
-      case 'bombLanded':
-        for (const c of e.cells) this.push('blast', 'player', playerTick, fx.EXPLOSION_TIME, c.x, c.y);
         break;
       case 'enemySlash':
         for (const c of e.cells) this.push('enemySlash', 'world', worldTick, fx.SLASH_TIME, c.x, c.y);
@@ -127,14 +120,9 @@ export class FxView {
     this.airFill.begin();
 
     for (const a of world.attacks) {
-      const playerOwned = a.timeDomain === 'player';
-      const tick = playerOwned ? playerTick : worldTick;
-      const attackAlpha = playerOwned ? alpha : worldAlpha;
-      if (a.kind === 'shockwave' || a.kind === 'playerWave')
-        this.wave(a as unknown as LaneMover, tick, attackAlpha, a.kind === 'playerWave' ? col.accent : col.red);
-      else if (a.kind === 'zapring') this.ring(a as unknown as LaneMover, tick, attackAlpha);
+      if (a.kind === 'shockwave') this.wave(a as unknown as LaneMover, worldTick, worldAlpha, col.red);
+      else if (a.kind === 'zapring') this.ring(a as unknown as LaneMover, worldTick, worldAlpha);
     }
-    for (const b of world.bombs) this.bomb(b, playerTick, alpha);
     if (world.state === 'ACTION') {
       for (const e of world.enemies) {
         const c = e.alive ? e.cursorCell() : null;
@@ -181,12 +169,6 @@ export class FxView {
       case 'enemySlash':
         this.slash(t.x, t.y, k, col.red);
         break;
-      case 'heal':
-        this.heal(t.x, t.y, k);
-        break;
-      case 'blast':
-        this.rings(this.floor, t.x, t.y, k, col.accent, true);
-        break;
       case 'spark':
         this.sparks(t.x, t.y, k, t.toY, SPARK_RAYS, SPARK_REACH, col.accent);
         break;
@@ -219,8 +201,8 @@ export class FxView {
 
   /**
    * The loaded chip shows on the player: sparks ahead for guns, a blade arc for
-   * swords, a bomb over the head, ripples at the feet for waves, rising dots
-   * for support chips and a turning ring on the panel for field chips.
+   * swords, rising dots for support chips and a turning ring on the panel for
+   * field chips.
    */
   private aura(world: World, seconds: number): void {
     const chip = world.chips.attackChips()[0];
@@ -249,31 +231,6 @@ export class FxView {
           const a1 = Math.PI * (0.15 + (0.7 * (i + 1)) / segs);
           const r = 0.42;
           this.air.line(p.x + Math.cos(a0) * r, AURA_HEAD_Y - 0.35 + Math.sin(a0) * r, p.z, p.x + Math.cos(a1) * r, AURA_HEAD_Y - 0.35 + Math.sin(a1) * r, p.z, col.accent);
-        }
-        break;
-      }
-      case 'lob': {
-        // A small bomb bobbing over the head, its fuse sparking.
-        const y = AURA_HEAD_Y + 0.04 * Math.sin(t * 5);
-        const sides = 8;
-        const r = 0.1;
-        for (let i = 0; i < sides; i++) {
-          const a0 = (i / sides) * Math.PI * 2;
-          const a1 = ((i + 1) / sides) * Math.PI * 2;
-          this.air.line(p.x + Math.cos(a0) * r, y + Math.sin(a0) * r, p.z, p.x + Math.cos(a1) * r, y + Math.sin(a1) * r, p.z, col.accent);
-        }
-        if (Math.floor(t * 16) % 2 === 0) this.cross(this.air, pl.x, pl.y, 0.05, col.red, y + r + 0.05);
-        break;
-      }
-      case 'wave': {
-        // Ripples running out from the feet.
-        for (let i = 0; i < 2; i++) {
-          const k = ((t * 1.2 + i * 0.5) % 1);
-          const hw = CELL_WIDTH * 0.45 * k;
-          const hd = CELL_DEPTH * 0.45 * k;
-          const c = dimSignal(col.accent, 1 - k, col.tmp);
-          this.floor.line(p.x - hw, FLOOR_Y, p.z - hd, p.x + hw, FLOOR_Y, p.z - hd, c);
-          this.floor.line(p.x - hw, FLOOR_Y, p.z + hd, p.x + hw, FLOOR_Y, p.z + hd, c);
         }
         break;
       }
@@ -342,19 +299,6 @@ export class FxView {
     }
   }
 
-  /** Phosphor dots rising around the player. */
-  private heal(x: number, y: number, k: number): void {
-    cellToWorld(x, y, p);
-    for (let i = 0; i < HEAL_DOTS; i++) {
-      const a = (i / HEAL_DOTS) * Math.PI * 2;
-      const r = 0.3 + 0.05 * Math.sin(i * 2.3);
-      const h = 0.1 + ((k + i * 0.13) % 1) * 0.9;
-      const dx = Math.cos(a) * r;
-      const dz = Math.sin(a) * r * 0.6;
-      this.air.line(p.x + dx, h, p.z + dz, p.x + dx, h + 0.05, p.z + dz, col.phosphor);
-    }
-  }
-
   /** Expanding (or, for warps, shrinking) square outlines on the floor. */
   private rings(batch: LineBatch, x: number, y: number, k: number, color: THREE.Color, grow: boolean): void {
     cellToWorld(x, y, p);
@@ -411,23 +355,6 @@ export class FxView {
     this.air.line(p.x + s, AIR_Y, z, p.x, AIR_Y - s, z, col.red);
     this.air.line(p.x, AIR_Y - s, z, p.x - s, AIR_Y, z, col.red);
     this.air.line(p.x - s, AIR_Y, z, p.x, AIR_Y + s, z, col.red);
-  }
-
-  /** Player bomb: an accent dot on a parabola with a floor shadow mark. */
-  private bomb(b: PlayerBomb, tick: number, alpha: number): void {
-    const k = b.progress(tick, alpha);
-    cellToWorld(b.fromX, b.fromY, p);
-    cellToWorld(b.x, b.y, q);
-    const x = p.x + (q.x - p.x) * k;
-    const z = p.z + (q.z - p.z) * k;
-    const y = 0.3 + 1.6 * k * (1 - k);
-    const s = 0.06;
-    A.set(x - s, y - s, z);
-    B.set(x + s, y - s, z);
-    C.set(x + s, y + s, z);
-    D.set(x - s, y + s, z);
-    this.airFill.quad(A, B, C, D, col.accent);
-    this.square(this.floor, x, z, s, s, FLOOR_Y, col.accent);
   }
 
   /** Canodron reticle: red corner brackets; locked ones shrink and blink. */

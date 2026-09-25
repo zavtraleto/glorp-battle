@@ -46,17 +46,15 @@ describe('14-segment display', () => {
     ], 'NO CHIP')).toBe('   CANNON 4   ');
   });
 
-  it('shows multi-hit damage and healing values', () => {
-    expect(chipDisplayText([{ name: 'Vulcan', power: 1, hits: 3 }], 'NO CHIP')).toBe('  VULCAN 1X3  ');
-    expect(chipDisplayText([{ name: 'Recov3', power: null, heal: 3 }], 'NO CHIP')).toBe('   RECOV3 3   ');
-    expect(chipDisplayText([{ name: 'Barrier', power: null }], 'NO CHIP')).toBe('   BARRIER    ');
+  it('shows only the name of a chip without damage', () => {
+    expect(chipDisplayText([{ name: 'Guard', power: null }], 'NO CHIP')).toBe('    GUARD     ');
   });
 
   it('always fits the wider display', () => {
     expect(DISPLAY_CHARS).toBe(14);
     for (const id of Object.keys(CHIPS) as ChipId[]) {
       const def = CHIPS[id];
-      const text = chipDisplayText([{ name: chipName(id), power: def.power, heal: def.heal, hits: def.hits }], 'NO CHIP');
+      const text = chipDisplayText([{ name: chipName(id), power: def.power }], 'NO CHIP');
       expect(text).toHaveLength(DISPLAY_CHARS);
       expect(text).not.toContain('+');
     }

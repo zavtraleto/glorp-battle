@@ -41,7 +41,6 @@ const LABEL_COLOR: Record<LabelTone, string> = {
   /** Damage dealt: hot yellow-white. */
   damage: '#fff0a8',
   playerDamage: hex(PALETTE.red),
-  heal: hex(PALETTE.phosphor),
 };
 
 export class CrtCanvas {
@@ -128,7 +127,7 @@ export class CrtCanvas {
     }
   }
 
-  /** Damage and heal numbers: big pixel digits with a dark outline, centred on their anchors. */
+  /** Damage numbers: big pixel digits with a dark outline, centred on their anchors. */
   private drawLabels(sink: PixelSink, labels: readonly HudLabel[]): void {
     for (const l of labels) {
       const scale = l.scale ?? tuning.battleVisual.DAMAGE_SCALE;

@@ -1,9 +1,9 @@
 import type { SimEvent } from '../../sim/events';
 import { PLAYER_ID } from '../../sim/player';
 
-// Floating damage / heal numbers shown in the CRT (GDD §14, TERMINAL.md §7.1). Pure.
+// Floating damage numbers shown in the CRT (GDD §14, TERMINAL.md §7.1). Pure.
 
-export type FloaterKind = 'damage' | 'playerDamage' | 'heal';
+export type FloaterKind = 'damage' | 'playerDamage';
 
 export interface Floater {
   kind: FloaterKind;
@@ -18,7 +18,6 @@ export function floaterFromEvent(e: SimEvent): Omit<Floater, 'startTick'> | null
   if (e.type === 'damaged' && e.amount > 0) {
     return { kind: e.targetId === PLAYER_ID ? 'playerDamage' : 'damage', text: String(e.amount), x: e.x, y: e.y };
   }
-  if (e.type === 'healed' && e.amount > 0) return { kind: 'heal', text: `+${e.amount}`, x: e.x, y: e.y };
   return null;
 }
 

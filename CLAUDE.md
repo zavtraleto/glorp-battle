@@ -6,6 +6,7 @@ Vite + TypeScript (strict) + Three.js. The whole interface is a 3D physical term
 - Spec: `docs/GDD.md` (Russian). It is the contract: read the relevant section before changing gameplay.
 - Interface spec: `docs/TERMINAL.md` (Russian) — the physical terminal NET-01 (stages T1–T3). It wins over the GDD for controls and presentation.
 - Battle look: `docs/BATTLE_VISUAL.md` (Russian). **Before changing how anything looks, read its §10.1–10.2 and TERMINAL.md §9.1–9.2**: the code map (which file owns which part of the look) and the pitfalls we already hit.
+- Current plan: `docs/superpowers/specs/2026-09-25-core-loop-plan.md` — core-loop tasks T0–T6 after the 2026-09-25 playtest; each task records its status and decisions there.
 - Live build: https://zavtraleto.github.io/glorp-battle/ (public repo `zavtraleto/glorp-battle`).
 
 ## Language
@@ -27,24 +28,24 @@ Before every commit: `npm test` and `npm run build` must pass. Pushing to `main`
 
 ## Design rules
 
-- **Source of truth for anything the GDD leaves open: MMBN6 as the combat base, MMBN3 for content and systemic depth** (chips, codes, virus stats, folder content). If BN3 lacks something, use BN6 and say so. MMBN1 is no longer a reference. Labels in docs: `[MMBN3]`, `[MMBN6]`, `[оценка]`, `[решение]`.
+- **Source of truth for anything the GDD leaves open: MMBN6 as the combat base, MMBN3 for content and systemic depth** (chips, virus stats, folder content). If BN3 lacks something, use BN6 and say so. MMBN1 is no longer a reference. Labels in docs: `[MMBN3]`, `[MMBN6]`, `[оценка]`, `[решение]`.
 - **Deliberate deviations — do not undo them:**
   - There is no Buster (GDD §4): only chips deal damage. Spent chips reshuffle into the draw pile when it runs dry (GDD §5).
-  - The run is linear and the folder never changes during it: no path choice, rewards, legacy or saves between runs (GDD §10).
+  - The run is linear and the folder never changes during it: no path choice, rewards, legacy or saves between runs (GDD §10). Task T6 of the plan will replace this with a new chip after each battle; until then it holds.
   - One trackball micro-swipe = exactly one panel. After each accepted step, the current finger position becomes the next gesture anchor; a stationary finger never repeats movement. No hold-to-repeat on gestures (keyboard keeps it).
   - A `DBG` button (bottom-right) toggles debug tools in every build; the pause key sits bottom-left on the control panel.
-  - Working names replace Capcom names: Mettik, Canodron, Spiker, … (see GDD §0.1).
+  - Working names replace Capcom names: Mettik, Canodron, Hopzap, Bladdy, … (see GDD §0.1).
 - When behavior changes, update the GDD in the same change. Mark new decisions `[решение YYYY-MM-DD]`, estimates `[оценка]`, and keep §17 (tuning table) in sync with `src/config/tuning.ts`.
 
 ## Architecture
 
 ```
 src/sim/      pure simulation: no DOM, no Three.js — World, Player, field, enemies, attacks, chips
-src/app/      Session + Run: title (Basic / Field / Random folder) → linear run of 10 (path → battle → …) → complete; death / abandon → game over; pause
+src/app/      Session + Run: title (Play / Tutorial) → linear run of 6 multi-wave battles (path → battle → …) → complete; death / abandon → game over; pause; tutorial director
 src/render/   battle view (BATTLE_VISUAL.md): grid + cell states, procedural sprites, FX, palette pass; reads sim state, never mutates it
 src/terminal/ 3D physical terminal: CRT (battle render target + HUD/menu canvas), controls, chip rail
 src/core/     fixed-step loop, seeded RNG, input (commands, swipe, keyboard, browser-gesture guards)
-src/data/     encounters, chips, folders (basic, field, debug all), enemy looks and levels — content is data, not code
+src/data/     encounters, chips, folders (starter, debug all), tutorial, enemy looks and levels — content is data, not code
 src/config/tuning.ts   every gameplay number (seconds), live-editable in the debug panel
 src/debug/    lil-gui panel, stats overlay, URL params
 ```
@@ -60,7 +61,7 @@ Invariants:
 - **New tunables** go into the right group in `tuning.ts`; the debug panel picks them up automatically (add a slider range in `RANGES` if the auto range is wrong).
 - **Battle palette.** Battle materials emit a signal, not a colour: G = phosphor, R = red, B = accent (`render/palette.ts`); the palette pass maps each pixel to its palette colour dimmed by the signal's brightness (no dithering since 2026-09-19). The CRT picture is drawn 1:1 with the glass's render pixels; `CRT_RES_W/H` only set its aspect. No text in battle: HUD shows only HP segments, damage numbers and menus.
 - **Panels live in the sim.** `world.field` owns panel state and ownership; movement, warps and waves ask `field.canStand` / `field.panel`, and anything leaving a cell calls `field.onLeave`. Objects (`world.objects`) sit in `Occupancy` and stop shots.
-- **New chips** are data: a `shape`, optional `onHit` / `field` / `heal` / `invis`, `codes` and `rarity` in `data/chips.ts`; a new shape or field action goes into `sim/chips/patterns.ts` / `World.applyFieldAction`. Add strings to `i18n/en.ts`, an icon to `terminal/chips/chipIcons.ts`, and a test in `tests/chipUse.test.ts`.
+- **New chips** are data: a `shape`, a `color`, optional `onHit` / `field` / `guard` in `data/chips.ts`; a new shape or field action goes into `sim/chips/patterns.ts` / `World.applyFieldAction`. Add strings to `i18n/en.ts`, an icon to `terminal/chips/chipIcons.ts`, and a test in `tests/chipUse.test.ts`.
 
 - **The terminal only reads** sim/session state; it changes them only through `InputState` and `Session` actions. Its mode is derived from `session.screen` + `world.state`, never stored.
 - **Terminal feedback is immediate:** a control reacts on `pointerdown` in the same frame; animations tied to game outcomes (chip eject, hits) are driven by `SimEvent`s and never delay the action.
@@ -79,7 +80,7 @@ Comments cite GDD sections (`// GDD §8.2`). Match the surrounding style: short 
 ## Verifying in the browser
 
 - Dev-only handle: `window.__glorp` (`world`, `session`, `input`, `loop`, `sceneRenderer` / `battleView`, `terminal`, `tuning`, `cheats`, `startBattle`).
-- URL params: `?debug=1&seed=123&battle=3&encounter=e1&wave=2&tutorial=2&folder=basic|field|all&god=1&timescale=0.5` (`tutorial=N` opens the tutorial at lesson N; `battle=` / `encounter=` skip the title and use the `folder=` folder; `encounter=s1`…`s5` are the multi-wave run stages, `wave=N` starts from wave N; `all` holds one of every chip); terminal: `?hitzones=1&rscale=400&crtres=240x320&bench=1`.
+- URL params: `?debug=1&seed=123&battle=3&encounter=e1&wave=2&tutorial=2&folder=all&god=1&timescale=0.5` (`tutorial=N` opens the tutorial at lesson N; `battle=` / `encounter=` skip the title and use the starter folder, or the `all` folder with `folder=all`; `encounter=s1`…`s5` are the multi-wave run stages, `wave=N` starts from wave N; `all` holds one of every chip); terminal: `?hitzones=1&rscale=400&crtres=240x320&bench=1`.
 - Drive the terminal with synthetic `PointerEvent`s on `#terminal-canvas`; zone rects are in `__glorp.terminal.layout.zones` (CSS px).
 - Do not run `?bench=1` or CPU-throttled measurements unless the user asks.
 - The in-app Browser pane does not run `requestAnimationFrame` while hidden, so the game looks frozen there. Use the Chrome DevTools MCP with phone emulation (`390x844x3,mobile,touch`) for anything time-based.

@@ -14,17 +14,13 @@ export interface AttackContext {
   hitPlayerAt(attack: Attack, x: number, y: number, damage: number): boolean;
   /** Damages an object on (x, y) once per attack; true if there was one. */
   hitObjectAt(attack: Attack, x: number, y: number, damage: number): boolean;
-  /** Damages a living enemy on (x, y) once per attack; true if it was hit now. */
-  hitEnemyAt(attack: Attack, x: number, y: number, damage: number): boolean;
   emit(event: SimEvent): void;
 }
 
-/** An enemy attack that lives on the field: visible, dodgeable, hits each target once (GDD §8.5, §9). */
+/** An enemy attack that lives on the field: visible, dodgeable, hits each target once (GDD §8.6, §9). */
 export interface Attack {
   readonly id: number;
   readonly kind: string;
-  /** Timeline that advances this attack. */
-  readonly timeDomain?: 'player' | 'world';
   /** Targets already damaged by this attack. */
   readonly hitIds: Set<number>;
   done: boolean;

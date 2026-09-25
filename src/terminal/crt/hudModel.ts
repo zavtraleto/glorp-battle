@@ -4,9 +4,9 @@ import type { MenuSpec } from './menuModel';
 // corner, enemy HP segments and damage numbers. Draw information lives on
 // the draw strip and the loaded chip on the segment display under the rail. Pure.
 
-export type LabelTone = 'damage' | 'playerDamage' | 'heal';
+export type LabelTone = 'damage' | 'playerDamage';
 
-/** A damage / heal number centred on a CRT pixel. */
+/** A damage number centred on a CRT pixel. */
 export interface HudLabel {
   text: string;
   x: number;

@@ -104,9 +104,9 @@ describe('EventBus', () => {
 describe('tuning', () => {
   it('merges only known keys with matching types', () => {
     const dst = JSON.parse(JSON.stringify(DEFAULT_TUNING)) as Tuning;
-    mergeTuning(dst, { player: { CELL_MOVE_TIME: 0.5, UNKNOWN: 1 }, gauge: { GAUGE_FILL_TIME: 'fast' }, nope: { A: 1 } });
+    mergeTuning(dst, { player: { CELL_MOVE_TIME: 0.5, UNKNOWN: 1 }, chips: { HAND_SIZE: 'five' }, nope: { A: 1 } });
     expect(dst.player.CELL_MOVE_TIME).toBe(0.5);
-    expect(dst.gauge.GAUGE_FILL_TIME).toBe(8);
+    expect(dst.chips.HAND_SIZE).toBe(5);
     expect('UNKNOWN' in dst.player).toBe(false);
   });
 
@@ -120,13 +120,13 @@ describe('tuning', () => {
 
 describe('debug params', () => {
   it('parses and clamps values', () => {
-    const p = parseDebugParams('?debug=1&seed=123&battle=9&folder=field&god=1&timescale=0.5');
-    expect(p).toMatchObject({ debug: true, seed: 123, battle: 4, folder: 'field', god: true, timescale: 0.5 });
+    const p = parseDebugParams('?debug=1&seed=123&battle=9&folder=all&god=1&timescale=0.5');
+    expect(p).toMatchObject({ debug: true, seed: 123, battle: 4, folder: 'all', god: true, timescale: 0.5 });
   });
 
   it('falls back to defaults', () => {
     const p = parseDebugParams('?seed=abc');
-    expect(p).toMatchObject({ debug: false, seed: null, battle: 1, folder: 'basic', god: false, timescale: 1 });
+    expect(p).toMatchObject({ debug: false, seed: null, battle: 1, folder: 'starter', god: false, timescale: 1 });
   });
 });
 
@@ -142,8 +142,8 @@ describe('grid', () => {
 
 describe('i18n', () => {
   it('returns English strings and fills placeholders', () => {
-    expect(t('banner.battleStart')).toBe('BATTLE START!');
-    expect(t('banner.battle', { n: 2, total: 4 })).toBe('BATTLE 2/4');
+    expect(t('banner.paused')).toBe('PAUSED');
+    expect(t('banner.wave', { n: 2 })).toBe('Wave 2');
   });
 
   it('has a name and description for every chip and a name for every enemy', () => {

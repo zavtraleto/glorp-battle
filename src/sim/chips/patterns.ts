@@ -25,14 +25,3 @@ export function shapeCells(shape: Shape, px: number, py: number, targetRow: Targ
       return [];
   }
 }
-
-/** Landing cell of a lobbed chip (MMBN1 MiniBomb: "Depth=3"), or null off the field. */
-export function lobTarget(depth: number, px: number, py: number): Cell | null {
-  const c = { x: px, y: py - depth };
-  return inField(c.x, c.y) ? c : null;
-}
-
-/** Cells hit around a landing cell. */
-export function lobArea(area: readonly Offset[], x: number, y: number): Cell[] {
-  return around(area, x, y);
-}

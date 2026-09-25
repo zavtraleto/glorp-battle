@@ -49,12 +49,6 @@ describe('hand', () => {
     expect(s.hand.filter((c) => c !== null)).toHaveLength(2);
     expect(s.slotState(4)).toBe('empty');
   });
-
-  it('shows the next chips of the draw queue', () => {
-    const s = sys(TEN);
-    expect(s.drawPreview(3)).toHaveLength(3);
-    expect(s.drawPreview(99)).toHaveLength(TEN.length - tuning.chips.HAND_SIZE);
-  });
 });
 
 describe('attack queue', () => {
@@ -183,16 +177,16 @@ describe('shared hand cooldown', () => {
 
   it('reserves a replacement at resolution and reports shared progress', () => {
     const s = sys(TEN);
-    const next = s.drawPreview(1)[0]!;
     s.toggleSelect(0);
     s.startAttack();
     s.takeNext(0);
 
-    expect(s.reserveRefill(0)).toBe(next);
+    const next = s.reserveRefill(0);
+    expect(next).not.toBeNull();
     expect(s.pendingChip(0)).toBe(next);
     expect(s.hand[0]).toBeNull();
     expect(s.slotState(0)).toBe('cooling');
-    expect(s.drawPreview(5)).not.toContain(next);
+    expect(s.hand).not.toContain(next);
     expect(s.refillProgress(0, 0)).toBe(0);
     expect(s.refillProgress(0, T(1))).toBeCloseTo(0.25, 5);
     s.finishAttack();

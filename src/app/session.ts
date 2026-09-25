@@ -5,7 +5,7 @@ import type { FolderId } from '../data/folders';
 import type { SimEvent } from '../sim/events';
 import { folderChips, type FolderChip } from '../sim/chips/chipSystem';
 import { World, type Cheats } from '../sim/world';
-import { Run, RUN_STEPS, type StartFolder } from './run';
+import { Run, RUN_STEPS } from './run';
 import { TutorialDirector, type CalloutView } from './tutorial/director';
 
 // Roguelite run and out-of-battle screens (GDD §10–11). Pure: no DOM.
@@ -106,10 +106,6 @@ export class Session {
     return { kind: encounter?.tier ?? 'normal', enemies: encounter?.waves[0]?.enemies.length ?? 0 };
   }
 
-  get healed(): boolean {
-    return this.run?.healed ?? false;
-  }
-
   get lastResult(): BattleResult | undefined {
     return this.results[this.results.length - 1];
   }
@@ -120,16 +116,16 @@ export class Session {
 
   // ---------- Flow ----------
 
-  private newRun(folder: StartFolder): Run {
-    const run = new Run(deriveSeed(this.seed, `run/${this.runCount++}`), folder);
+  private newRun(): Run {
+    const run = new Run(deriveSeed(this.seed, `run/${this.runCount++}`));
     this.results = [];
     return run;
   }
 
   /** Title → path screen of a new run. */
-  start(folder: StartFolder): void {
+  start(): void {
     if (this.screen !== 'TITLE') return;
-    this.run = this.newRun(folder);
+    this.run = this.newRun();
     this.debugFolder = null;
     this.screen = 'PATH';
   }
@@ -265,7 +261,7 @@ export class Session {
   /** A fresh run that jumps straight into an encounter with the debug folder. */
   private debugBattle(encounter: Encounter, seed?: number, wave = 1): void {
     if (seed !== undefined) this.seed = seed >>> 0;
-    this.run = this.newRun('basic');
+    this.run = this.newRun();
     this.run.encounter = encounter;
     this.debugFolder = folderChips(this.options.folder);
     this.startBattle(encounter, wave - 1);
@@ -296,7 +292,7 @@ export class Session {
 
   /** Moves the run to another step (PATH screen). */
   debugDepth(depth: number): void {
-    if (!this.run) this.start('basic');
+    if (!this.run) this.start();
     if (!this.run) return;
     this.run.jumpTo(depth);
     this.screen = 'PATH';

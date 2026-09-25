@@ -20,7 +20,6 @@ function session(screen: Screen, over: Partial<MenuSession> = {}): MenuSession {
     maxHp: 100,
     folderSize: 21,
     next: { kind: 'normal', enemies: 2 },
-    healed: false,
     results,
     lastResult: results[1],
     totalTime: 42.5,
@@ -197,9 +196,8 @@ describe('FloaterList', () => {
       y: 1,
     });
     expect(floaterFromEvent({ type: 'damaged', targetId: PLAYER_ID, amount: 10, x: 1, y: 4, hpLeft: 90 })?.kind).toBe('playerDamage');
-    expect(floaterFromEvent({ type: 'healed', amount: 50, x: 1, y: 4 })?.text).toBe('+50');
     expect(floaterFromEvent({ type: 'damaged', targetId: 100, amount: 0, x: 1, y: 1, hpLeft: 5 })).toBeNull();
-    expect(floaterFromEvent({ type: 'bombThrown', id: 1 })).toBeNull();
+    expect(floaterFromEvent({ type: 'barrierSet', x: 1, y: 4 })).toBeNull();
   });
 
   it('ages and drops floaters', () => {

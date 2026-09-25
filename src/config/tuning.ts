@@ -42,32 +42,17 @@ export const DEFAULT_TUNING = {
     BLOCK_HP: 2,
     BLOCK_DURATION: 6,
   },
-  gauge: {
-    GAUGE_FILL_TIME: 8.0,
-  },
   chips: {
     /** Hand slots visible in the rail for the whole battle (GDD §5). */
     HAND_SIZE: 5,
-    /** Chips of the draw queue shown under the rail. */
-    DRAW_PREVIEW: 3,
-    CHIP_STARTUP_VULCAN: 0.1,
-    CHIP_RECOVERY_VULCAN: 0.1,
     CHIP_STARTUP_CANNON: 0.1,
     CHIP_RECOVERY_CANNON: 0.15,
     CHIP_STARTUP_SWORD: 0.15,
     CHIP_RECOVERY_SWORD: 0.2,
-    CHIP_STARTUP_BOMB: 0.2,
-    CHIP_RECOVERY_BOMB: 0.2,
-    CHIP_STARTUP_RECOVER: 0.1,
-    CHIP_RECOVERY_RECOVER: 0.15,
     CHIP_STARTUP_FIELD: 0.15,
     CHIP_RECOVERY_FIELD: 0.15,
     /** Shared delay from the first charged shot until the next hand may activate. */
     HAND_REFILL_COOLDOWN: 4.0,
-    VULCAN_HIT_STEP: 0.05,
-    /** ZapRing paralysis (roguelite spec §4.3). */
-    PARALYZE_TIME: 1.5,
-    INVIS_TIME: 3.0,
     CHIP_DAMAGE_CANNON: 4,
     CHIP_DAMAGE_SWORD: 6,
     CHIP_DAMAGE_MINE: 6,
@@ -87,7 +72,6 @@ export const DEFAULT_TUNING = {
   projectile: {
     CELL_TRAVEL_TIME: 0.2,
     FAST_CELL_TRAVEL_TIME: 0.15,
-    SLOW_CELL_TRAVEL_TIME: 0.3,
   },
   counter: {
     COUNTER_STAGGER_TIME: 0.5,
@@ -99,7 +83,7 @@ export const DEFAULT_TUNING = {
     /** Least time between one callout closing and the next opening. */
     TUT_CALLOUT_GAP: 1,
   },
-  // Enemy timings follow MMBN6 as the Hub-OS mods recreate it (GDD §8.2–8.6):
+  // Enemy timings follow MMBN6 as the Hub-OS mods recreate it (GDD §8.2–8.4):
   // frame counts / 60, rounded. Bunny has no frame data: Hopzap is [оценка].
   mettik: {
     /** Pickaxe raised (0.34 s in BN6), then the counter window up to the wave (0.72 s). */
@@ -176,8 +160,6 @@ export const DEFAULT_TUNING = {
     IFRAME_BLINK_HZ: 15,
     CANNON_TRACER_TIME: 0.18,
     SLASH_TIME: 0.15,
-    EXPLOSION_TIME: 0.3,
-    HEAL_FX_TIME: 0.5,
     WARP_FX_TIME: 0.15,
     DAMAGE_NUMBER_TIME: 0.6,
     DELETE_ANIM_TIME: 0.4,

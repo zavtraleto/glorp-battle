@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_TUNING, mergeTuning, tuning } from '../src/config/tuning';
-import { PLAY_CONTENT, Run, RUN_STEPS } from '../src/app/run';
+import { PLAY_ENEMIES, Run, RUN_STEPS } from '../src/app/run';
 import type { EnemyKind } from '../src/sim/enemies/enemyBase';
 
 beforeEach(() => mergeTuning(tuning, JSON.parse(JSON.stringify(DEFAULT_TUNING))));
@@ -10,11 +10,11 @@ const waves = (run: Run) => run.encounter.waves.map((w) => w.enemies.map((enemy)
 
 describe('Run', () => {
   it('uses the six-stage Play progression, two or three waves each (GDD §10.2)', () => {
-    const run = new Run(5, 'basic');
+    const run = new Run(5);
     expect(RUN_STEPS).toBe(6);
     // Stage 1 is fixed by the design: Mettik, two Mettiks, Mettik + Canodron.
     expect(waves(run)).toEqual([['mettik'], ['mettik', 'mettik'], ['mettik', 'canodron']]);
-    const allowed = new Set<EnemyKind>(PLAY_CONTENT.enemies);
+    const allowed = new Set<EnemyKind>(PLAY_ENEMIES);
     for (let step = 1; step <= RUN_STEPS; step++) {
       const w = waves(run);
       expect(w.length, `stage ${step}`).toBeGreaterThanOrEqual(2);
@@ -29,32 +29,32 @@ describe('Run', () => {
   });
 
   it('reproduces the final random waves from the run seed', () => {
-    const a = new Run(123, 'basic');
-    const b = new Run(123, 'field');
+    const a = new Run(123);
+    const b = new Run(123);
     a.jumpTo(RUN_STEPS);
     b.jumpTo(RUN_STEPS);
     expect(waves(a)).toEqual(waves(b));
     for (const kinds of waves(a)) expect(new Set(kinds).size).toBe(kinds.length);
   });
 
-  it('starts with the 8-chip starter folder regardless of the legacy menu choice', () => {
-    const basic = new Run(1, 'basic').folder;
-    const random = new Run(1, 'random').folder;
-    expect(basic).toHaveLength(8);
-    expect(random).toEqual(basic);
+  it('starts with the 8-chip starter folder: 3 Cannon, 2 Sword, 2 AreaGrab, 1 Guard (GDD §6.3)', () => {
+    const folder = new Run(1).folder;
+    const counts = new Map<string, number>();
+    for (const chip of folder) counts.set(chip.defId, (counts.get(chip.defId) ?? 0) + 1);
+    expect(Object.fromEntries(counts)).toEqual({ cannon: 3, sword: 2, areagrab: 2, guard: 1 });
+    expect(new Run(2).folder).toEqual(folder);
   });
 
   it('carries HP without automatic healing', () => {
-    const run = new Run(1, 'basic');
+    const run = new Run(1);
     for (const hp of [4, 3, 2, 1]) {
       run.finishBattle(true, hp);
       expect(run.hp).toBe(hp);
-      expect(run.healed).toBe(false);
     }
   });
 
   it('completes after the last win', () => {
-    const run = new Run(1, 'basic');
+    const run = new Run(1);
     for (let step = 1; step < RUN_STEPS; step++) {
       run.finishBattle(true, run.hp);
       expect(run.complete).toBe(false);
@@ -65,7 +65,7 @@ describe('Run', () => {
   });
 
   it('a loss ends the climb without advancing the step', () => {
-    const run = new Run(3, 'basic');
+    const run = new Run(3);
     run.finishBattle(true, 6);
     expect(run.hp).toBe(6);
     expect(run.depth).toBe(2);
@@ -77,7 +77,7 @@ describe('Run', () => {
   });
 
   it('jumpTo selects the requested Play stage', () => {
-    const run = new Run(1, 'basic');
+    const run = new Run(1);
     run.jumpTo(RUN_STEPS);
     expect(run.depth).toBe(RUN_STEPS);
     expect(waves(run)).toHaveLength(3);

@@ -69,7 +69,7 @@ const FLOATER_POP = 0.12;
 const FLOATER_SHAKE = 0.35;
 /** Whole-terminal shake (decision 2026-09-19): world units at full strength, and fade time. */
 const CAM_SHAKE_TIME = 0.22;
-const SHAKE = { chip: 0.035, sword: 0.06, bomb: 0.07, kill: 0.09, playerHit: 0.16 };
+const SHAKE = { chip: 0.035, sword: 0.06, kill: 0.09, playerHit: 0.16 };
 /** Edge glow of the tube: faint warm on a hit, bright warm on a kill, red on a hit taken. */
 const EDGE_HIT = 0xffb347;
 const EDGE_KILL = 0xffe2a0;
@@ -338,7 +338,6 @@ export class Terminal {
       this.shakeCabinet(shape === 'near' ? SHAKE.sword : SHAKE.chip);
     }
     if (e.type === 'chipChainCancelled') this.rail.flashCancelled(e.chips);
-    if (e.type === 'bombLanded') this.shakeCabinet(SHAKE.bomb);
     if (e.type === 'damaged' && e.targetId !== PLAYER_ID && e.amount > 0) this.crt.edgeFlash(EDGE_HIT, EDGE.hit);
     // A kill is the big beat: bright edges, a flash and a jolt of the cabinet.
     if (e.type === 'enemyKilled') {
@@ -613,8 +612,6 @@ export class Terminal {
     const toEntry = (def: (typeof CHIPS)[keyof typeof CHIPS]): ChipDisplayEntry => ({
       name: chipName(def.id),
       power: def.power,
-      heal: def.heal,
-      hits: def.hits,
     });
     const queued = !inBattle || this.mode() === 'MENU' ? null : chips.attackChips()[0] ?? null;
     const shown = world.activeChip?.def ?? (queued ? CHIPS[queued.defId] : null);

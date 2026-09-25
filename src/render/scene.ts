@@ -166,7 +166,6 @@ export class SceneRenderer {
     this.fx.handleEvent(e, world);
     if (e.type === 'chipEffect') this.field.markAttack(e.cells, world.playerTick, 'accent', 'player');
     else if (e.type === 'enemyShot') this.field.markAttack([{ x: e.x, y: e.toY }], world.tick, 'red');
-    else if (e.type === 'bombLanded') this.field.markAttack(e.cells, world.playerTick, 'accent', 'player');
     else if (e.type === 'enemySlash') this.field.markAttack(e.cells, world.tick, 'red');
     else if (e.type === 'objectBroken') this.field.markAttack([{ x: e.x, y: e.y }], world.tick, 'red');
   }
@@ -220,15 +219,9 @@ export class SceneRenderer {
     this.fx.update(world, alpha);
     // Moving enemy attacks light up the cell they are in.
     for (const a of world.attacks) {
-      if (a.kind === 'shockwave' || a.kind === 'playerWave') {
+      if (a.kind === 'shockwave') {
         const m = a as unknown as { x: number; y: number };
-        const playerOwned = a.timeDomain === 'player';
-        this.field.markAttack(
-          [{ x: m.x, y: m.y }],
-          playerOwned ? world.playerTick : world.tick,
-          playerOwned ? 'accent' : 'red',
-          playerOwned ? 'player' : 'world',
-        );
+        this.field.markAttack([{ x: m.x, y: m.y }], world.tick, 'red', 'world');
       }
     }
     // Spawn markers under enemies during the battle intro (clock: ui ticks).

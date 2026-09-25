@@ -96,7 +96,7 @@ const terminal = new Terminal({
     },
     menu: (action) => {
       if (action === 'start:play') {
-        session.start('basic');
+        session.start();
         void keepAwake();
         return;
       }

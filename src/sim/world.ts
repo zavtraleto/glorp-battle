@@ -8,14 +8,12 @@ import { CHIPS, type ChipDef, type FieldAction } from '../data/chips';
 import type { FolderId } from '../data/folders';
 import type { FolderChip } from './chips/chipSystem';
 import type { Attack, AttackContext } from './attacks/attack';
-import { PlayerBomb } from './attacks/bomb';
-import { Shockwave } from './attacks/shockwave';
 import { Field } from './field';
 import { FieldObject, type ObjectKind } from './fieldObject';
 import { ChipSystem, type ChipInstance } from './chips/chipSystem';
 import { ComboState } from './chips/comboState';
 import { startChip, type ActiveChip } from './chips/executor';
-import { lobArea, lobTarget, shapeCells } from './chips/patterns';
+import { shapeCells } from './chips/patterns';
 import { chipAim, fieldTargetDistance, type Aim } from './chips/aim';
 import type { Enemy, EnemyContext } from './enemies/enemyBase';
 import { createEnemy } from './enemies/factory';
@@ -151,8 +149,6 @@ export class World implements EnemyContext, AttackContext {
   enemies: Enemy[] = [];
   objects: FieldObject[] = [];
   attacks: Attack[] = [];
-  /** Player bombs in flight. */
-  bombs: PlayerBomb[] = [];
   /** Tutorial callout in progress; ACTION does not advance while it is set. */
   hold: Hold | null = null;
   /** Chip currently being used by the player (GDD §6.5). */
@@ -186,7 +182,7 @@ export class World implements EnemyContext, AttackContext {
     this.rngFolder = root.fork('folder');
     this.rngAi = root.fork('ai');
     this.player = new Player(this.occupancy, this.field, options.playerHp);
-    this.chips = new ChipSystem(options.folder ?? 'basic', this.rngFolder);
+    this.chips = new ChipSystem(options.folder ?? 'starter', this.rngFolder);
     this.handSpec = options.hand ?? null;
     this.waveIndex = Math.max(0, Math.min(this.waveCount - 1, Math.floor(options.startWave ?? 0)));
     this.spawnWave();
@@ -296,7 +292,6 @@ export class World implements EnemyContext, AttackContext {
     this.enemies = [];
     this.objects = [];
     this.attacks = [];
-    this.bombs = [];
     this.pendingPushes.clear();
     this.impactObjects.clear();
     this.field.reset();
@@ -325,7 +320,6 @@ export class World implements EnemyContext, AttackContext {
   /** Stops everything the player and the enemies had going when a wave or the battle ends. */
   private endCombat(): void {
     this.attacks = [];
-    this.bombs = [];
     // A chip still before its hit frame goes back to its slot (GDD §6.5).
     const active = this.activeChip;
     if (active && !active.resolved) this.chips.restoreInterrupted(active.chip, active.slot);
@@ -473,7 +467,7 @@ export class World implements EnemyContext, AttackContext {
       }
       if (p.x === x && p.y === y && p.alive) {
         // An invulnerable player lets the shot pass (GDD §9).
-        if (p.invulnerable || p.invisTicks > 0) continue;
+        if (p.invulnerable) continue;
         this.hitPlayerAt(ONE_SHOT, x, y, damage);
         ONE_SHOT.hitIds.clear();
         this.events.push({ type: 'enemyShot', x, fromY, toY: y });
@@ -502,7 +496,7 @@ export class World implements EnemyContext, AttackContext {
     if (p.x !== x || p.y !== y || !p.alive) return false;
     if (attack.hitIds.has(p.id)) return false;
     // Hits on an invulnerable player are ignored entirely (GDD §9).
-    if (p.invulnerable || p.invisTicks > 0) return false;
+    if (p.invulnerable) return false;
     attack.hitIds.add(p.id);
     this.resolveHit({ target: p, damage });
     return true;
@@ -636,15 +630,6 @@ export class World implements EnemyContext, AttackContext {
 
   // ---------- Combat ----------
 
-  hitEnemyAt(attack: Attack, x: number, y: number, damage: number): boolean {
-    const e = this.enemyAt(x, y);
-    if (!e || !e.alive || attack.hitIds.has(e.id)) return false;
-    attack.hitIds.add(e.id);
-    this.damageEnemy(e, damage, true);
-    return true;
-  }
-
-
   damageEnemy(enemy: Enemy, amount: number, canCounter = false): void {
     this.resolveHit({ target: enemy, damage: amount, canCounter });
   }
@@ -755,8 +740,6 @@ export class World implements EnemyContext, AttackContext {
       py: p.y,
       firstTargetRow: this.firstTargetRow,
       owner: (x, y) => this.field.owner(x, y),
-      hole: (x, y) => this.field.panel(x, y) === 'BROKEN',
-      object: (x, y) => this.objectAt(x, y) !== null,
       occupied: (x, y) => !this.occupancy.isFree(x, y),
     });
   }
@@ -793,7 +776,6 @@ export class World implements EnemyContext, AttackContext {
         pushRequiresDamage: def.onHit?.pushRequiresDamage,
         source,
       });
-      if (def.onHit?.paralyze && enemy.alive) enemy.paralyze(secondsToTicks(tuning.chips.PARALYZE_TIME));
     }
   }
 
@@ -851,11 +833,9 @@ export class World implements EnemyContext, AttackContext {
   }
 
   private resolveDueChipHits(active: ActiveChip): void {
-    while (active.nextHit < active.hitTicks.length && this.playerTick >= active.hitTicks[active.nextHit]!) {
-      active.nextHit++;
-      this.commitChipResolution(active);
-      this.resolveChip(active);
-    }
+    if (active.resolved || this.playerTick < active.hitTick) return;
+    this.commitChipResolution(active);
+    this.resolveChip(active);
   }
 
   private commitChipResolution(active: ActiveChip): void {
@@ -914,26 +894,6 @@ export class World implements EnemyContext, AttackContext {
         this.hitCells(cells, power, def, { x: px, y: py });
         break;
       }
-      case 'lob': {
-        const land = lobTarget(shape.depth, px, py);
-        if (!land) break;
-        const bomb = new PlayerBomb(this.attackIdCounter++, px, py, land.x, land.y, power, this.playerTick, def);
-        this.bombs.push(bomb);
-        effect([land], land.y);
-        this.events.push({ type: 'bombThrown', id: bomb.id });
-        break;
-      }
-      case 'wave':
-        this.spawnAttack(
-          new Shockwave(this.attackIdCounter++, px, py - 1, this.playerTick, {
-            dir: -1,
-            damage: power,
-            stepTicks: secondsToTicks(tuning.projectile.FAST_CELL_TRAVEL_TIME),
-            owner: 'player',
-          }),
-        );
-        effect([]);
-        break;
       case 'self':
         if (def.field === 'arm' || def.field === 'break') {
           const target = { x: px, y: py - fieldTargetDistance(def.field) };
@@ -942,12 +902,6 @@ export class World implements EnemyContext, AttackContext {
         break;
     }
     if (def.field) this.applyFieldAction(def.field, px, py);
-    if (def.heal) {
-      const before = p.hp;
-      p.hp = Math.min(p.maxHp, p.hp + def.heal);
-      this.events.push({ type: 'healed', amount: p.hp - before, x: px, y: py });
-    }
-    if (def.invis) p.invisTicks = secondsToTicks(tuning.chips.INVIS_TIME);
     if (def.guard) {
       p.guard = true;
       this.events.push({ type: 'barrierSet', x: px, y: py });
@@ -961,7 +915,7 @@ export class World implements EnemyContext, AttackContext {
       case 'claim': {
         const free = (x: number, y: number) => this.occupancy.isFree(x, y);
         const claim = f.claimNextRow(this.playerTick, secondsToTicks(tuning.chips.AREA_GRAB_DURATION), 'player', free);
-        // Enemies keep the panel they stand on and take a small hit (GDD §6.2).
+        // Enemies keep the panel they stand on and take a small hit (GDD §6).
         for (const c of claim?.held ?? []) {
           const enemy = this.enemyAt(c.x, c.y);
           if (enemy?.alive) this.resolveHit({ target: enemy, damage: tuning.chips.AREA_GRAB_OCCUPANT_DMG });
@@ -982,19 +936,6 @@ export class World implements EnemyContext, AttackContext {
         this.breakCell(px, py - fieldTargetDistance('break'), secondsToTicks(tuning.chips.BREAK_DURATION));
         return;
     }
-  }
-
-  private updateBombs(): void {
-    if (this.bombs.length === 0) return;
-    for (const b of this.bombs) {
-      if (b.done || this.playerTick < b.landTick) continue;
-      b.done = true;
-      const shape = b.def.shape;
-      const cells = shape.t === 'lob' ? lobArea(shape.area, b.x, b.y) : [{ x: b.x, y: b.y }];
-      this.events.push({ type: 'bombLanded', id: b.id, x: b.x, y: b.y, cells });
-      this.hitCells(cells, b.damage, b.def, { x: b.fromX, y: b.fromY });
-    }
-    this.bombs = this.bombs.filter((b) => !b.done);
   }
 
   /**
@@ -1140,18 +1081,11 @@ export class World implements EnemyContext, AttackContext {
     if (worldSteps > 0) this.updatePendingPushes();
     this.updateActiveChip();
     this.useBufferedChip();
-    this.updateBombs();
 
     if (worldSteps > 0) for (const e of this.enemies) {
       if (!e.alive) continue;
       if (e.state === 'STAGGER') {
         e.updateStagger(this);
-        continue;
-      }
-      if (e.paralyzeTicks > 0) {
-        // Paralysis freezes the enemy's state timer too.
-        e.paralyzeTicks--;
-        e.freezePhase();
         continue;
       }
       if (this.cheats.aiEnabled) {
@@ -1162,14 +1096,10 @@ export class World implements EnemyContext, AttackContext {
     }
 
     this.captureImpactObjects();
-    for (const a of this.attacks) {
-      const domain = a.timeDomain ?? 'world';
-      if (domain === 'player') a.update(this, this.playerTick);
-      else if (worldSteps > 0) a.update(this, this.tick);
-    }
+    if (worldSteps > 0) for (const a of this.attacks) a.update(this, this.tick);
     if (this.attacks.some((a) => a.done)) this.attacks = this.attacks.filter((a) => !a.done);
 
-    // A simultaneous kill-trade counts as a loss (GDD §10.3).
+    // A simultaneous kill-trade counts as a loss (GDD §10.4).
     if (!p.alive) {
       this.worldTimeScale = 1;
       this.worldScaleTransition = null;

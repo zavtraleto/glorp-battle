@@ -16,7 +16,6 @@ export interface WaveOptions {
   dir: 1 | -1;
   damage: number;
   stepTicks: number;
-  owner: 'enemy' | 'player';
 }
 
 function mettikWave(): WaveOptions {
@@ -24,25 +23,22 @@ function mettikWave(): WaveOptions {
     dir: 1,
     damage: tuning.mettik.MET_DMG,
     stepTicks: Math.max(1, secondsToTicks(tuning.projectile.CELL_TRAVEL_TIME)),
-    owner: 'enemy',
   };
 }
 
 /**
- * Ground wave (GDD §8.2 Mettik, roguelite spec §4.2 ShockWave): travels one
+ * Mettik's ground wave (GDD §8.2): travels one
  * panel per step, pierces its targets, stops at the field edge, a hole (its spawn
  * cell included) or an object.
  */
 export class Shockwave implements LaneMover {
-  readonly kind: string;
+  readonly kind = 'shockwave';
   readonly hitIds = new Set<number>();
   done = false;
   lastStepTick: number;
   readonly stepTicks: number;
   readonly damage: number;
   readonly dir: 1 | -1;
-  readonly owner: 'enemy' | 'player';
-  readonly timeDomain: 'player' | 'world';
 
   constructor(
     readonly id: number,
@@ -55,9 +51,6 @@ export class Shockwave implements LaneMover {
     this.stepTicks = Math.max(1, opts.stepTicks);
     this.damage = opts.damage;
     this.dir = opts.dir;
-    this.owner = opts.owner;
-    this.timeDomain = opts.owner === 'player' ? 'player' : 'world';
-    this.kind = opts.owner === 'player' ? 'playerWave' : 'shockwave';
   }
 
   update(ctx: AttackContext, tick = ctx.tick): void {
@@ -79,7 +72,6 @@ export class Shockwave implements LaneMover {
       this.done = true;
       return;
     }
-    if (this.owner === 'player') ctx.hitEnemyAt(this, this.x, this.y, this.damage);
-    else ctx.hitPlayerAt(this, this.x, this.y, this.damage);
+    ctx.hitPlayerAt(this, this.x, this.y, this.damage);
   }
 }

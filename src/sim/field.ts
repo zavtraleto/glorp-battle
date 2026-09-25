@@ -43,7 +43,7 @@ export interface ClaimResult {
 }
 
 /**
- * Row AreaGrab takes (GDD §6.2): the enemy-owned row nearest to the player
+ * Row AreaGrab takes (GDD §6): the enemy-owned row nearest to the player
  * with at least one free cell; -1 if none.
  */
 export function claimRow(owner: (x: number, y: number) => Side | null, free: (x: number, y: number) => boolean): number {

@@ -26,8 +26,6 @@ export class Player {
   flinchTicks = 0;
   /** Remaining ticks of invulnerability after a hit. */
   iframeTicks = 0;
-  /** Remaining ticks of Invis: enemy attacks pass through. */
-  invisTicks = 0;
   /** One charge that fully absorbs the next damaging hit. */
   guard = false;
   /** Remaining ticks of paralysis: no movement or chips, no i-frames. */
@@ -118,7 +116,6 @@ export class Player {
     this.bufferedDir = null;
     this.flinchTicks = 0;
     this.iframeTicks = 0;
-    this.invisTicks = 0;
     this.paralyzeTicks = 0;
     this.actionTicks = 0;
     this.guard = false;
@@ -129,7 +126,6 @@ export class Player {
   updateTimers(): void {
     if (this.flinchTicks > 0) this.flinchTicks--;
     if (this.iframeTicks > 0) this.iframeTicks--;
-    if (this.invisTicks > 0) this.invisTicks--;
     if (this.paralyzeTicks > 0) this.paralyzeTicks--;
     if (this.actionTicks > 0) this.actionTicks--;
   }

@@ -69,8 +69,6 @@ export abstract class Enemy {
   stateEndTick = Infinity;
   lastHitTick = -Infinity;
   deathTick = -Infinity;
-  /** Ticks left of paralysis: no actions, state timers stand still. */
-  paralyzeTicks = 0;
   private collisionResume: {
     state: EnemyState;
     elapsed: number;
@@ -129,11 +127,6 @@ export abstract class Enemy {
 
   phaseRemaining(tick: number): number {
     return Number.isFinite(this.stateEndTick) ? Math.max(0, this.stateEndTick - tick) : 0;
-  }
-
-  freezePhase(ticks = 1): void {
-    this.stateTick += ticks;
-    if (Number.isFinite(this.stateEndTick)) this.stateEndTick += ticks;
   }
 
   /** Render interpolation duration matching this level's rounded simulation cadence. */
@@ -256,10 +249,6 @@ export abstract class Enemy {
     this.y = ny;
     this.lastMoveTick = ctx.tick;
     return true;
-  }
-
-  paralyze(ticks: number): void {
-    if (this.alive) this.paralyzeTicks = Math.max(this.paralyzeTicks, ticks);
   }
 
   /** Knock-back: one row away from the player if the panel allows it. */

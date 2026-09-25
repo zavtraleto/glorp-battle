@@ -10,7 +10,7 @@ beforeEach(() => mergeTuning(tuning, JSON.parse(JSON.stringify(DEFAULT_TUNING)))
 
 /** Enemy AI off: the Mettiks stand still, so lining up is up to the test. */
 function make(): Session {
-  return new Session({ seed: 42, cheats: { god: false, aiEnabled: false }, folder: 'basic' });
+  return new Session({ seed: 42, cheats: { god: false, aiEnabled: false }, folder: 'starter' });
 }
 
 function tick(s: Session, commands: Command[] = []): void {
@@ -229,7 +229,7 @@ describe('tutorial mode', () => {
 
   it('shows no callout outside the tutorial', () => {
     const s = make();
-    s.start('basic');
+    s.start();
     expect(s.tutorialCallout()).toBeNull();
   });
 

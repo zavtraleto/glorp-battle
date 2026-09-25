@@ -1,7 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_TUNING, mergeTuning, secondsToTicks, tuning } from '../src/config/tuning';
-import { CHIPS } from '../src/data/chips';
-import { PlayerBomb } from '../src/sim/attacks/bomb';
 import type { EnemyKind, EnemyState } from '../src/sim/enemies/enemyBase';
 import { World } from '../src/sim/world';
 
@@ -53,49 +51,6 @@ describe('enemy attack timing grammar', () => {
     w.damageEnemy(enemy, 1, true);
     expect(enemy.state).toBe('STAGGER');
     expect(w.drainEvents().some((event) => event.type === 'enemyCountered')).toBe(true);
-  });
-
-  it('evaluates a delayed player hit at impact rather than throw time', () => {
-    const w = world('mettik', false);
-    const enemy = w.enemies[0]!;
-    enemy.hp = 200;
-    const delayed = { ...CHIPS.cannon, shape: { t: 'lob', depth: 3, area: [{ x: 0, y: 0 }] } } as const;
-    const bomb = new PlayerBomb(700, 1, 4, 1, 1, 50, w.tick, delayed);
-    w.bombs.push(bomb);
-    enemy.setTimedState('LOCK', w.tick, bomb.landTick);
-
-    for (let i = 0; i < bomb.landTick - 1; i++) step(w);
-    enemy.setTimedState('COUNTER', w.tick, T(tuning.mettik.COUNTER_TIME));
-    step(w);
-
-    expect(enemy.state).toBe('STAGGER');
-  });
-
-  it('freezes a timed enemy phase while paralyzed', () => {
-    const w = world('mettik');
-    const enemy = w.enemies[0]!;
-    enemy.setTimedState('COUNTER', w.tick, T(0.18));
-    const remaining = enemy.phaseRemaining(w.tick);
-    enemy.paralyze(3);
-    step(w);
-    step(w);
-    step(w);
-    expect(enemy.state).toBe('COUNTER');
-    expect(enemy.phaseRemaining(w.tick)).toBe(remaining);
-  });
-
-  it('freezes Canodron cursor travel while paralyzed', () => {
-    const w = world('canodron');
-    const enemy = w.enemies[0]!;
-    enemy.forceAttack(w.tick);
-    expect(enemy.cursorCell()).toEqual({ x: 1, y: 2, locked: false });
-
-    enemy.paralyze(30);
-    for (let i = 0; i < 30; i++) step(w);
-    for (let i = 0; i < T(tuning.canodron.CANO_CURSOR_STEP) - 1; i++) step(w);
-    expect(enemy.cursorCell()).toEqual({ x: 1, y: 2, locked: false });
-    step(w);
-    expect(enemy.cursorCell()).toEqual({ x: 1, y: 3, locked: false });
   });
 
   it('reports the level-scaled movement duration used by simulation', () => {

@@ -23,11 +23,8 @@ export type SimEvent =
   | { type: 'chipChainCancelled'; chips: { slot: number; deal: number }[] }
   /** Visual footprint of a resolved chip; `cells` are the panels it swept or hit. */
   | { type: 'chipEffect'; defId: ChipId; shape: ShapeKind; x: number; fromY: number; cells: Cell[]; toY: number }
-  | { type: 'healed'; amount: number; x: number; y: number }
   | { type: 'barrierSet'; x: number; y: number }
   | { type: 'barrierBroken'; x: number; y: number }
-  | { type: 'bombThrown'; id: number }
-  | { type: 'bombLanded'; id: number; x: number; y: number; cells: Cell[] }
   /** Instant enemy shot along a lane (Canodron); toY = row where it stopped, or ROWS if it left the field. */
   | { type: 'enemyShot'; x: number; fromY: number; toY: number }
   | { type: 'panelChanged'; x: number; y: number; panel: Panel; owner: Side }

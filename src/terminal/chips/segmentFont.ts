@@ -102,8 +102,6 @@ export function glyph(ch: string): readonly Segment[] {
 export interface ChipDisplayEntry {
   name: string;
   power?: number | null;
-  heal?: number;
-  hits?: number;
 }
 
 function centre(text: string, width: number): string {
@@ -112,17 +110,12 @@ function centre(text: string, width: number): string {
   return `${' '.repeat(left)}${clipped}`.padEnd(width, ' ');
 }
 
-/** The first Attack Queue chip, with damage/healing, centred without a queue count. */
+/** The first Attack Queue chip with its damage, centred without a queue count. */
 export function chipDisplayText(queued: readonly ChipDisplayEntry[], noChip: string, width = DISPLAY_CHARS): string {
   const first = queued[0];
   if (first === undefined) return centre(noChip, width);
-  let value = '';
-  if (first.power !== null && first.power !== undefined) {
-    value = `${first.power}${(first.hits ?? 1) > 1 ? `X${first.hits}` : ''}`;
-  } else if (first.heal !== undefined) {
-    value = String(first.heal);
-  }
-  return centre(value ? `${first.name} ${value}` : first.name, width);
+  const value = first.power ?? null;
+  return centre(value === null ? first.name : `${first.name} ${value}`, width);
 }
 
 /**

@@ -35,7 +35,7 @@ interface PendingRefill {
   readyAt: number;
 }
 
-/** A debug folder as a flat chip list. */
+/** A folder as a flat chip list. */
 export function folderChips(id: FolderId): FolderChip[] {
   return FOLDERS[id].flatMap((e) => Array.from({ length: e.count }, () => ({ defId: e.chip })));
 }
@@ -184,11 +184,6 @@ export class ChipSystem {
     this.pendingRefills[slot] = null;
     this.spentSlots[slot] = false;
     return chip;
-  }
-
-  /** The next chips of the draw queue, for the preview strip (GDD §7.5). */
-  drawPreview(n: number): ChipInstance[] {
-    return this.drawPile.slice(this.drawIndex, this.drawIndex + Math.max(0, n));
   }
 
   attackChips(): ChipInstance[] {

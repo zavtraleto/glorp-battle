@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_TUNING, mergeTuning, secondsToTicks, tuning } from '../src/config/tuning';
 import type { Command } from '../src/core/input/commands';
 import { CHIPS, type ChipId } from '../src/data/chips';
-import { FOLDERS, FOLDER_SIZE } from '../src/data/folders';
 import { canAddToSelection } from '../src/sim/chips/selection';
 import { Mettik } from '../src/sim/enemies/mettik';
 import { World } from '../src/sim/world';
@@ -14,14 +13,6 @@ const T = (s: number) => secondsToTicks(s);
 
 beforeEach(() => {
   mergeTuning(tuning, JSON.parse(JSON.stringify(DEFAULT_TUNING)));
-});
-
-describe('folders', () => {
-  it('the starting folders contain exactly 30 chips', () => {
-    for (const id of ['basic', 'field'] as const) {
-      expect(FOLDERS[id].reduce((n, e) => n + e.count, 0)).toBe(FOLDER_SIZE);
-    }
-  });
 });
 
 describe('chip catalogue (compact MMBN3 scale)', () => {
