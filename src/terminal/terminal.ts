@@ -35,8 +35,8 @@ import { Housing } from './parts/housing';
 import { DarkLighting } from './parts/lighting';
 import { Pcb, PCB_PULSE_HZ } from './parts/pcb';
 import { SegmentDisplay } from './parts/segmentDisplay';
-import { comboDisplayModel, type ChipDisplayEntry } from './chips/segmentFont';
-import { cooldownForSlot } from './chips/railPlan';
+import { comboDisplayModel, signedSeconds, type ChipDisplayEntry } from './chips/segmentFont';
+import { cooldownForSlot, slidCooldown } from './chips/railPlan';
 import { Mount } from './parts/mount';
 import { mountCorners, screenBounds } from './interaction/project';
 import { Trackball } from './parts/trackball';
@@ -132,9 +132,14 @@ export class Terminal {
   private readonly corners: THREE.Vector3[] = [];
   private readonly activeChipAt = new THREE.Vector3();
   private hpHitLeft = 0;
-  /** `<CHIP> LOST` on the segment display after a last charge (GDD §6.1). */
-  private chipLost = '';
-  private chipLostLeft = 0;
+  /** Hand cooldown fill as drawn; after a jump it slides to the sim's value (GDD §5.1). */
+  private cooldownShown: number | null = null;
+  private cooldownGap = 0;
+  private cooldownSlideLeft = 0;
+  private cooldownJumped = false;
+  /** Short segment display line: `<CHIP> LOST` (GDD §6.1), hand cooldown change (GDD §5.1). */
+  private notice = '';
+  private noticeLeft = 0;
   private readonly battle: BattleTarget;
   private readonly router: PointerRouter;
 
@@ -344,8 +349,12 @@ export class Terminal {
     // The last charge is gone: the cartridge bursts and the display names it (TERMINAL.md §6.5).
     if (e.type === 'chipExhausted') {
       this.rail.shatter(e.deal);
-      this.chipLost = t('hud.chipLost', { name: chipName(e.defId) });
-      this.chipLostLeft = tuning.terminal.CHIP_LOST_TIME;
+      this.showNotice(t('hud.chipLost', { name: chipName(e.defId) }));
+    }
+    // The cooldown fill on the rail jumps by itself; the display says why (TERMINAL.md §6.3).
+    if (e.type === 'handCooldownChanged') {
+      this.cooldownJumped = true;
+      this.showNotice(t(`hud.cooldown.${e.reason}`, { s: signedSeconds(e.seconds) }));
     }
     if (e.type === 'damaged' && e.targetId !== PLAYER_ID && e.amount > 0) this.crt.edgeFlash(EDGE_HIT, EDGE.hit);
     // A kill is the big beat: bright edges, a flash and a jolt of the cabinet.
@@ -398,12 +407,34 @@ export class Terminal {
     this.waveBanner.show(t('banner.wave', { n: world.waveIndex + 1 }), seconds);
   }
 
+  /** The fill starts sliding in the frame of the jump, from where it was drawn. */
+  private slideCooldown(target: number | null): number | null {
+    if (target === null) {
+      this.cooldownShown = null;
+      this.cooldownSlideLeft = 0;
+    } else {
+      if (this.cooldownJumped && this.cooldownShown !== null) {
+        this.cooldownGap = this.cooldownShown - target;
+        this.cooldownSlideLeft = tuning.terminal.COOLDOWN_JUMP_TIME;
+      }
+      this.cooldownShown = slidCooldown(target, this.cooldownGap, this.cooldownSlideLeft, tuning.terminal.COOLDOWN_JUMP_TIME);
+    }
+    this.cooldownJumped = false;
+    return this.cooldownShown;
+  }
+
+  private showNotice(text: string): void {
+    this.notice = text;
+    this.noticeLeft = tuning.terminal.DISPLAY_NOTICE_TIME;
+  }
+
   render(world: World, alpha: number, dt: number): void {
     const { renderer, sceneRenderer, perf } = this.opts;
     this.resize();
     this.time += dt;
     this.hpHitLeft = Math.max(0, this.hpHitLeft - dt);
-    this.chipLostLeft = Math.max(0, this.chipLostLeft - dt);
+    this.noticeLeft = Math.max(0, this.noticeLeft - dt);
+    this.cooldownSlideLeft = Math.max(0, this.cooldownSlideLeft - dt);
     renderer.info.reset();
 
     const screen = this.battle.render(sceneRenderer, world, alpha, dt);
@@ -602,7 +633,7 @@ export class Terminal {
     // flies out at once, and between battles the rail stays empty (2026-09-19).
     const screen = this.opts.session.screen;
     const inBattle = (screen === 'BATTLE' || screen === 'PAUSED') && world.state !== 'BATTLE_WON' && world.state !== 'PLAYER_DEAD';
-    const cooldown = inBattle ? chips.handCooldownProgress(world.playerTick) : null;
+    const cooldown = this.slideCooldown(inBattle ? chips.handCooldownProgress(world.playerTick) : null);
     // A tutorial lesson replaced the folder (GDD §10.5): the old cassettes were
     // not spent, so they vanish instead of ejecting; the new ones load in.
     if (chips.folderVersion !== this.folderVersion) {
@@ -625,8 +656,8 @@ export class Terminal {
     });
     const queued = !inBattle || this.mode() === 'MENU' ? null : chips.attackChips()[0] ?? null;
     const shown = world.activeChip?.def ?? (queued ? CHIPS[queued.defId] : null);
-    const lost = inBattle && this.chipLostLeft > 0;
-    const fallback = lost ? this.chipLost : inBattle ? t('hud.selectChip') : '';
+    const lost = inBattle && this.noticeLeft > 0;
+    const fallback = lost ? this.notice : inBattle ? t('hud.selectChip') : '';
     this.chipDisplay.set(comboDisplayModel(
       shown && !lost ? toEntry(shown) : null,
       fallback,

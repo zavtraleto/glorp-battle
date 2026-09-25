@@ -2,5 +2,6 @@
 export class ComboState {
   readonly status = 'active' as const;
 
-  constructor(readonly startedAt: number) {}
+  /** `size`: chips in the series; a completed combo shortens the cooldown by it (GDD §5.1). */
+  constructor(readonly startedAt: number, readonly size: number) {}
 }

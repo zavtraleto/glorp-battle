@@ -1,4 +1,5 @@
 import type { ChipId, ShapeKind } from '../data/chips';
+import type { CooldownReason } from './chips/chipSystem';
 import type { Panel } from './field';
 import type { ObjectKind } from './fieldObject';
 import type { Cell, Side } from './grid';
@@ -12,6 +13,8 @@ export type SimEvent =
   | { type: 'comboStarted'; size: number }
   | { type: 'comboEnded'; reason: 'complete' }
   | { type: 'comboBroken' }
+  /** A kill, Counter, completed combo or hit moved the hand cooldown by `seconds` (GDD §5.1). */
+  | { type: 'handCooldownChanged'; reason: CooldownReason; seconds: number }
   | { type: 'enemyKilled'; id: EntityId; x: number; y: number }
   | { type: 'enemyCountered'; id: EntityId; x: number; y: number }
   | { type: 'enemyRemoved'; id: EntityId }

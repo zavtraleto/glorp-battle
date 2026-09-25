@@ -90,4 +90,14 @@ describe('shared cooldown presentation', () => {
     expect(cooldownForSlot('committed', 0.5)).toBeNull();
     expect(cooldownForSlot('ready', 0.5)).toBeNull();
   });
+
+  it('slides the cooldown fill to the new level after a kill or a hit (GDD §5.1)', () => {
+    // A kill jumped the sim from 0.4 to 0.6: the fill starts where it was drawn.
+    expect(railPlan.slidCooldown(0.6, -0.2, 0.2, 0.2)).toBeCloseTo(0.4, 6);
+    const mid = railPlan.slidCooldown(0.6, -0.2, 0.1, 0.2);
+    expect(mid).toBeGreaterThan(0.4);
+    expect(mid).toBeLessThan(0.6);
+    expect(railPlan.slidCooldown(0.6, -0.2, 0, 0.2)).toBe(0.6);
+    expect(railPlan.slidCooldown(0.1, 0.5, 0.2, 0.2)).toBeCloseTo(0.6, 6);
+  });
 });

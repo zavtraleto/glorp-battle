@@ -10,9 +10,11 @@
 // │/   │   \│
 //  ─── d ───
 
-export type Segment = 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g1' | 'g2' | 'h' | 'i' | 'j' | 'k' | 'l' | 'm';
+export type Segment = 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g1' | 'g2' | 'h' | 'i' | 'j' | 'k' | 'l' | 'm' | 'dp';
 
-export const SEGMENTS: readonly Segment[] = ['a', 'b', 'c', 'd', 'e', 'f', 'g1', 'g2', 'h', 'i', 'j', 'k', 'l', 'm'];
+/** The 14 strokes of a cell; the decimal point `dp` is drawn only when lit. */
+export type Stroke = Exclude<Segment, 'dp'>;
+export const SEGMENTS: readonly Stroke[] = ['a', 'b', 'c', 'd', 'e', 'f', 'g1', 'g2', 'h', 'i', 'j', 'k', 'l', 'm'];
 
 /** Characters the display has in its segments table (upper case). */
 const GLYPHS: Record<string, readonly Segment[]> = {
@@ -55,6 +57,7 @@ const GLYPHS: Record<string, readonly Segment[]> = {
   Z: ['a', 'd', 'j', 'k'],
   '-': ['g1', 'g2'],
   '+': ['g1', 'g2', 'i', 'l'],
+  '.': ['dp'],
 };
 
 /** Character cells on the wider display in the CRT's lower frame. */
@@ -97,6 +100,12 @@ export function hasGlyph(ch: string): boolean {
 /** Lit segments of a character; unknown characters stay dark. */
 export function glyph(ch: string): readonly Segment[] {
   return GLYPHS[ch.toUpperCase()] ?? [];
+}
+
+/** Signed seconds for the hand cooldown notice (GDD §5.1): `-0.5`, `+1`, `-0.75`. */
+export function signedSeconds(seconds: number): string {
+  const value = Math.round(Math.abs(seconds) * 100) / 100;
+  return `${seconds < 0 ? '-' : '+'}${value}`;
 }
 
 export interface ChipDisplayEntry {

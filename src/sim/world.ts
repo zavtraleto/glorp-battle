@@ -10,7 +10,7 @@ import type { FolderChip } from './chips/chipSystem';
 import type { Attack, AttackContext } from './attacks/attack';
 import { Field } from './field';
 import { FieldObject, type ObjectKind } from './fieldObject';
-import { ChipSystem, type ChipInstance } from './chips/chipSystem';
+import { ChipSystem, cooldownDelta, type ChipInstance, type CooldownReason } from './chips/chipSystem';
 import { ComboState } from './chips/comboState';
 import { startChip, type ActiveChip } from './chips/executor';
 import { shapeCells } from './chips/patterns';
@@ -526,29 +526,32 @@ export class World implements EnemyContext, AttackContext {
   }
 
   private startCombo(size: number): void {
-    this.combo = new ComboState(this.playerTick);
+    this.combo = new ComboState(this.playerTick, size);
     this.setWorldTimeScale(tuning.combo.WORLD_TIME_SCALE, tuning.combo.SLOW_MO_ENTER);
     this.events.push({ type: 'comboStarted', size });
   }
 
   private finishCombo(): void {
     if (!this.combo) return;
+    const size = this.combo.size;
     this.combo = null;
     this.bufferedChipUntil = null;
     this.chips.finishAttack();
-    this.chips.startCooldown(this.playerTick);
+    // A completed combo shortens the cooldown it starts (GDD §5.1).
+    const change = this.chips.startCooldown(this.playerTick, cooldownDelta('combo', size));
     this.chips.reserveSpentRefills();
+    if (change) this.events.push({ type: 'handCooldownChanged', reason: 'combo', seconds: change });
     this.setWorldTimeScale(1, tuning.combo.SLOW_MO_EXIT);
     this.events.push({ type: 'comboEnded', reason: 'complete' });
   }
 
   private breakCombo(): void {
     if (!this.combo) return;
-    this.chips.burnAttackTail();
     this.combo = null;
     this.bufferedChipUntil = null;
     this.events.push({ type: 'comboBroken' });
     this.setWorldTimeScale(1, tuning.combo.COMBO_BREAK_EXIT);
+    // The unfired tail goes back to its slots, like any interrupted chain (GDD §6.6).
     this.interruptPlayerChip();
     this.chips.startCooldown(this.playerTick);
     this.chips.reserveSpentRefills();
@@ -655,7 +658,11 @@ export class World implements EnemyContext, AttackContext {
       if (isPlayer) {
         let amount = this.cheats.god ? 0 : spec.damage;
         if (this.cheats.noKo) amount = Math.min(amount, Math.max(0, this.player.hp - 1));
-        if (amount > 0) this.player.takeHit(amount, this.playerTick);
+        if (amount > 0) {
+          this.player.takeHit(amount, this.playerTick);
+          // Before a Combo Break starts a cooldown: only a running one grows (GDD §5.1).
+          this.adjustHandCooldown('hit');
+        }
         damageApplied = amount;
         died = !this.player.alive;
         this.events.push({ type: 'damaged', targetId: target.id, amount, x: target.x, y: target.y, hpLeft: target.hp });
@@ -669,9 +676,11 @@ export class World implements EnemyContext, AttackContext {
         this.events.push({ type: 'damaged', targetId: enemy.id, amount: spec.damage, x: enemy.x, y: enemy.y, hpLeft: enemy.hp });
         if (!died && countered && enemy.counter(this.tick)) {
           this.events.push({ type: 'enemyCountered', id: enemy.id, x: enemy.x, y: enemy.y });
+          this.adjustHandCooldown('counter');
         }
         if (died) {
           this.events.push({ type: 'enemyKilled', id: enemy.id, x: enemy.x, y: enemy.y });
+          this.adjustHandCooldown('kill');
         }
       }
     }
@@ -679,6 +688,12 @@ export class World implements EnemyContext, AttackContext {
     const mayPush = !!spec.push && !died && (!spec.pushRequiresDamage || damageApplied > 0);
     if (mayPush && enemy && spec.source) pushed = this.pushEnemy(enemy, spec.source) === 'moved';
     return { order, countered, guarded, damageApplied, died, pushed };
+  }
+
+  /** Kills, Counters and hits move the running hand cooldown (GDD §5.1). */
+  private adjustHandCooldown(reason: CooldownReason): void {
+    const seconds = this.chips.adjustCooldown(this.playerTick, cooldownDelta(reason));
+    if (seconds !== 0) this.events.push({ type: 'handCooldownChanged', reason, seconds });
   }
 
   pushEnemy(enemy: Enemy, source: Cell): 'moved' | 'blocked' | 'queued' {
