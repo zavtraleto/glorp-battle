@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_TUNING, mergeTuning, tuning } from '../src/config/tuning';
 import { PLAY_ENEMIES, Run, RUN_STEPS } from '../src/app/run';
 import type { EnemyKind } from '../src/sim/enemies/enemyBase';
+import { folderChips } from '../src/sim/chips/chipSystem';
 
 beforeEach(() => mergeTuning(tuning, JSON.parse(JSON.stringify(DEFAULT_TUNING))));
 
@@ -37,11 +38,14 @@ describe('Run', () => {
     for (const kinds of waves(a)) expect(new Set(kinds).size).toBe(kinds.length);
   });
 
-  it('starts with the 8-chip starter folder: 3 Cannon, 2 Sword, 2 AreaGrab, 1 Guard (GDD §6.3)', () => {
+  it('starts with the 14-chip starter folder without Mine (GDD §6.3)', () => {
     const folder = new Run(1).folder;
     const counts = new Map<string, number>();
     for (const chip of folder) counts.set(chip.defId, (counts.get(chip.defId) ?? 0) + 1);
-    expect(Object.fromEntries(counts)).toEqual({ cannon: 3, sword: 2, areagrab: 2, guard: 1 });
+    expect(folder).toHaveLength(14);
+    expect(Object.fromEntries(counts)).toEqual({
+      cannon: 3, sword: 2, widesword: 1, airshot: 2, spreader: 1, areagrab: 2, guard: 1, block: 1, break: 1,
+    });
     expect(new Run(2).folder).toEqual(folder);
   });
 
@@ -69,7 +73,7 @@ describe('Run', () => {
     run.finishBattle(true, 6);
     expect(run.hp).toBe(6);
     expect(run.depth).toBe(2);
-    expect(run.folder).toHaveLength(8);
+    expect(run.folder).toHaveLength(folderChips('starter').length);
     run.finishBattle(false, 0);
     expect(run.depth).toBe(2);
     expect(run.history.map((step) => step.won)).toEqual([true, false]);

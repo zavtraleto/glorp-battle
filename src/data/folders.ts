@@ -9,12 +9,17 @@ export interface FolderEntry {
 }
 
 export const FOLDERS: Record<FolderId, readonly FolderEntry[]> = {
-  // GDD §6.3: eight chips for a short, readable rotation.
+  // GDD §6.3: fourteen chips, most of the catalogue; Mine stays out of play.
   starter: [
     { chip: 'cannon', count: 3 },
     { chip: 'sword', count: 2 },
+    { chip: 'widesword', count: 1 },
+    { chip: 'airshot', count: 2 },
+    { chip: 'spreader', count: 1 },
     { chip: 'areagrab', count: 2 },
     { chip: 'guard', count: 1 },
+    { chip: 'block', count: 1 },
+    { chip: 'break', count: 1 },
   ],
   all: (Object.values(CHIPS) as ChipDef[]).map((def) => ({ chip: def.id, count: 1 })),
 };

@@ -99,6 +99,11 @@ export class FxView {
       case 'enemyKilled':
         this.push('kill', 'player', playerTick, KILL_TIME, e.x, e.y, playerTick % 5);
         break;
+      case 'waveField':
+        // Both clocks stand still through the wave flight: without this the
+        // old field's effects would resume on the new one (GDD §10.4).
+        this.clear();
+        break;
       case 'enemyWarped':
         this.push('warp', 'world', worldTick, fx.WARP_FX_TIME, e.fromX, e.fromY);
         this.push('warp', 'world', worldTick, fx.WARP_FX_TIME, e.x, e.y);
@@ -149,6 +154,11 @@ export class FxView {
 
   clear(): void {
     this.timed = [];
+  }
+
+  /** Timed effects still playing (tests, debug). */
+  get timedCount(): number {
+    return this.timed.length;
   }
 
   private push(kind: TimedKind, domain: 'player' | 'world', tick: number, seconds: number, x: number, y: number, toY = y): void {

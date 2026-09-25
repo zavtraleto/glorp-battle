@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_HUD, hudKey, type HudStatus } from '../src/terminal/crt/hudModel';
+import { EMPTY_HUD, enemyHpVisible, hudKey, type HudStatus } from '../src/terminal/crt/hudModel';
 import { drawText, glyphRows, measureText, GLYPH_H } from '../src/terminal/crt/pixelFont';
 import { terminalMode } from '../src/terminal/terminalMode';
 import { plasticPattern } from '../src/terminal/textures/procedural';
 
 describe('hud model', () => {
+  it('hides enemy HP while a new wave materializes (GDD §10.4)', () => {
+    expect(enemyHpVisible('WAVE_INTRO')).toBe(false);
+    expect(enemyHpVisible('ACTION')).toBe(true);
+    expect(enemyHpVisible('BATTLE_INTRO')).toBe(true);
+  });
+
   it('changes the redraw key with content, and with blink only in menus', () => {
     const a = { ...EMPTY_HUD, hp: [{ x: 10, y: 20, hp: 40, level: 1 }] };
     const b = { ...EMPTY_HUD, hp: [{ x: 10, y: 20, hp: 30, level: 1 }] };

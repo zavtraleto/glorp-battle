@@ -159,6 +159,15 @@ export class PixelSprite {
     this.hologram?.setTime(seconds);
   }
 
+  /**
+   * Wave materialize 0..1 (GDD §10.4): PNG art builds line by line; a
+   * procedural sprite resolves out of its dissolve instead.
+   */
+  setBuild(k: number): void {
+    if (this.hologram) this.hologram.setBuild(k);
+    else this.setDissolve(1 - k);
+  }
+
   /** 0 = whole, 1 = gone. */
   setDissolve(k: number): void {
     if (this.hologram) this.hologram.setDissolve(k);

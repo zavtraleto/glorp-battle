@@ -1,3 +1,4 @@
+import type { GameState } from '../../sim/world';
 import type { MenuSpec } from './menuModel';
 
 // What the CRT HUD layer shows (spec §8): the player's HP in the bottom-left
@@ -14,6 +15,11 @@ export interface HudLabel {
   tone: LabelTone;
   /** Pixel-font scale; defaults to DAMAGE_SCALE. */
   scale?: number;
+}
+
+/** Enemy HP numbers wait until a new wave has materialized (GDD §10.4). */
+export function enemyHpVisible(state: GameState): boolean {
+  return state !== 'WAVE_INTRO';
 }
 
 /** Enemy HP as a small number centred above an enemy (CRT pixels), decision 2026-09-19. */

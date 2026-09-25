@@ -336,7 +336,7 @@ describe('player sprite and texel scale', () => {
 });
 
 describe('battle signals', () => {
-  const base = { firstStart: true, player: { x: 1, y: 4 }, introTicks: 48, startTicks: 60, wonTicks: 72, deadTicks: 60, flightTicks: 60 };
+  const base = { firstStart: true, player: { x: 1, y: 4 }, introTicks: 48, startTicks: 60, wonTicks: 72, deadTicks: 60 };
 
   it('draws the grid in from the player edge during the intro', () => {
     const early = battleSignal({ ...base, state: 'BATTLE_INTRO', elapsed: 8 });
@@ -366,11 +366,7 @@ describe('battle signals', () => {
     expect(battleSignal({ ...base, state: 'ACTION', elapsed: 0 })).toBe(NO_SIGNAL);
   });
 
-  it('wave flight: the old field leaves near rows first, the new one builds from the far edge', () => {
-    const leaving = battleSignal({ ...base, state: 'WAVE_INTRO', elapsed: 10 });
-    expect(leaving.reveal(5)).toBeLessThan(leaving.reveal(0));
-    const arriving = battleSignal({ ...base, state: 'WAVE_INTRO', elapsed: 40 });
-    expect(arriving.reveal(0)).toBeGreaterThan(arriving.reveal(5));
-    expect(battleSignal({ ...base, state: 'WAVE_INTRO', elapsed: 60 })).toBe(NO_SIGNAL);
+  it('keeps the field steady between waves: only the enemies materialize', () => {
+    expect(battleSignal({ ...base, state: 'WAVE_INTRO', elapsed: 10 })).toBe(NO_SIGNAL);
   });
 });

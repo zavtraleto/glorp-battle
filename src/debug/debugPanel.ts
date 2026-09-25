@@ -97,6 +97,8 @@ export class DebugPanel {
   private onlyChanged = false;
   /** Folder expansion is being set by the panel, not the user: do not remember it. */
   private folding = false;
+  /** The game is writing its state into the bindings: their change handlers must not act. */
+  private syncing = false;
   private readonly state = { seed: 0, battle: 1, timeScale: 1, paused: false, showCoords: false, showOverlay: true, logEvents: false };
 
   constructor(private clock: FixedStepClock, private actions: DebugActions) {
@@ -147,10 +149,19 @@ export class DebugPanel {
     return this.root.style.display !== 'none';
   }
 
+  /**
+   * Mirrors the running session. Tweakpane fires `change` on refresh, so the
+   * battle picker would otherwise restart the run every time a step advanced.
+   */
   syncSeed(seed: number, battle: number): void {
     this.state.seed = seed;
     this.state.battle = battle;
-    this.pane.refresh();
+    this.syncing = true;
+    try {
+      this.pane.refresh();
+    } finally {
+      this.syncing = false;
+    }
   }
 
   // ---------- Tune ----------
@@ -292,7 +303,9 @@ export class DebugPanel {
         url.searchParams.set('folder', String(ev.value));
         location.href = url.toString();
       });
-    f.addBinding(s, 'battle', { options: { 1: 1, 2: 2, 3: 3, 4: 4 } }).on('change', (ev) => a.restart({ battle: ev.value }));
+    f.addBinding(s, 'battle', { options: { 1: 1, 2: 2, 3: 3, 4: 4 } }).on('change', (ev) => {
+      if (!this.syncing) a.restart({ battle: ev.value });
+    });
     f.addBinding(s, 'seed', { step: 1 });
     f.addButton({ title: 'restart with seed' }).on('click', () => a.restart({ seed: s.seed >>> 0 }));
     f.addButton({ title: 'restart random seed' }).on('click', () => a.restart({ seed: 'random' }));

@@ -17,6 +17,11 @@ export function chipDesc(id: string): string {
   return t(`chip.${id}.desc` as StringKey);
 }
 
+/** What the chip does, short enough for the 14-segment display with its power. */
+export function chipBrief(id: string): string {
+  return t(`chip.${id}.brief` as StringKey);
+}
+
 export function enemyName(kind: string): string {
   return t(`enemy.${kind}` as StringKey);
 }

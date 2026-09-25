@@ -140,6 +140,9 @@ describe('tutorial mode', () => {
     attack(s);
     run(s, 30);
     expect(s.world.field.owner(1, 2)).toBe('player');
+    // The player keeps its cell between waves (GDD §10.4): back into the Mettik's lane.
+    expect(s.world.player.x).toBe(0);
+    move(s, 'right');
     move(s, 'up');
     move(s, 'up');
     run(s, 120);
@@ -189,14 +192,15 @@ describe('tutorial mode', () => {
     expect(s.world.uiTick - closed).toBeGreaterThanOrEqual(T(tuning.tutorial.TUT_CALLOUT_GAP));
   });
 
-  it('swaps the chips during the flight to the next lesson', () => {
+  it('swaps the chips as the next lesson begins', () => {
     const s = make();
     s.debugTutorial(1);
     untilWave(s, 0);
     move(s, 'left');
+    const version = s.world.chips.folderVersion;
     s.world.killAllEnemies();
     for (let i = 0; i < 600 && s.world.state !== 'WAVE_INTRO'; i++) tick(s);
-    const version = s.world.chips.folderVersion;
+    expect(s.world.chips.folderVersion).toBe(version + 1);
     for (let i = 0; i < 600 && s.world.state === 'WAVE_INTRO'; i++) tick(s);
     expect(s.world.chips.folderVersion).toBe(version + 1);
     expect(s.world.chips.hand.slice(0, 2).map((c) => c?.defId)).toEqual(['cannon', 'cannon']);

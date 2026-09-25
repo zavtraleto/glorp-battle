@@ -12,6 +12,8 @@ export type SimEvent =
   | { type: 'comboStarted'; size: number }
   | { type: 'comboEnded'; reason: 'complete' }
   | { type: 'comboBroken' }
+  /** A completed combo brought these cooling slots `ticks` closer to their next chip (GDD §5). */
+  | { type: 'slotCooldownCut'; slots: number[]; ticks: number }
   | { type: 'enemyKilled'; id: EntityId; x: number; y: number }
   | { type: 'enemyCountered'; id: EntityId; x: number; y: number }
   | { type: 'enemyRemoved'; id: EntityId }
@@ -37,7 +39,7 @@ export type SimEvent =
   | { type: 'enemyWarped'; id: EntityId; fromX: number; fromY: number; x: number; y: number }
   /** Every enemy of a wave that is not the last is deleted (GDD §10.4); `wave` is 1-based. */
   | { type: 'waveCleared'; wave: number }
-  /** The field was swapped for the next wave mid-flight. */
+  /** The field reset in place for the next wave (GDD §10.4). */
   | { type: 'waveField'; wave: number }
   /** The enemies of a wave appeared; they act once the spawn animation ends. */
   | { type: 'waveSpawned'; wave: number; count: number }

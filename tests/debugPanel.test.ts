@@ -44,8 +44,8 @@ describe('tuning groups', () => {
     expect(DEFAULT_TUNING.combo.WORLD_TIME_SCALE).toBe(0.85);
     expect(DEFAULT_TUNING.mettik.ACTION_DELAY).toBe(0.4);
     expect(DEFAULT_TUNING.canodron.RECOVERY_TIME).toBe(1.0);
-    expect(DEFAULT_TUNING.flow).toMatchObject({ INTRO_TIME: 0.6, WAVE_FLIGHT_TIME: 0.7, RESULT_DELAY_WIN: 0.9 });
-    // A wave's last deletion must finish before the flight starts.
+    expect(DEFAULT_TUNING.flow).toMatchObject({ INTRO_TIME: 0.6, RESULT_DELAY_WIN: 0.9 });
+    // A wave's last deletion must finish before the field resets.
     expect(DEFAULT_TUNING.flow.WAVE_CLEAR_TIME).toBeGreaterThanOrEqual(DEFAULT_TUNING.fx.DELETE_ANIM_TIME);
   });
 });

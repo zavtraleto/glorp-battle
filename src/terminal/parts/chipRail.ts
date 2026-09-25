@@ -61,6 +61,7 @@ interface Cart {
   aim: EjectAim;
   wasCooling: boolean;
   cancelFlashLeft: number;
+  cutFlashLeft: number;
 }
 
 const COLOR = {
@@ -270,6 +271,15 @@ export class ChipRail {
     }
   }
 
+  /** A completed combo cut these slots' cooldown (GDD §5): a yellow glow and a contact flash, this frame. */
+  flashCooldownCut(slots: readonly number[]): void {
+    for (const slot of slots) {
+      this.flashContacts(slot);
+      const cart = this.carts.find((c) => c.slot === slot && c.phase !== 'eject');
+      if (cart) cart.cutFlashLeft = tuning.terminal.CHIP_CUT_FLASH_TIME;
+    }
+  }
+
   /** Battle only: with nothing queued for a while, the faces flash to call for a pick. */
   setAttract(allowed: boolean): void {
     this.attractAllowed = allowed;
@@ -294,6 +304,7 @@ export class ChipRail {
     for (const c of [...this.carts]) {
       c.t += dt;
       c.cancelFlashLeft = Math.max(0, c.cancelFlashLeft - dt);
+      c.cutFlashLeft = Math.max(0, c.cutFlashLeft - dt);
       const o = c.cart.object;
       const rest = this.slotPos[c.slot];
       const cancelLeft = c.cancelFlashLeft;
@@ -359,7 +370,8 @@ export class ChipRail {
             c.cart.setGlow(COLOR.glowCancelled, cancelGlow);
           } else if (cooling) {
             c.cart.setTint(this.coolingBody.setScalar(cooldownBodyLevel(view?.cooldown ?? 0)), COLOR.faceCooling);
-            c.cart.setGlow(COLOR.glowPossible, 0);
+            const cut = t.CHIP_CUT_FLASH_TIME > 0 ? c.cutFlashLeft / t.CHIP_CUT_FLASH_TIME : 0;
+            c.cart.setGlow(COLOR.glowSelected, GLOW_COMMITTED * cut);
           } else if (blocked) {
             c.cart.setTint(COLOR.tintBlocked, COLOR.faceBlocked);
             c.cart.setGlow(COLOR.glowPossible, 0);
@@ -489,6 +501,7 @@ export class ChipRail {
       aim: { x: 0, y: 0, z: 0 },
       wasCooling: this.slotViews?.[slot]?.state === 'cooling',
       cancelFlashLeft: 0,
+      cutFlashLeft: 0,
     };
   }
 

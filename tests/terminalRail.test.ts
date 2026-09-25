@@ -49,8 +49,9 @@ describe('railChanges', () => {
     const uid = cs.hand[0]?.uid;
     const before = keys();
     cs.toggleSelect(0);
-    cs.startAttack();
+    cs.commitAttack();
     cs.takeNext(0);
+    cs.reserveRefill(0, 0);
     cs.finishAttack();
     cs.refillReady(240);
     expect(cs.hand[0]?.uid).toBe(uid);
@@ -77,15 +78,15 @@ describe('cancel flash', () => {
   });
 });
 
-describe('shared cooldown presentation', () => {
-  it('covers every unavailable chip without obscuring the committed tail', () => {
+describe('slot cooldown presentation', () => {
+  it('fills only cooling slots; locked and committed chips show no cooldown', () => {
     const cooldownForSlot = (railPlan as unknown as {
       cooldownForSlot?: (state: string, progress: number | null) => number | null;
     }).cooldownForSlot;
     expect(cooldownForSlot).toBeTypeOf('function');
     if (!cooldownForSlot) return;
 
-    expect(cooldownForSlot('locked', 0.5)).toBe(0.5);
+    expect(cooldownForSlot('locked', 0.5)).toBeNull();
     expect(cooldownForSlot('cooling', 0.5)).toBe(0.5);
     expect(cooldownForSlot('committed', 0.5)).toBeNull();
     expect(cooldownForSlot('ready', 0.5)).toBeNull();

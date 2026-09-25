@@ -67,7 +67,7 @@ export class TutorialDirector {
   }
 
   update(world: World, events: readonly SimEvent[]): void {
-    // The next lesson's chips load mid-flight, while the field is swapped.
+    // The next lesson's chips load as the field resets for its wave.
     if (events.some((e) => e.type === 'waveField')) this.startLesson(world, world.waveIndex);
     if (world.state !== 'ACTION') return;
     if (world.waveIndex !== this.lessonIndex) this.startLesson(world, world.waveIndex);
@@ -215,7 +215,7 @@ export class TutorialDirector {
     return slots;
   }
 
-  /** A missed shot: once the hand has refilled, the lesson goes round again. */
+  /** A missed shot: once a cooled slot brings a chip back, the lesson goes round again. */
   private retry(world: World): void {
     const lesson = this.lesson;
     if (lesson?.retry === undefined || this.beatIndex !== lesson.beats.length - 1) return;

@@ -123,7 +123,7 @@ BROKEN / EMPTY / OBJECT пока только визуал: включаются
 | ENEMY DELETED! | клетки врага вспыхивают, сетка пульсирует |
 | GAME OVER | каскад BROKEN от игрока, сетка гаснет красным |
 | NO CHIP | только отказ EXECUTE на корпусе |
-| (волна, GDD §10.4) | `WAVE_CLEAR`: клетки врага вспыхивают, как при победе; `WAVE_INTRO`: камера летит вперёд, старое поле уходит под игрока от ближних рядов, новое строится от дальнего края; новые враги падают сверху, выходя из распада и ряби, под ними маркеры SPAWN |
+| (волна, GDD §10.4) | `WAVE_CLEAR`: клетки врага вспыхивают, как при победе; `WAVE_INTRO` [решение 2026-09-25]: поле сбрасывается на месте, камера стоит; новые враги материализуются голограммой — строки по 2 px собираются снизу вверх, въезжают попеременно слева и справа со светящимся краем (`uHoloBuild` в `hologramMaterial.ts`, процедурный спрайт — через распад), под ними маркеры SPAWN. Раньше — пролёт камеры к новому полю |
 | HP / CUSTOM / имя чипа | только светодиоды корпуса и ряд чипов |
 
 Время сигналов берётся из `world` (тики состояния), поэтому пауза их замораживает.
@@ -146,7 +146,6 @@ BROKEN / EMPTY / OBJECT пока только визуал: включаются
 | `ATTACK_CELL_TIME` | 0.15 с | полоса ATTACK |
 | `AFTER_TIME` | 0.2 с | мерцание после атаки |
 | `SPAWN_TIME` | 0.6 с | маркеры появления |
-| `WAVE_FLIGHT_DIST` | 8 | путь камеры за половину пролёта к следующей волне, мировые единицы [решение 2026-09-24] |
 | `DAMAGE_SCALE` | 3 | масштаб чисел урона |
 
 ## 10. Отладка
@@ -170,8 +169,8 @@ BROKEN / EMPTY / OBJECT пока только визуал: включаются
 | Спрайты: игрок, враги, пиксельная посадка | `src/render/playerSprite.ts`, `creatureGen.ts`, `pixelSprite.ts`, `actors.ts` |
 | Нарисованные спрайты: загрузка, приглушение, какие виды | `src/render/spriteArt.ts`, `src/assets/sprites/` (исходники — `/assets`) |
 | Hologram PNG-спрайтов: shader, defaults/overrides, object-space time effects | `src/render/hologramMaterial.ts`, `hologramConfig.ts`, `config/tuning.ts` (`hologram`) |
-| Сигналы боя (появление, победа, поражение, пролёт между волнами) | `src/render/battleSignals.ts` |
-| Пролёт камеры между волнами, появление врагов волны | `src/render/scene.ts` (`flightOffset`, `placeFlight`), `actors.ts` (`spawn`) |
+| Сигналы боя (появление, победа, поражение) | `src/render/battleSignals.ts` |
+| Материализация врагов волны | `src/render/scene.ts` (`spawnProgress`), `actors.ts` (`spawn`), `pixelSprite.ts` (`setBuild`), `hologramMaterial.ts` (`uHoloBuild`, `buildRowProgress`) |
 | Надпись `Wave N` поверх терминала | `src/terminal/waveBanner.ts`, шрифт `bannerFont.ts` |
 | HUD-слой CRT (полоса состояния, сегменты HP, числа, меню) | `src/terminal/crt/crtCanvas.ts`, `hudModel.ts`, `menuModel.ts` |
 | Шейдер стекла CRT (сканлайны, маска фосфора, свечение, шум, аберрация, тряска) | `src/terminal/crt/crtMaterial.ts` |

@@ -24,6 +24,22 @@ export function paddedSpriteMetrics(width: number, height: number): PaddedSprite
   };
 }
 
+/**
+ * Wave materialize (GDD §10.4): the sprite builds line by line from the
+ * bottom. A line starts after `y * BUILD_ROW_SPAN + jitter * BUILD_JITTER`
+ * of the build and takes `BUILD_ROW_TIME` to slide in; the numbers are chosen
+ * so every line is whole at build = 1. The shader uses the same curve.
+ */
+const BUILD_ROW_SPAN = 0.7;
+const BUILD_JITTER = 0.12;
+const BUILD_ROW_TIME = 0.18;
+
+/** 0..1 progress of the line at height `rowY` (0 = bottom) with `jitter` in 0..1. */
+export function buildRowProgress(build: number, rowY: number, jitter: number): number {
+  const k = (build - (rowY * BUILD_ROW_SPAN + jitter * BUILD_JITTER)) / BUILD_ROW_TIME;
+  return Math.max(0, Math.min(1, k));
+}
+
 type HologramUniforms = {
   uHoloTime: { value: number };
   uHoloVisualSize: { value: THREE.Vector2 };
@@ -31,6 +47,7 @@ type HologramUniforms = {
   uHoloGlowColor: { value: THREE.Color };
   uHoloSeed: { value: number };
   uHoloDissolve: { value: number };
+  uHoloBuild: { value: number };
   uHoloRipple: { value: number };
   uHoloRippleTime: { value: number };
   uHoloColorRetention: { value: number };
@@ -66,6 +83,7 @@ uniform vec2 uHoloTexel;
 uniform vec3 uHoloGlowColor;
 uniform float uHoloSeed;
 uniform float uHoloDissolve;
+uniform float uHoloBuild;
 uniform float uHoloRipple;
 uniform float uHoloRippleTime;
 uniform float uHoloColorRetention;
@@ -129,6 +147,20 @@ float sweepBand(float y, float phase, float speed, float bandWidth) {
 void main() {
   vec2 sourceUv = (vMapUv - vec2(${HOLOGRAM_PADDING.toFixed(4)})) / ${CONTENT_SHARE.toFixed(4)};
   vec2 q = sourceUv;
+
+  // Wave materialize: 2-px lines rise from the bottom, sliding in from
+  // alternate sides, each with a bright leading glow until it settles.
+  float buildGlow = 0.0;
+  if (uHoloBuild < 1.0) {
+    float buildLines = max(8.0, uHoloVisualSize.y * 0.5);
+    float row = floor(q.y * buildLines);
+    float jitter = hash21(vec2(row, uHoloSeed * 13.0));
+    float rowK = clamp((uHoloBuild - (row / buildLines * ${BUILD_ROW_SPAN.toFixed(4)} + jitter * ${BUILD_JITTER.toFixed(4)})) / ${BUILD_ROW_TIME.toFixed(4)}, 0.0, 1.0);
+    if (rowK <= 0.0) discard;
+    float side = mod(row, 2.0) < 1.0 ? -1.0 : 1.0;
+    q.x += side * (1.0 - rowK) * (1.0 - rowK) * 0.9;
+    buildGlow = 1.0 - rowK;
+  }
 
   q.x += sin(q.y * 26.0 + uHoloRippleTime * 55.0) * 0.045 * uHoloRipple;
   float glitchTick = floor(uHoloTime * 2.0);
@@ -200,6 +232,7 @@ void main() {
   colour += uHoloGlowColor * innerEdge * (uHoloEmission * 0.8 + uHoloHalo * 0.28);
   colour += (source.rgb * 0.22 + uHoloGlowColor * 0.78) * sweeps;
   colour += (source.rgb * 0.12 + uHoloGlowColor * 0.88) * thinSweep;
+  colour += uHoloGlowColor * buildGlow * 1.4;
 
   vec3 outsideLight = uHoloGlowColor * (nearHalo * uHoloHalo * 0.34 + wideHalo * uHoloBloom);
   outsideLight += mix(uHoloGlowColor, source.rgb, 0.2) * particle * (0.45 + uHoloEmission);
@@ -221,6 +254,7 @@ function makeUniforms(textureWidth: number, textureHeight: number, seed: number)
     uHoloGlowColor: { value: new THREE.Color() },
     uHoloSeed: { value: seed },
     uHoloDissolve: { value: 0.5 },
+    uHoloBuild: { value: 1 },
     uHoloRipple: { value: 0 },
     uHoloRippleTime: { value: 0 },
     uHoloColorRetention: { value: 0 },
@@ -276,7 +310,7 @@ export class HologramSpriteMaterial extends THREE.SpriteMaterial {
   }
 
   override customProgramCacheKey(): string {
-    return 'glorp-png-hologram-v1';
+    return 'glorp-png-hologram-v2';
   }
 
   setTime(seconds: number): void {
@@ -290,6 +324,11 @@ export class HologramSpriteMaterial extends THREE.SpriteMaterial {
   setRipple(strength: number, seconds: number): void {
     this.holoUniforms.uHoloRipple.value = Math.max(0, Math.min(1, strength));
     this.holoUniforms.uHoloRippleTime.value = seconds;
+  }
+
+  /** Wave materialize 0..1 (GDD §10.4); 1 = whole. */
+  setBuild(progress: number): void {
+    this.holoUniforms.uHoloBuild.value = Math.max(0, Math.min(1, progress));
   }
 
   setDissolve(progress: number): void {

@@ -13,7 +13,7 @@ import { CrtCanvas } from './crt/crtCanvas';
 import { CrtMaterial } from './crt/crtMaterial';
 import { PLAYER_ID } from '../sim/player';
 import { FloaterList, floaterFromEvent } from './crt/floaters';
-import type { HpTag, HudLabel, HudStatus } from './crt/hudModel';
+import { enemyHpVisible, type HpTag, type HudLabel, type HudStatus } from './crt/hudModel';
 import { menuFor, menuItemAt, menuLayout, moveCursor, type MenuAction, type MenuSpec } from './crt/menuModel';
 import { cursorCss } from './interaction/cursor';
 import { attachPointers } from './interaction/pointerEvents';
@@ -43,7 +43,7 @@ import { Trackball } from './parts/trackball';
 import { WaveBanner } from './waveBanner';
 import { TutorialCallout, type CalloutPoint } from './tutorialCallout';
 import { terminalMode } from './terminalMode';
-import { chipName, t } from '../i18n';
+import { chipBrief, t } from '../i18n';
 import { CHIPS } from '../data/chips';
 
 // NET-01 terminal (TERMINAL.md §13). Owns the terminal scene and camera, draws
@@ -338,6 +338,7 @@ export class Terminal {
       this.shakeCabinet(shape === 'near' ? SHAKE.sword : SHAKE.chip);
     }
     if (e.type === 'chipChainCancelled') this.rail.flashCancelled(e.chips);
+    if (e.type === 'slotCooldownCut') this.rail.flashCooldownCut(e.slots);
     if (e.type === 'damaged' && e.targetId !== PLAYER_ID && e.amount > 0) this.crt.edgeFlash(EDGE_HIT, EDGE.hit);
     // A kill is the big beat: bright edges, a flash and a jolt of the cabinet.
     if (e.type === 'enemyKilled') {
@@ -354,10 +355,10 @@ export class Terminal {
       this.lighting.flashAlarm();
       this.shakeCabinet(SHAKE.playerHit);
     }
-    // Waves (GDD §10.4): the banner rides the flight, the landing jolts the cabinet.
-    if (e.type === 'stateChanged' && e.to === 'WAVE_INTRO') {
-      this.showWaveBanner(world, tuning.flow.WAVE_FLIGHT_TIME + tuning.flow.WAVE_SPAWN_TIME);
-    }
+    // Waves (GDD §10.4): the banner hangs while the new wave materializes.
+    if (e.type === 'stateChanged' && e.to === 'WAVE_INTRO') this.showWaveBanner(world, tuning.flow.WAVE_SPAWN_TIME);
+    // Damage numbers belong to the old field; they must not rise over the new one.
+    if (e.type === 'waveField') this.floaters.clear();
     if (e.type === 'waveSpawned') {
       this.crt.flash();
       this.shakeCabinet(SHAKE.chip);
@@ -592,7 +593,6 @@ export class Terminal {
     // flies out at once, and between battles the rail stays empty (2026-09-19).
     const screen = this.opts.session.screen;
     const inBattle = (screen === 'BATTLE' || screen === 'PAUSED') && world.state !== 'BATTLE_WON' && world.state !== 'PLAYER_DEAD';
-    const cooldown = inBattle ? chips.handCooldownProgress(world.playerTick) : null;
     // A tutorial lesson replaced the folder (GDD §10.5): the old cassettes were
     // not spent, so they vanish instead of ejecting; the new ones load in.
     if (chips.folderVersion !== this.folderVersion) {
@@ -605,12 +605,12 @@ export class Terminal {
       return {
         chip: inBattle ? (chip ?? chips.pendingChip(i)) : null,
         state,
-        cooldown: cooldownForSlot(state, cooldown),
+        cooldown: cooldownForSlot(state, inBattle ? chips.refillProgress(i, world.playerTick) : null),
         order: inBattle ? chips.queuePosition(i) : 0,
       };
     }));
     const toEntry = (def: (typeof CHIPS)[keyof typeof CHIPS]): ChipDisplayEntry => ({
-      name: chipName(def.id),
+      name: chipBrief(def.id),
       power: def.power,
     });
     const queued = !inBattle || this.mode() === 'MENU' ? null : chips.attackChips()[0] ?? null;
@@ -636,7 +636,7 @@ export class Terminal {
     const H = this.battle.height;
     const labels: HudLabel[] = [];
     const hp: HpTag[] = [];
-    for (const e of world.enemies) {
+    for (const e of enemyHpVisible(world.state) ? world.enemies : []) {
       if (!e.alive) continue;
       const p = sceneRenderer.actorTopTargetPos(e.id);
       if (!p) continue;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CHIPS, type ChipId } from '../src/data/chips';
-import { chipName, t } from '../src/i18n';
+import { chipBrief, chipName, t } from '../src/i18n';
 import { trackballArmed } from '../src/terminal/controlRules';
 import {
   barCellSegments,
@@ -48,6 +48,17 @@ describe('14-segment display', () => {
 
   it('shows only the name of a chip without damage', () => {
     expect(chipDisplayText([{ name: 'Guard', power: null }], 'NO CHIP')).toBe('    GUARD     ');
+  });
+
+  it('shows every chip as its brief plus power, whole and drawable (GDD §6.5)', () => {
+    for (const id of Object.keys(CHIPS) as ChipId[]) {
+      const power = CHIPS[id].power;
+      const full = power === null ? chipBrief(id) : `${chipBrief(id)} ${power}`;
+      expect(full.length, id).toBeLessThanOrEqual(DISPLAY_CHARS);
+      for (const ch of full) expect(hasGlyph(ch), `${id}: ${ch}`).toBe(true);
+    }
+    expect(chipDisplayText([{ name: chipBrief('cannon'), power: CHIPS.cannon.power }], 'NO CHIP').trim())
+      .toBe(`LINE HIT ${CHIPS.cannon.power}`);
   });
 
   it('always fits the wider display', () => {

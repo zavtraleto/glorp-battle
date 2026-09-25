@@ -35,7 +35,7 @@ export type GameState =
   | 'BATTLE_WON'
   /** A wave is deleted and more follow: deletions play out (GDD §10.4). */
   | 'WAVE_CLEAR'
-  /** Flight to the next field, then the new enemies spawn; frozen like the intro. */
+  /** The field has reset and the new wave materializes; frozen like the intro. */
   | 'WAVE_INTRO'
   | 'RESULT'
   | 'SEQUENCE_COMPLETE';
@@ -139,7 +139,6 @@ export class World implements EnemyContext, AttackContext {
   /** 0-based index of the current wave (GDD §10.4). */
   waveIndex = 0;
   /** WAVE_INTRO progress: the field swap and the spawn happen once each. */
-  private wavePhase: 'flight' | 'swapped' | 'spawned' = 'spawned';
   readonly rngFolder: Rng;
   readonly rngAi: Rng;
   readonly occupancy = new Occupancy();
@@ -283,8 +282,9 @@ export class World implements EnemyContext, AttackContext {
   }
 
   /**
-   * Mid-flight swap to a fresh field (GDD §10.4): panels, mines, objects and
-   * leftovers of the old wave go; the player returns to the start cell with HP kept.
+   * The field resets in place for the next wave (GDD §10.4): panels, mines,
+   * objects and leftovers of the old wave go. The player keeps its cell unless
+   * the reset took it away; HP, folder, hand and cooldowns stay.
    */
   private resetFieldForWave(): void {
     for (const e of this.enemies) this.occupancy.remove(e.id, e.x, e.y);
@@ -295,26 +295,24 @@ export class World implements EnemyContext, AttackContext {
     this.pendingPushes.clear();
     this.impactObjects.clear();
     this.field.reset();
-    this.player.resetForWave();
+    const p = this.player;
+    const keep = this.field.canStand('player', p.x, p.y);
+    p.resetForWave(keep ? p.x : tuning.player.PLAYER_START_X, keep ? p.y : tuning.player.PLAYER_START_Y);
     this.events.push({ type: 'waveField', wave: this.waveIndex + 1 });
   }
 
-  /** WAVE_INTRO: flight, field swap halfway, then the spawn (GDD §10.4). */
+  /** WAVE_CLEAR → WAVE_INTRO: the field resets and the next wave appears at once (GDD §10.4). */
+  private beginNextWave(): void {
+    this.waveIndex++;
+    this.setState('WAVE_INTRO');
+    this.resetFieldForWave();
+    this.spawnWave();
+    this.events.push({ type: 'waveSpawned', wave: this.waveIndex + 1, count: this.enemies.length });
+  }
+
+  /** WAVE_INTRO: frozen while the new wave materializes (GDD §10.4). */
   private updateWaveIntro(): void {
-    const flight = secondsToTicks(tuning.flow.WAVE_FLIGHT_TIME);
-    const elapsed = this.stateElapsed;
-    if (this.wavePhase === 'flight' && elapsed >= Math.floor(flight / 2)) {
-      this.resetFieldForWave();
-      this.wavePhase = 'swapped';
-    }
-    if (this.wavePhase === 'swapped' && elapsed >= flight) {
-      this.spawnWave();
-      this.wavePhase = 'spawned';
-      this.events.push({ type: 'waveSpawned', wave: this.waveIndex + 1, count: this.enemies.length });
-    }
-    if (this.wavePhase === 'spawned' && elapsed >= flight + secondsToTicks(tuning.flow.WAVE_SPAWN_TIME)) {
-      this.setState('ACTION');
-    }
+    if (this.stateElapsed >= secondsToTicks(tuning.flow.WAVE_SPAWN_TIME)) this.setState('ACTION');
   }
 
   /** Stops everything the player and the enemies had going when a wave or the battle ends. */
@@ -327,12 +325,6 @@ export class World implements EnemyContext, AttackContext {
     this.combo = null;
     this.bufferedChipUntil = null;
     this.chips.cancelAttack();
-    // A combo delays the hand cooldown to its exit; ended here, it must still
-    // start, or the hand stays locked through the next wave.
-    if (this.chips.locked) {
-      this.chips.startCooldown(this.playerTick);
-      this.chips.reserveSpentRefills();
-    }
     this.worldTimeScale = 1;
     this.worldScaleTransition = null;
     this.selectSlowMo = false;
@@ -376,13 +368,12 @@ export class World implements EnemyContext, AttackContext {
   }
 
   /**
-   * One budget per hand (GDD §6.7): it drains while chips are queued, refills
-   * gradually while the queue is empty and is full again with every new hand.
+   * One budget (GDD §6.7): it drains while chips are queued and refills
+   * gradually while the queue is empty.
    */
-  private updateSelectBudget(newHand: boolean): void {
+  private updateSelectBudget(): void {
     const full = secondsToTicks(tuning.combo.SELECT_SLOW_MO_TIME);
-    if (newHand) this.selectBudget = full;
-    else if (this.chips.phase === 'selecting' && this.chips.attack.length > 0) {
+    if (this.chips.phase === 'selecting' && this.chips.attack.length > 0) {
       this.selectBudget = Math.max(0, this.selectBudget - 1);
     } else {
       const recharge = secondsToTicks(tuning.combo.SELECT_SLOW_MO_RECHARGE);
@@ -525,19 +516,22 @@ export class World implements EnemyContext, AttackContext {
     if (cancelledChips.length > 0) this.events.push({ type: 'chipChainCancelled', chips: cancelledChips });
   }
 
-  private startCombo(size: number): void {
-    this.combo = new ComboState(this.playerTick);
+  private startCombo(slots: readonly number[]): void {
+    this.combo = new ComboState(this.playerTick, slots);
     this.setWorldTimeScale(tuning.combo.WORLD_TIME_SCALE, tuning.combo.SLOW_MO_ENTER);
-    this.events.push({ type: 'comboStarted', size });
+    this.events.push({ type: 'comboStarted', size: slots.length });
   }
 
+  /** A completed combo cuts the cooldown of every slot it fired from (GDD §5). */
   private finishCombo(): void {
-    if (!this.combo) return;
+    const combo = this.combo;
+    if (!combo) return;
     this.combo = null;
     this.bufferedChipUntil = null;
     this.chips.finishAttack();
-    this.chips.startCooldown(this.playerTick);
-    this.chips.reserveSpentRefills();
+    const ticks = secondsToTicks(tuning.hand.COMBO_CUT_PER_CHIP * combo.slots.length);
+    const slots = this.chips.cutCooldowns(combo.slots, ticks);
+    if (slots.length > 0) this.events.push({ type: 'slotCooldownCut', slots, ticks });
     this.setWorldTimeScale(1, tuning.combo.SLOW_MO_EXIT);
     this.events.push({ type: 'comboEnded', reason: 'complete' });
   }
@@ -550,8 +544,7 @@ export class World implements EnemyContext, AttackContext {
     this.events.push({ type: 'comboBroken' });
     this.setWorldTimeScale(1, tuning.combo.COMBO_BREAK_EXIT);
     this.interruptPlayerChip();
-    this.chips.startCooldown(this.playerTick);
-    this.chips.reserveSpentRefills();
+    this.chips.finishAttack();
   }
 
   // ---------- Objects ----------
@@ -786,16 +779,14 @@ export class World implements EnemyContext, AttackContext {
     const first = this.chips.phase === 'selecting';
     const size = this.chips.attack.length;
     const startsCombo = first && size >= 2 && size <= 5;
-    const committed = first
-      ? (startsCombo ? this.chips.commitAttack() : this.chips.startAttack(this.playerTick))
-      : this.chips.commitAttack();
-    if (!committed) return false;
+    const comboSlots = [...this.chips.attack];
+    if (!this.chips.commitAttack()) return false;
     const slot = this.chips.attack[0];
     const chip = this.chips.takeNext(this.playerTick);
     if (!chip) return false;
     this.beginChip(chip, slot ?? -1);
     if (first) this.selectSlowMo = false;
-    if (startsCombo) this.startCombo(size);
+    if (startsCombo) this.startCombo(comboSlots);
     // A single chip leaves the decision slow-mo straight to normal speed (GDD §6.7).
     else if (first) this.setWorldTimeScale(1, tuning.combo.SLOW_MO_EXIT);
     return true;
@@ -842,7 +833,7 @@ export class World implements EnemyContext, AttackContext {
     if (active.resolved) return;
     active.resolved = true;
     const reshuffles = this.chips.reshuffles;
-    this.chips.reserveRefill(active.slot);
+    this.chips.reserveRefill(active.slot, this.playerTick);
     if (this.chips.reshuffles > reshuffles) {
       this.events.push({ type: 'drawReshuffled', count: this.chips.reshuffles });
     }
@@ -1008,15 +999,11 @@ export class World implements EnemyContext, AttackContext {
         }
         return;
       case 'WAVE_CLEAR':
-        // Deletions play out on both clocks, then the flight starts.
+        // Deletions play out on both clocks, then the field resets for the next wave.
         this.tick++;
         this.time += dt;
         this.removeDeletedEnemies();
-        if (this.stateElapsed >= secondsToTicks(tuning.flow.WAVE_CLEAR_TIME)) {
-          this.waveIndex++;
-          this.wavePhase = 'flight';
-          this.setState('WAVE_INTRO');
-        }
+        if (this.stateElapsed >= secondsToTicks(tuning.flow.WAVE_CLEAR_TIME)) this.beginNextWave();
         return;
       case 'WAVE_INTRO':
         this.updateWaveIntro();
@@ -1046,7 +1033,6 @@ export class World implements EnemyContext, AttackContext {
       worldSteps++;
     }
     const reshufflesBeforeRefill = this.chips.reshuffles;
-    const phaseBeforeRefill = this.chips.phase;
     // Until its hit frame, the active chip may still be interrupted and must
     // be able to return to the exact slot it came from.
     const reservedChip = this.activeChip && !this.activeChip.resolved
@@ -1074,7 +1060,7 @@ export class World implements EnemyContext, AttackContext {
       else if (c.type === 'useChip') this.requestUseChip();
       else if (c.type === 'selectChip') this.selectChip(c.slot);
     }
-    this.updateSelectBudget(phaseBeforeRefill !== 'selecting' && this.chips.phase === 'selecting');
+    this.updateSelectBudget();
     const playerBefore = { x: p.x, y: p.y };
     p.updateMovement(this.playerTick, moves, input.held);
     if (p.x !== playerBefore.x || p.y !== playerBefore.y) this.triggerCellEntry(p);

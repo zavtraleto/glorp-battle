@@ -38,7 +38,7 @@ function clearWave(w: World, log: SimEvent[] = []): SimEvent[] {
   w.killAllEnemies();
   run(w, 1, log);
   expect(w.state).toBe('WAVE_CLEAR');
-  run(w, T(tuning.flow.WAVE_CLEAR_TIME) + T(tuning.flow.WAVE_FLIGHT_TIME) + T(tuning.flow.WAVE_SPAWN_TIME) + 1, log);
+  run(w, T(tuning.flow.WAVE_CLEAR_TIME) + T(tuning.flow.WAVE_SPAWN_TIME) + 1, log);
   expect(w.state).toBe('ACTION');
   return log;
 }
@@ -85,7 +85,7 @@ describe('waves (GDD §10.4)', () => {
     expect(w.chips.chips).toBe(chips);
   });
 
-  it('swaps in a fresh field halfway through the flight', () => {
+  it('resets the field in place as the next wave begins; the player keeps its cell', () => {
     const w = make();
     w.field.breakPanel(1, 3, w.tick, false);
     w.field.setOwner(0, 2, 'player', w.tick);
@@ -99,33 +99,51 @@ describe('waves (GDD §10.4)', () => {
 
     w.killAllEnemies();
     run(w, 1);
-    run(w, T(tuning.flow.WAVE_CLEAR_TIME) + 1);
-    expect(w.state).toBe('WAVE_INTRO');
-    // The old field is still there while the player flies off it.
+    run(w, T(tuning.flow.WAVE_CLEAR_TIME) - 1);
+    expect(w.state).toBe('WAVE_CLEAR');
+    // The old field stays while the deletions play out.
     expect(w.field.panel(1, 3)).toBe('BROKEN');
-    run(w, Math.floor(T(tuning.flow.WAVE_FLIGHT_TIME) / 2));
+    const log = run(w, 1);
+    expect(w.state).toBe('WAVE_INTRO');
+    expect(log.map((ev) => ev.type)).toEqual(expect.arrayContaining(['waveField', 'waveSpawned']));
     expect(w.field.panel(1, 3)).toBe('NORMAL');
     expect(w.field.owner(0, 2)).toBe('enemy');
     expect(w.field.hazard(2, 1)).toBeNull();
     expect(w.objects).toHaveLength(0);
     expect(w.occupancy.isFree(0, 3)).toBe(true);
-    expect({ x: w.player.x, y: w.player.y }).toEqual({ x: tuning.player.PLAYER_START_X, y: tuning.player.PLAYER_START_Y });
-    expect(w.occupancy.get(w.player.x, w.player.y)).toBe(w.player.id);
+    expect({ x: w.player.x, y: w.player.y }).toEqual({ x: 0, y: 5 });
+    expect(w.occupancy.get(0, 5)).toBe(w.player.id);
     expect(w.player.guard).toBe(false);
-    expect(w.enemies).toHaveLength(0);
+    expect(w.enemies.map((en) => [en.x, en.y])).toEqual([[0, 1], [2, 1]]);
   });
 
-  it('the new wave is frozen through the flight and the spawn', () => {
+  it('sends the player to the start cell when the reset takes its panel away', () => {
     const w = make();
+    // A grabbed enemy row: after the reset it belongs to the enemy again.
+    w.field.setOwner(0, 2, 'player', w.tick);
+    w.occupancy.remove(w.player.id, w.player.x, w.player.y);
+    w.player.x = 0;
+    w.player.y = 2;
+    w.occupancy.place(w.player.id, 0, 2);
     w.killAllEnemies();
-    run(w, 1 + T(tuning.flow.WAVE_CLEAR_TIME) + T(tuning.flow.WAVE_FLIGHT_TIME) + 1);
+    run(w, 1 + T(tuning.flow.WAVE_CLEAR_TIME));
+    expect(w.state).toBe('WAVE_INTRO');
+    expect({ x: w.player.x, y: w.player.y }).toEqual({ x: tuning.player.PLAYER_START_X, y: tuning.player.PLAYER_START_Y });
+    expect(w.occupancy.isFree(0, 2)).toBe(true);
+  });
+
+  it('the new wave is frozen while it materializes', () => {
+    const w = make();
+    const x = w.player.x;
+    w.killAllEnemies();
+    run(w, 1 + T(tuning.flow.WAVE_CLEAR_TIME) + 1);
     expect(w.state).toBe('WAVE_INTRO');
     expect(w.simFrozen).toBe(true);
     expect(w.enemies).toHaveLength(2);
     const tick = w.tick;
     w.step(DT, { commands: [{ type: 'move', dir: 'left' }], held: null });
     expect(w.tick).toBe(tick);
-    expect(w.player.x).toBe(tuning.player.PLAYER_START_X);
+    expect(w.player.x).toBe(x);
     run(w, T(tuning.flow.WAVE_SPAWN_TIME));
     expect(w.state).toBe('ACTION');
   });

@@ -99,13 +99,8 @@ export class Player {
     return true;
   }
 
-  /**
-   * Next wave (GDD §10.4): back on the start cell with every status cleared;
-   * HP stays. `prevX/prevY` keep the old cell so the view can glide over.
-   */
-  resetForWave(): void {
-    const x = tuning.player.PLAYER_START_X;
-    const y = tuning.player.PLAYER_START_Y;
+  /** Next wave (GDD §10.4): stands at (x, y) with every temporary status cleared; HP stays. */
+  resetForWave(x: number, y: number): void {
     this.occupancy.remove(this.id, this.x, this.y);
     this.prevX = this.x;
     this.prevY = this.y;

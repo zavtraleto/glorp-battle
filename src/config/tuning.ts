@@ -29,12 +29,10 @@ export const DEFAULT_TUNING = {
   flow: {
     /** Enemies appear and the hand rides into the rail before the battle runs. */
     INTRO_TIME: 0.6,
-    /** Last enemy of a wave deleted → flight starts; covers the deletion animation. */
+    /** Last enemy of a wave deleted → the field resets; covers the deletion animation. */
     WAVE_CLEAR_TIME: 0.4,
-    /** The player flies to the next field; the field is swapped halfway. */
-    WAVE_FLIGHT_TIME: 0.7,
-    /** New enemies materialize; nothing acts yet. */
-    WAVE_SPAWN_TIME: 0.3,
+    /** New enemies materialize line by line on the reset field; nothing acts yet (GDD §10.4). */
+    WAVE_SPAWN_TIME: 0.7,
     /** "ENEMY DELETED!" banner before the result screen. */
     RESULT_DELAY_WIN: 0.9,
     /** Player deletion before the GAME OVER screen. */
@@ -58,8 +56,10 @@ export const DEFAULT_TUNING = {
   hand: {
     /** Hand slots visible in the rail for the whole battle (GDD §5). */
     SIZE: 5,
-    /** Shared delay from the first charged shot until the next hand may activate. */
+    /** A spent slot cools this long from its chip's hit until the next draw arrives (GDD §5). */
     REFILL_COOLDOWN: 4.0,
+    /** A completed combo cuts each of its slots' cooldown by this × the combo's size. */
+    COMBO_CUT_PER_CHIP: 0.4,
   },
   // Chips (GDD §6): one group per chip id; STARTUP → impact → RECOVERY (GDD §6.5).
   cannon: {
@@ -253,8 +253,6 @@ export const DEFAULT_TUNING = {
     AFTER_TIME: 0.2,
     /** Spawn markers at the battle intro, seconds. */
     SPAWN_TIME: 0.6,
-    /** How far the camera flies per half of the wave flight, world units (GDD §10.4). */
-    WAVE_FLIGHT_DIST: 8,
     DAMAGE_SCALE: 4,
     /** Height of the CRT status band, share of the picture (spec §8). */
     HUD_BAND: 0.11,
@@ -373,6 +371,8 @@ export const DEFAULT_TUNING = {
     CONTACT_FLASH_TIME: 0.2,
     /** Three red body pulses when a chip chain is cancelled before use. */
     CHIP_CANCEL_FLASH_TIME: 1.2,
+    /** A completed combo cut this slot's cooldown: one fading yellow glow (s). */
+    CHIP_CUT_FLASH_TIME: 0.35,
     /** Nothing queued this long in battle: the cassette faces start flashing to call for a pick (s). */
     RAIL_ATTRACT_DELAY: 1.5,
     /** One beat of those flashing patterns (s). */

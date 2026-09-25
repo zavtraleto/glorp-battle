@@ -33,26 +33,29 @@ function run(w: World, ticks: number): void {
 }
 
 describe('Combo State activation and completion', () => {
-  it('never activates for one chip and keeps the existing immediate cooldown', () => {
+  it('never activates for one chip; its slot cools while the rest stays selectable', () => {
     const w = world();
-    give(w, 'cannon');
+    const [slot] = give(w, 'cannon');
     step(w, true);
-
     expect(w.combo).toBeNull();
-    expect(w.chips.handCooldownProgress(w.playerTick)).toBe(0);
+
+    run(w, chipTiming(CHIPS.cannon).totalTicks);
+    expect(w.chips.phase).toBe('selecting');
+    expect(w.chips.slotState(slot!)).toBe('cooling');
+    const other = w.chips.hand.findIndex((c, i) => c !== null && i !== slot);
+    expect(w.chips.slotState(other)).toBe('ready');
   });
 
   it('starts only after the first chip of a two-chip chain begins', () => {
     const w = world();
-    give(w, 'cannon', 'sword');
+    const slots = give(w, 'cannon', 'sword');
     expect(w.combo).toBeNull();
-    expect(w.chips.handCooldownProgress(w.playerTick)).toBeNull();
 
     step(w, true);
 
     expect(w.combo?.status).toBe('active');
     expect(w.combo?.startedAt).toBe(w.playerTick);
-    expect(w.chips.handCooldownProgress(w.playerTick)).toBeNull();
+    expect(w.combo?.slots).toEqual(slots);
     expect(w.worldTimeScale).toBe(1);
   });
 
@@ -68,20 +71,41 @@ describe('Combo State activation and completion', () => {
     expect(w.chipsUsed).toBe(0);
   });
 
-  it('finishes after the last recovery and starts cooldown on that tick', () => {
+  it('finishes after the last recovery and cuts the cooldown of every combo slot', () => {
     const w = world();
-    give(w, 'cannon', 'sword');
+    const [a, b] = give(w, 'cannon', 'sword');
     step(w, true);
     run(w, chipTiming(CHIPS.cannon).totalTicks);
     step(w, true);
     expect(w.activeChip?.def.id).toBe('sword');
     expect(w.combo).not.toBeNull();
+    w.drainEvents();
 
     run(w, chipTiming(CHIPS.sword).totalTicks);
 
     expect(w.combo).toBeNull();
     expect(w.activeChip).toBeNull();
-    expect(w.chips.handCooldownProgress(w.playerTick)).toBe(0);
+    expect(w.chips.phase).toBe('selecting');
+    const cut = T(tuning.hand.COMBO_CUT_PER_CHIP * 2);
+    expect(w.drainEvents()).toContainEqual({ type: 'slotCooldownCut', slots: [a, b], ticks: cut });
+    expect(w.chips.slotState(a!)).toBe('cooling');
+    expect(w.chips.slotState(b!)).toBe('cooling');
+
+    // Without the bonus the Cannon slot would still be cooling here.
+    run(w, T(tuning.hand.REFILL_COOLDOWN) - cut);
+    expect(w.chips.slotState(a!)).toBe('ready');
+    expect(w.chips.slotState(b!)).toBe('ready');
+  });
+
+  it('grows the bonus with the length of the combo', () => {
+    const w = world();
+    const slots = give(w, 'cannon', 'cannon', 'cannon');
+    for (let i = 0; i < slots.length; i++) {
+      step(w, true);
+      run(w, chipTiming(CHIPS.cannon).totalTicks);
+    }
+    const cut = w.drainEvents().find((e) => e.type === 'slotCooldownCut');
+    expect(cut).toEqual({ type: 'slotCooldownCut', slots, ticks: T(tuning.hand.COMBO_CUT_PER_CHIP * 3) });
   });
 });
 
@@ -96,12 +120,12 @@ describe('Combo State without a time limit', () => {
     expect(w.combo?.status).toBe('active');
     expect(w.comboDisplayActive).toBe(true);
     expect(w.chips.hand[secondSlot!]?.defId).toBe('sword');
-    expect(w.chips.handCooldownProgress(w.playerTick)).toBeNull();
+    expect(w.chips.phase).toBe('committed');
 
     step(w, true);
     run(w, chipTiming(CHIPS.sword).totalTicks);
     expect(w.combo).toBeNull();
-    expect(w.chips.handCooldownProgress(w.playerTick)).toBe(0);
+    expect(w.chips.phase).toBe('selecting');
   });
 });
 
@@ -161,7 +185,7 @@ describe('Combo State manual execution', () => {
     step(w, true);
 
     expect(w.combo).toBeNull();
-    expect(w.chips.handCooldownProgress(w.playerTick)).toBe(0);
+    expect(w.chips.phase).toBe('committed');
   });
 });
 
@@ -205,6 +229,7 @@ describe('Combo Break', () => {
     step(w, true);
     const hp = w.player.hp;
 
+    w.drainEvents();
     w.resolveHit({ target: w.player, damage: 1 });
 
     expect(w.player.hp).toBe(hp - 1);
@@ -212,7 +237,11 @@ describe('Combo Break', () => {
     expect(w.activeChip).toBeNull();
     expect(w.chips.hand[firstSlot!]?.defId).toBe('cannon');
     expect(w.chips.hand[secondSlot!]).toBeNull();
-    expect(w.chips.handCooldownProgress(w.playerTick)).toBe(0);
+    expect(w.chips.phase).toBe('selecting');
+    step(w);
+    // The burned slot cools the full time: a broken combo earns no bonus.
+    expect(w.chips.slotState(secondSlot!)).toBe('cooling');
+    expect(w.drainEvents().some((e) => e.type === 'slotCooldownCut')).toBe(false);
   });
 
   it('does not break or interrupt when Guard prevents HP loss', () => {
@@ -335,7 +364,7 @@ describe('Selection slow-mo (GDD §6.7)', () => {
     expect(w.worldTimeScale).toBe(1);
   });
 
-  it('gives every new hand a full budget and hides the timer while it is full', () => {
+  it('recharges the budget gradually after a shot and hides the timer once it is full', () => {
     const w = world();
     const [a] = readySlots(w);
     expect(w.selectTimeLeft).toBeNull();
@@ -343,8 +372,11 @@ describe('Selection slow-mo (GDD §6.7)', () => {
     run(w, T(tuning.combo.SELECT_SLOW_MO_TIME) / 2);
     step(w, true);
     expect(w.selectTimeLeft).toBeNull();
-    run(w, T(tuning.hand.REFILL_COOLDOWN) + T(1));
+    run(w, T(1));
     expect(w.chips.phase).toBe('selecting');
+    expect(w.selectBudget).toBeLessThan(T(tuning.combo.SELECT_SLOW_MO_TIME));
+    expect(w.selectTimeLeft).not.toBeNull();
+    run(w, T(tuning.combo.SELECT_SLOW_MO_RECHARGE));
     expect(w.selectBudget).toBe(T(tuning.combo.SELECT_SLOW_MO_TIME));
     expect(w.selectTimeLeft).toBeNull();
   });

@@ -67,14 +67,14 @@ describe('Session', () => {
     const s = make();
     s.start();
     expect(s.screen).toBe('PATH');
-    expect(s.folderSize).toBe(8);
+    expect(s.folderSize).toBe(folderChips('starter').length);
     const encounter = s.run!.encounter;
     expect(s.next).toEqual({ kind: encounter.tier, enemies: encounter.waves[0]!.enemies.length });
     s.fight();
     expect(s.screen).toBe('BATTLE');
     expect(s.world.encounter.id).toBe(encounter.id);
     expect(s.world.enemies.map((e) => e.kind)).toEqual(encounter.waves[0]!.enemies.map((e) => e.kind));
-    expect(s.world.chips.chips).toHaveLength(8);
+    expect(s.world.chips.chips).toHaveLength(folderChips('starter').length);
     expect(s.world.player.hp).toBe(s.world.player.maxHp);
   });
 
@@ -88,7 +88,7 @@ describe('Session', () => {
     expect(s.screen).toBe('PATH');
     expect(s.run!.depth).toBe(2);
     expect(s.hp).toBe(6);
-    expect(s.folderSize).toBe(8);
+    expect(s.folderSize).toBe(folderChips('starter').length);
     s.fight();
     expect(s.world.player.hp).toBe(6);
     expect(s.lastResult).toMatchObject({ battle: 1, hpLeft: 6 });

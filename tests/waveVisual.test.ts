@@ -1,19 +1,30 @@
 import { describe, expect, it } from 'vitest';
 import { en } from '../src/i18n/en';
-import { flightOffset } from '../src/render/scene';
+import { FxView } from '../src/render/fx';
+import { buildRowProgress } from '../src/render/hologramMaterial';
+import type { World } from '../src/sim/world';
 import { BANNER_CAP, bannerCovers, layoutBanner } from '../src/terminal/bannerFont';
 import { bannerGeometry } from '../src/terminal/waveBanner';
 
-describe('wave flight (GDD §10.4)', () => {
-  it('flies forward off the old field, jumps back at the swap and lands on the new one', () => {
-    const d = 8;
-    expect(flightOffset(0, d)).toBe(0);
-    expect(flightOffset(0.25, d)).toBeLessThan(0);
-    expect(flightOffset(0.499, d)).toBeCloseTo(-d, 1);
-    expect(flightOffset(0.501, d)).toBeCloseTo(d, 1);
-    expect(flightOffset(0.75, d)).toBeGreaterThan(0);
-    expect(flightOffset(1, d)).toBe(0);
-    expect(flightOffset(-1, d)).toBe(0);
+describe('wave materialize (GDD §10.4)', () => {
+  it('builds the sprite line by line from the bottom and finishes every line', () => {
+    // Same curve as the hologram shader: row 0 is the bottom line.
+    expect(buildRowProgress(0, 0, 0)).toBe(0);
+    expect(buildRowProgress(0.3, 0, 0)).toBeGreaterThan(buildRowProgress(0.3, 0.8, 0));
+    expect(buildRowProgress(0.3, 0.8, 0)).toBe(0);
+    for (const y of [0, 0.25, 0.5, 0.99]) for (const jitter of [0, 0.5, 1]) expect(buildRowProgress(1, y, jitter)).toBe(1);
+  });
+});
+
+describe('wave field swap', () => {
+  it('drops the effects of the old field so they do not play on the new one', () => {
+    const fx = new FxView();
+    const world = { playerTick: 100, tick: 100 } as unknown as World;
+    fx.handleEvent({ type: 'enemyKilled', id: 7, x: 1, y: 1 }, world);
+    fx.handleEvent({ type: 'enemyShot', x: 0, fromY: 0, toY: 5 }, world);
+    expect(fx.timedCount).toBe(2);
+    fx.handleEvent({ type: 'waveField', wave: 2 }, world);
+    expect(fx.timedCount).toBe(0);
   });
 });
 

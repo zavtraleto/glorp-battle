@@ -41,8 +41,8 @@ export function returningCartIndex(carts: readonly { deal: number; phase: string
   return carts.findIndex((cart) => cart.deal === deal && cart.phase === 'eject');
 }
 
-/** Shared cooldown covers unavailable chips, but never the usable committed tail. */
+/** Only a cooling slot shows its own cooldown; a locked chip is ready, just held (GDD §5). */
 export function cooldownForSlot(state: SlotState, progress: number | null): number | null {
   if (progress === null) return null;
-  return state === 'locked' || state === 'cooling' ? progress : null;
+  return state === 'cooling' ? progress : null;
 }

@@ -126,14 +126,15 @@ describe('battle flow', () => {
     expect(w.chips.hand[slot]).toBeNull();
   });
 
-  it('refills a spent slot after its cooldown without leaving ACTION', () => {
+  it('refills a spent slot REFILL_COOLDOWN after its chip hit, without leaving ACTION', () => {
     const folder = Array.from({ length: 8 }, () => ({ defId: 'cannon' as const }));
     const w = new World({ seed: 1, battleIndex: 1, folder, skipIntro: true, cheats: { god: true, aiEnabled: false } });
     for (const enemy of w.enemies) enemy.hp = 100_000;
     const slot = w.chips.hand.findIndex((c) => c !== null);
     step(w, [{ type: 'selectChip', slot }, { type: 'useChip' }]);
     expect(w.chips.hand[slot]).toBeNull();
-    run(w, T(tuning.hand.REFILL_COOLDOWN) - 1);
+    // The slot starts cooling on the hit frame, once the chip can no longer return (GDD §5).
+    run(w, T(tuning.cannon.STARTUP) + T(tuning.hand.REFILL_COOLDOWN) - 1);
     expect(w.chips.hand[slot]).toBeNull();
     run(w, 1);
     expect(w.state).toBe('ACTION');
