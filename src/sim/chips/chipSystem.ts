@@ -1,6 +1,6 @@
 import { secondsToTicks, tuning } from '../../config/tuning';
 import type { Rng } from '../../core/rng';
-import { CHIPS, type ChipCode, type ChipDef, type ChipId } from '../../data/chips';
+import { CHIPS, type ChipDef, type ChipId } from '../../data/chips';
 import { FOLDERS, type FolderId } from '../../data/folders';
 import { canAddToSelection, type ChipKey } from './selection';
 
@@ -19,7 +19,6 @@ export type HandPhase = 'selecting' | 'committed' | 'waiting';
 export interface ChipInstance {
   readonly uid: number;
   readonly defId: ChipId;
-  readonly code: ChipCode;
   state: ChipState;
   /** Serial of the draw that put this chip in the hand (0 = never drawn); a re-dealt chip gets a new one. */
   deal: number;
@@ -28,7 +27,6 @@ export interface ChipInstance {
 /** A chip in a run's folder. */
 export interface FolderChip {
   defId: ChipId;
-  code: ChipCode;
 }
 
 interface PendingRefill {
@@ -39,7 +37,7 @@ interface PendingRefill {
 
 /** A debug folder as a flat chip list. */
 export function folderChips(id: FolderId): FolderChip[] {
-  return FOLDERS[id].flatMap((e) => Array.from({ length: e.count }, () => ({ defId: e.chip, code: e.code })));
+  return FOLDERS[id].flatMap((e) => Array.from({ length: e.count }, () => ({ defId: e.chip })));
 }
 
 export function chipDef(chip: ChipInstance): ChipDef {
@@ -58,7 +56,7 @@ export class ChipSystem {
   attack: number[] = [];
   /**
    * Keys of every chip added to the current series, including the ones already
-   * fired: the code rule belongs to the series, not to what is still unfired.
+   * fired: the combination rule belongs to the series, not to what is still unfired.
    */
   private series: ChipKey[] = [];
   /** Selection, committed manual charge, or cooldown wait before the next selection. */
@@ -91,7 +89,7 @@ export class ChipSystem {
   private fill(list: readonly FolderChip[]): void {
     const first = (this.chips[this.chips.length - 1]?.uid ?? 0) + 1;
     this.chips.length = 0;
-    list.forEach((c, i) => this.chips.push({ uid: first + i, defId: c.defId, code: c.code, state: 'folder', deal: 0 }));
+    list.forEach((c, i) => this.chips.push({ uid: first + i, defId: c.defId, state: 'folder', deal: 0 }));
     this.drawPile = this.rng.shuffle([...this.chips]);
     this.drawIndex = 0;
   }
@@ -176,7 +174,7 @@ export class ChipSystem {
   dealSlot(slot: number, spec: FolderChip): ChipInstance | null {
     if (slot < 0 || slot >= this.hand.length || this.hand[slot] !== null) return null;
     const at = this.drawPile.findIndex(
-      (c, i) => i >= this.drawIndex && c.defId === spec.defId && c.code === spec.code,
+      (c, i) => i >= this.drawIndex && c.defId === spec.defId,
     );
     if (at < 0) return null;
     const [chip] = this.drawPile.splice(at, 1) as [ChipInstance];

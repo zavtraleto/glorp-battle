@@ -20,6 +20,10 @@ export const DEFAULT_TUNING = {
     /** Experimental: world speed while the Attack Queue is being built (GDD §6.7); 1 = off. */
     SELECT_TIME_SCALE: 0.1,
     SELECT_SLOW_MO_ENTER: 0.1,
+    /** Selection slow-mo budget per hand, unscaled seconds (GDD §6.7). */
+    SELECT_SLOW_MO_TIME: 3,
+    /** Unscaled seconds for an empty budget to refill while the queue is empty. */
+    SELECT_SLOW_MO_RECHARGE: 6,
   },
   player: {
     PLAYER_MAX_HP: 10,

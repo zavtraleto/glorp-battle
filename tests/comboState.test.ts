@@ -20,7 +20,7 @@ function world(god = false): World {
 
 function give(w: World, ...ids: ChipId[]): number[] {
   const before = new Set(w.chips.attack);
-  for (const defId of ids) w.giveChip({ uid: uid++, defId, code: '*', state: 'queued', deal: 0 });
+  for (const defId of ids) w.giveChip({ uid: uid++, defId, state: 'queued', deal: 0 });
   return w.chips.attack.filter((slot) => !before.has(slot));
 }
 
@@ -312,6 +312,57 @@ describe('Selection slow-mo (GDD §6.7)', () => {
     expect(w.combo).not.toBeNull();
     run(w, T(tuning.combo.SLOW_MO_ENTER) + 1);
     expect(w.worldTimeScale).toBeCloseTo(tuning.combo.WORLD_TIME_SCALE);
+  });
+
+  it('returns to normal speed when the budget runs out, keeping the selection', () => {
+    const w = world();
+    const [a, b] = readySlots(w);
+    select(w, a!);
+    select(w, b!);
+    // Both selecting steps already drained the budget.
+    run(w, T(tuning.combo.SELECT_SLOW_MO_TIME) - 3);
+    expect(w.worldTimeScale).toBeCloseTo(tuning.combo.SELECT_TIME_SCALE);
+    expect(w.selectTimeLeft).toBeGreaterThan(0);
+
+    run(w, 1);
+    expect(w.selectTimeLeft).toBe(0);
+    run(w, T(tuning.combo.SLOW_MO_EXIT) + 1);
+    expect(w.worldTimeScale).toBe(1);
+    expect(w.chips.attack).toEqual([a, b]);
+  });
+
+  it('refills the budget gradually, so reselecting does not restore it', () => {
+    const w = world();
+    const [a] = readySlots(w);
+    select(w, a!);
+    run(w, T(tuning.combo.SELECT_SLOW_MO_TIME));
+    expect(w.selectTimeLeft).toBe(0);
+
+    select(w, a!);
+    const half = T(tuning.combo.SELECT_SLOW_MO_RECHARGE) / 2;
+    run(w, half - 1);
+    expect(w.selectTimeLeft).toBeCloseTo(0.5, 1);
+    select(w, a!);
+    run(w, T(tuning.combo.SELECT_SLOW_MO_ENTER) + 1);
+    expect(w.worldTimeScale).toBeCloseTo(tuning.combo.SELECT_TIME_SCALE);
+    run(w, T(tuning.combo.SELECT_SLOW_MO_TIME) / 2);
+    expect(w.selectTimeLeft).toBe(0);
+    run(w, T(tuning.combo.SLOW_MO_EXIT) + 1);
+    expect(w.worldTimeScale).toBe(1);
+  });
+
+  it('gives every new hand a full budget and hides the timer while it is full', () => {
+    const w = world();
+    const [a] = readySlots(w);
+    expect(w.selectTimeLeft).toBeNull();
+    select(w, a!);
+    run(w, T(tuning.combo.SELECT_SLOW_MO_TIME) / 2);
+    step(w, true);
+    expect(w.selectTimeLeft).toBeNull();
+    run(w, T(tuning.chips.HAND_REFILL_COOLDOWN) + T(1));
+    expect(w.chips.phase).toBe('selecting');
+    expect(w.selectBudget).toBe(T(tuning.combo.SELECT_SLOW_MO_TIME));
+    expect(w.selectTimeLeft).toBeNull();
   });
 
   it('returns to normal speed after a single chip fires', () => {

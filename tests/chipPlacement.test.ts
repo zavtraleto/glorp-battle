@@ -23,7 +23,7 @@ function world(): World {
 }
 
 function useAtImpact(w: World, id: ChipId, commands: Command[] = []): void {
-  w.giveChip({ uid: uid++, defId: id, code: '*', state: 'queued', deal: 0 });
+  w.giveChip({ uid: uid++, defId: id, state: 'queued', deal: 0 });
   w.step(DT, { commands: [{ type: 'useChip' }, ...commands], held: null });
   for (let i = 0; i < chipTiming(CHIPS[id]).startupTicks; i++) w.step(DT);
 }

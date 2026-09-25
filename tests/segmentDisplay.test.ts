@@ -3,13 +3,16 @@ import { CHIPS, type ChipId } from '../src/data/chips';
 import { chipName, t } from '../src/i18n';
 import { trackballArmed } from '../src/terminal/controlRules';
 import {
+  barCellSegments,
   chipDisplayText,
   comboDisplayModel,
   DISPLAY_CHARS,
   DISPLAY_TOTAL_CHARS,
   glyph,
   hasGlyph,
+  SEGMENTS,
   TIMER_BANK_CHARS,
+  TIMER_BANK_HALVES,
 } from '../src/terminal/chips/segmentFont';
 
 // The amber chip display under the rail and the trackball ring (TERMINAL.md §3.1).
@@ -59,25 +62,35 @@ describe('14-segment display', () => {
     }
   });
 
-  it('keeps full symmetric side banks while Combo State is active', () => {
+  it('keeps full side bars while Combo State is active', () => {
     const entry = { name: 'Sword', power: 6 };
-    const active = comboDisplayModel(entry, 'NO CHIP', true);
+    const active = comboDisplayModel(entry, 'NO CHIP', true, 0.2);
 
-    expect(active).toEqual({
-      text: '   SWORD 6    ',
-      leftLit: TIMER_BANK_CHARS,
-      rightLit: TIMER_BANK_CHARS,
-    });
+    expect(active).toEqual({ text: '   SWORD 6    ', barHalves: TIMER_BANK_HALVES });
     expect(active.text).toHaveLength(DISPLAY_CHARS);
     expect(DISPLAY_TOTAL_CHARS).toBe(DISPLAY_CHARS + TIMER_BANK_CHARS * 2);
   });
 
-  it('turns both side banks off outside Combo State', () => {
+  it('turns the side bars off with no combo and no selection timer', () => {
     expect(comboDisplayModel({ name: 'Cannon', power: 4 }, 'NO CHIP', false)).toEqual({
       text: '   CANNON 4   ',
-      leftLit: 0,
-      rightLit: 0,
+      barHalves: 0,
     });
+  });
+
+  it('shows the selection slow-mo left in half-cell steps (GDD §6.7)', () => {
+    const bars = (left: number) => comboDisplayModel(null, 'NO CHIP', false, left).barHalves;
+    expect(bars(1)).toBe(TIMER_BANK_HALVES);
+    expect(bars(0.5)).toBe(TIMER_BANK_HALVES / 2);
+    expect(bars(0.001)).toBe(1);
+    expect(bars(0)).toBe(0);
+  });
+
+  it('shrinks the bars toward the label, splitting the last cell in half', () => {
+    expect(barCellSegments('left', 0, 3)).toBe(SEGMENTS);
+    expect(barCellSegments('left', 1, 3)).toEqual(['b', 'c', 'g2', 'j', 'm']);
+    expect(barCellSegments('right', 1, 3)).toEqual(['f', 'e', 'g1', 'h', 'k']);
+    expect(barCellSegments('right', 2, 3)).toEqual([]);
   });
 });
 

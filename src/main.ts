@@ -229,8 +229,8 @@ const panel = new DebugPanel(loop.clock, {
     p.hp = Math.max(0, Math.min(p.maxHp, Math.round(hp)));
   },
   giveChip: (defId) => {
-    // Debug chips get uids outside the folder range and a wildcard code.
-    session.world.giveChip({ uid: debugChipUid++, defId, code: '*', state: 'queued', deal: 0 });
+    // Debug chips get uids outside the folder range.
+    session.world.giveChip({ uid: debugChipUid++, defId, state: 'queued', deal: 0 });
   },
   forceAttack: () => {
     const w = session.world;

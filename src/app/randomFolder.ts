@@ -1,18 +1,14 @@
 import type { Rng } from '../core/rng';
-import { CHIPS, type ChipCode, type ChipDef, type Rarity } from '../data/chips';
+import { CHIPS, type ChipDef, type Rarity } from '../data/chips';
 import { FOLDER_SIZE } from '../data/folders';
 import type { FolderChip } from '../sim/chips/chipSystem';
 
 // RANDOM starting folder (decision 2026-09-18): weighted by rarity, capped
-// copies, a few heals, few field chips, codes leaning on three "core" codes so
-// multi-selections sometimes line up. Pure and seeded.
+// copies, a few heals, few field chips. Pure and seeded.
 
 export const RANDOM_MAX_COPIES = 4;
 export const RANDOM_MIN_HEALS = 0;
 export const RANDOM_MAX_FIELD = 12;
-/** Chance a chip takes a core code when it has one. [оценка] */
-const CORE_CODE_CHANCE = 0.7;
-const CORE_CODES = 3;
 const WEIGHT: Record<Rarity, number> = { common: 6, uncommon: 3, rare: 1 };
 
 function weightedPick(rng: Rng, pool: readonly ChipDef[]): ChipDef {
@@ -27,8 +23,6 @@ function weightedPick(rng: Rng, pool: readonly ChipDef[]): ChipDef {
 
 export function randomFolder(rng: Rng): FolderChip[] {
   const all = Object.values(CHIPS);
-  const letters = [...new Set(all.flatMap((d) => d.codes).filter((c) => c !== '*'))] as ChipCode[];
-  const core = rng.shuffle(letters).slice(0, CORE_CODES);
   const counts = new Map<string, number>();
   const picked: ChipDef[] = [];
   const take = (pool: readonly ChipDef[]) => {
@@ -48,9 +42,5 @@ export function randomFolder(rng: Rng): FolderChip[] {
     // but a stalled `take` must not spin forever).
     if (picked.length === before) break;
   }
-  return picked.map((d) => {
-    const coreCodes = d.codes.filter((c) => core.includes(c) || c === '*');
-    const code: ChipCode = coreCodes.length > 0 && rng.next() < CORE_CODE_CHANCE ? rng.pick(coreCodes) : rng.pick(d.codes);
-    return { defId: d.id, code };
-  });
+  return picked.map((d) => ({ defId: d.id }));
 }

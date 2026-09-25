@@ -122,7 +122,7 @@ describe('time-based combat timing', () => {
     enemy.hp = 200;
     w.chips.attack = [];
     for (const uid of [9101, 9102]) {
-      w.giveChip({ uid, defId: 'cannon', code: '*', state: 'hand', deal: 0 });
+      w.giveChip({ uid, defId: 'cannon', state: 'hand', deal: 0 });
     }
     expect(w.chips.attackChips()).toHaveLength(2);
 

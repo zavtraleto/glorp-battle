@@ -31,6 +31,9 @@ body {
   -webkit-user-select: none;
   -webkit-touch-callout: none;
   -webkit-tap-highlight-color: transparent;
+  /* No mobile text inflation (Chrome font boosting, iOS text size adjust): the debug text keeps its CSS size. */
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
 }
 
 #app {

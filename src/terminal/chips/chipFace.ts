@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CHIPS, type ChipCode, type ChipId, type UseTimeGroup } from '../../data/chips';
+import { CHIPS, type ChipColor, type ChipId } from '../../data/chips';
 import { drawBig, measureBig } from './cartFont';
 import { drawText, measureText, type PixelSink } from '../crt/pixelFont';
 import { CHIP_ICONS, ICON_PALETTE } from './chipIcons';
@@ -17,16 +17,14 @@ import { CHIP_ICONS, ICON_PALETTE } from './chipIcons';
 export const FACE_W = 60;
 export const FACE_H = 74;
 /** Bumped whenever the face design changes, so cached textures are not reused. */
-const FACE_GEN = 6;
+const FACE_GEN = 7;
 
 /**
- * Top panel colour per chip family: dark enough for light glyphs to read on it
- * without an outline, and clear of the red (damage) and yellow (action) roles.
+ * Top panel colour per chip colour (GDD §6.1): dark enough for the light number
+ * to read on it without an outline.
  */
-const GROUP_COLOR: Record<UseTimeGroup, string> = {
-  CANNON: '#2f4e93',
-  SWORD: '#8f4a1c',
-  FIELD: '#5c5438',
+export const CHIP_COLOR: Record<ChipColor, string> = {
+  red: '#a3302a',
 };
 
 const COLOR = {
@@ -42,7 +40,7 @@ const COLOR = {
 /** Top panel and label, in texels. Together they fill the whole plane. */
 const PANEL = { x: 0, y: 0, w: FACE_W, h: 20 };
 const LABEL = { x: 0, y: 22, w: FACE_W, h: FACE_H - 22 };
-/** Room the panel keeps for the number and the code, in texels. */
+/** Room the panel keeps for the number, in texels. */
 export const PANEL_TEXT_W = FACE_W - 6;
 const ICON_SCALE = 3;
 
@@ -76,8 +74,8 @@ function sink(ctx: CanvasRenderingContext2D, r: { x: number; y: number; w: numbe
   ctx.fillRect(r.x + r.w - 1, r.y, 1, r.h);
 }
 
-export function chipFaceTexture(defId: ChipId, code: ChipCode): THREE.CanvasTexture {
-  const key = `${defId}:${code}:${FACE_GEN}`;
+export function chipFaceTexture(defId: ChipId): THREE.CanvasTexture {
+  const key = `${defId}:${FACE_GEN}`;
   const hit = cache.get(key);
   if (hit) return hit;
 
@@ -89,15 +87,14 @@ export function chipFaceTexture(defId: ChipId, code: ChipCode): THREE.CanvasText
   const pixels = ctx as unknown as PixelSink;
   const def = CHIPS[defId];
 
-  // Top panel: one flat colour, the number left and the code right, both in a
-  // single light ink — no outline (decision 2026-09-20).
-  ctx.fillStyle = GROUP_COLOR[def.useTime];
+  // Top panel: the chip's colour with the number left in a light ink — no
+  // outline (decision 2026-09-20); letter codes are gone (2026-09-25).
+  ctx.fillStyle = CHIP_COLOR[def.color];
   ctx.fillRect(PANEL.x, PANEL.y, PANEL.w, PANEL.h);
   sink(ctx, PANEL);
   const number = faceNumber(defId);
   const textY = PANEL.y + 5;
   if (number) drawBig(pixels, number, PANEL.x + 3, textY, COLOR.ink);
-  drawBig(pixels, code, PANEL.x + PANEL.w - 3 - measureBig(code), textY, COLOR.ink);
 
   // The gap between the panel and the label is the plastic showing through.
   ctx.fillStyle = COLOR.recess;

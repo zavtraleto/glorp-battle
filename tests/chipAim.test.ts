@@ -23,7 +23,7 @@ function addEnemy(w: World, x: number, y: number): void {
 }
 
 function give(w: World, id: ChipId): void {
-  w.giveChip({ uid: uid++, defId: id, code: '*', state: 'queued', deal: 0 });
+  w.giveChip({ uid: uid++, defId: id, state: 'queued', deal: 0 });
 }
 
 describe('chip aim preview', () => {

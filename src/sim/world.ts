@@ -159,6 +159,10 @@ export class World implements EnemyContext, AttackContext {
   activeChip: ActiveChip | null = null;
   /** Active multi-chip window, driven exclusively by the unscaled player clock. */
   combo: ComboState | null = null;
+  /** Unscaled ticks of selection slow-mo left for this hand (GDD §6.7). */
+  selectBudget = secondsToTicks(tuning.combo.SELECT_SLOW_MO_TIME);
+  /** The world is in (or entering) the selection slow-mo. */
+  private selectSlowMo = false;
   /** One early Attack press retained until this simulation tick. */
   private bufferedChipUntil: number | null = null;
   chipsUsed = 0;
@@ -209,6 +213,17 @@ export class World implements EnemyContext, AttackContext {
   /** The side display banks are a binary Combo State indicator. */
   get comboDisplayActive(): boolean {
     return this.combo !== null;
+  }
+
+  /**
+   * Selection slow-mo left as a share of the budget (GDD §6.7), or null when the
+   * timer has nothing to show: outside selection, or full with an empty queue.
+   */
+  get selectTimeLeft(): number | null {
+    if (tuning.combo.SELECT_TIME_SCALE >= 1 || this.chips.phase !== 'selecting') return null;
+    const full = secondsToTicks(tuning.combo.SELECT_SLOW_MO_TIME);
+    if (this.chips.attack.length === 0 && this.selectBudget >= full) return null;
+    return full > 0 ? Math.max(0, Math.min(1, this.selectBudget / full)) : 0;
   }
 
   /** Deterministic transition of the enemy/world cadence on the unscaled timeline. */
@@ -326,6 +341,7 @@ export class World implements EnemyContext, AttackContext {
     }
     this.worldTimeScale = 1;
     this.worldScaleTransition = null;
+    this.selectSlowMo = false;
   }
 
   drainEvents(): SimEvent[] {
@@ -356,13 +372,29 @@ export class World implements EnemyContext, AttackContext {
     return true;
   }
 
-  /** Decision slow-mo while the Attack Queue is being built (GDD §6.7). */
+  /** Decision slow-mo while the Attack Queue is being built and budget is left (GDD §6.7). */
   private updateSelectSlowMo(): void {
-    if (this.chips.attack.length > 0) {
-      this.setWorldTimeScale(tuning.combo.SELECT_TIME_SCALE, tuning.combo.SELECT_SLOW_MO_ENTER);
+    const on = this.chips.attack.length > 0 && this.selectBudget > 0;
+    if (on === this.selectSlowMo) return;
+    this.selectSlowMo = on;
+    if (on) this.setWorldTimeScale(tuning.combo.SELECT_TIME_SCALE, tuning.combo.SELECT_SLOW_MO_ENTER);
+    else this.setWorldTimeScale(1, tuning.combo.SLOW_MO_EXIT);
+  }
+
+  /**
+   * One budget per hand (GDD §6.7): it drains while chips are queued, refills
+   * gradually while the queue is empty and is full again with every new hand.
+   */
+  private updateSelectBudget(newHand: boolean): void {
+    const full = secondsToTicks(tuning.combo.SELECT_SLOW_MO_TIME);
+    if (newHand) this.selectBudget = full;
+    else if (this.chips.phase === 'selecting' && this.chips.attack.length > 0) {
+      this.selectBudget = Math.max(0, this.selectBudget - 1);
     } else {
-      this.setWorldTimeScale(1, tuning.combo.SLOW_MO_EXIT);
+      const recharge = secondsToTicks(tuning.combo.SELECT_SLOW_MO_RECHARGE);
+      this.selectBudget = recharge > 0 ? Math.min(full, this.selectBudget + full / recharge) : full;
     }
+    if (this.selectSlowMo && this.selectBudget <= 0) this.updateSelectSlowMo();
   }
 
   /**
@@ -780,6 +812,7 @@ export class World implements EnemyContext, AttackContext {
     const chip = this.chips.takeNext(this.playerTick);
     if (!chip) return false;
     this.beginChip(chip, slot ?? -1);
+    if (first) this.selectSlowMo = false;
     if (startsCombo) this.startCombo(size);
     // A single chip leaves the decision slow-mo straight to normal speed (GDD §6.7).
     else if (first) this.setWorldTimeScale(1, tuning.combo.SLOW_MO_EXIT);
@@ -981,6 +1014,7 @@ export class World implements EnemyContext, AttackContext {
   private dealStartingHand(): void {
     if (this.handSpec) this.chips.dealHandExact(this.handSpec);
     else this.chips.dealHand();
+    this.selectBudget = secondsToTicks(tuning.combo.SELECT_SLOW_MO_TIME);
   }
 
   /** Tutorial: a new folder and hand for the next lesson (GDD §10.5). */
@@ -1071,6 +1105,7 @@ export class World implements EnemyContext, AttackContext {
       worldSteps++;
     }
     const reshufflesBeforeRefill = this.chips.reshuffles;
+    const phaseBeforeRefill = this.chips.phase;
     // Until its hit frame, the active chip may still be interrupted and must
     // be able to return to the exact slot it came from.
     const reservedChip = this.activeChip && !this.activeChip.resolved
@@ -1098,6 +1133,7 @@ export class World implements EnemyContext, AttackContext {
       else if (c.type === 'useChip') this.requestUseChip();
       else if (c.type === 'selectChip') this.selectChip(c.slot);
     }
+    this.updateSelectBudget(phaseBeforeRefill !== 'selecting' && this.chips.phase === 'selecting');
     const playerBefore = { x: p.x, y: p.y };
     p.updateMovement(this.playerTick, moves, input.held);
     if (p.x !== playerBefore.x || p.y !== playerBefore.y) this.triggerCellEntry(p);

@@ -171,7 +171,7 @@ const wait = (w: World, n: number) => {
 let uid = 8000;
 /** Gives the player a chip already selected in the attack queue, then uses it. */
 const useNow = (w: World, defId: 'cannon') => {
-  w.giveChip({ uid: uid++, defId, code: '*', state: 'queued', deal: 0 });
+  w.giveChip({ uid: uid++, defId, state: 'queued', deal: 0 });
   w.step(DT, { commands: [{ type: 'useChip' }], held: null });
 };
 

@@ -27,21 +27,18 @@ describe('tutorial script', () => {
     expect(TUTORIAL[3]!.beats.some((b) => b.callout)).toBe(false);
   });
 
-  it('uses real chips and codes they can carry', () => {
+  it('uses real chips', () => {
     for (const s of TUTORIAL) {
-      for (const c of s.folder) {
-        expect(CHIPS[c.defId]).toBeDefined();
-        expect(CHIPS[c.defId].codes).toContain(c.code);
-      }
+      for (const c of s.folder) expect(CHIPS[c.defId]).toBeDefined();
     }
   });
 
   it('starts every hand from chips that are in that step folder', () => {
     for (const s of TUTORIAL) {
-      const pool = s.folder.map((c) => `${c.defId}:${c.code}`);
+      const pool = s.folder.map((c) => c.defId);
       for (const h of s.hand) {
         if (!h) continue;
-        const at = pool.indexOf(`${h.defId}:${h.code}`);
+        const at = pool.indexOf(h.defId);
         expect(at).toBeGreaterThanOrEqual(0);
         pool.splice(at, 1);
       }
@@ -106,10 +103,9 @@ describe('tutorial script', () => {
       expect(reachFromStolenRow).toContain(enemy!.y);
     });
 
-    it('lesson 2 holds exactly two neutral-code Cannons for the queue lesson', () => {
+    it('lesson 2 holds exactly two Cannons for the queue lesson', () => {
       const [first, second, third] = TUTORIAL[1]!.hand;
       expect([first?.defId, second?.defId, third]).toEqual(['cannon', 'cannon', null]);
-      expect([first?.code, second?.code]).toEqual(['*', '*']);
       expect(canAddToSelection([first!], second!, tuning.chips.HAND_SIZE)).toBe(true);
     });
   });

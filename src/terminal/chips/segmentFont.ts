@@ -63,12 +63,31 @@ export const DISPLAY_CHARS = 14;
 export const TIMER_BANK_CHARS = 8;
 export const DISPLAY_TOTAL_CHARS = DISPLAY_CHARS + TIMER_BANK_CHARS * 2;
 
+/** Half-cell steps of one side bar. */
+export const TIMER_BANK_HALVES = TIMER_BANK_CHARS * 2;
+
 export interface SegmentDisplayModel {
   /** Fixed-width centre label. */
   text: string;
-  /** Lit cells, counted from the outside edge toward the label. */
-  leftLit: number;
-  rightLit: number;
+  /** Lit half-cells of each side bar, counted from the label outward. */
+  barHalves: number;
+}
+
+/** Segments of each half of a cell; the full-width `a` and `d` belong to neither. */
+const HALF: Record<'left' | 'right', readonly Segment[]> = {
+  left: ['f', 'e', 'g1', 'h', 'k'],
+  right: ['b', 'c', 'g2', 'j', 'm'],
+};
+
+/**
+ * Lit segments of a side-bar cell: `fromLabel` counts cells outward from the
+ * label, and a half-lit cell keeps its half nearest the label.
+ */
+export function barCellSegments(side: 'left' | 'right', fromLabel: number, barHalves: number): readonly Segment[] {
+  const lit = barHalves - fromLabel * 2;
+  if (lit >= 2) return SEGMENTS;
+  if (lit === 1) return HALF[side === 'left' ? 'right' : 'left'];
+  return [];
 }
 
 export function hasGlyph(ch: string): boolean {
@@ -106,13 +125,18 @@ export function chipDisplayText(queued: readonly ChipDisplayEntry[], noChip: str
   return centre(value ? `${first.name} ${value}` : first.name, width);
 }
 
-/** Fixed centre label plus symmetric character-cell banks for Combo Time. */
+/**
+ * Fixed centre label plus symmetric side bars: full through Combo State,
+ * otherwise the selection slow-mo left (GDD §6.7), shrinking toward the label.
+ */
 export function comboDisplayModel(
   entry: ChipDisplayEntry | null,
   noChip: string,
-  active: boolean,
+  combo: boolean,
+  selectTimeLeft: number | null = null,
 ): SegmentDisplayModel {
   const text = chipDisplayText(entry ? [entry] : [], noChip);
-  const lit = active ? TIMER_BANK_CHARS : 0;
-  return { text, leftLit: lit, rightLit: lit };
+  if (combo) return { text, barHalves: TIMER_BANK_HALVES };
+  const left = selectTimeLeft === null ? 0 : Math.max(0, Math.min(1, selectTimeLeft));
+  return { text, barHalves: Math.ceil(left * TIMER_BANK_HALVES) };
 }

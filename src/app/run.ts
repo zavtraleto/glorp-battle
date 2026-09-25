@@ -1,7 +1,7 @@
 import { tuning } from '../config/tuning';
 import { deriveSeed, Rng } from '../core/rng';
 import { e, STAGES, wave, type Encounter, type EncounterTier } from '../data/encounters';
-import type { ChipCode, ChipId } from '../data/chips';
+import type { ChipId } from '../data/chips';
 import type { FolderChip } from '../sim/chips/chipSystem';
 import type { EnemyKind } from '../sim/enemies/enemyBase';
 
@@ -13,22 +13,21 @@ export const RUN_STEPS = 6;
 
 interface PlayChip {
   defId: ChipId;
-  code: ChipCode;
 }
 
 /** Content exposed by the player-facing Play mode. Tutorial and debug do not use this filter. */
 export const PLAY_CONTENT = {
   chips: [
-    { defId: 'cannon', code: '*' },
-    { defId: 'sword', code: '*' },
-    { defId: 'areagrab', code: '*' },
-    { defId: 'mine', code: '*' },
-    { defId: 'block', code: '*' },
-    { defId: 'break', code: '*' },
-    { defId: 'airshot', code: '*' },
-    { defId: 'spreader', code: '*' },
-    { defId: 'widesword', code: '*' },
-    { defId: 'guard', code: '*' },
+    { defId: 'cannon' },
+    { defId: 'sword' },
+    { defId: 'areagrab' },
+    { defId: 'mine' },
+    { defId: 'block' },
+    { defId: 'break' },
+    { defId: 'airshot' },
+    { defId: 'spreader' },
+    { defId: 'widesword' },
+    { defId: 'guard' },
   ] satisfies readonly PlayChip[],
   enemies: ['mettik', 'canodron', 'bladdy', 'hopzap'] satisfies readonly EnemyKind[],
 } as const;
@@ -44,12 +43,9 @@ export const STARTER_FOLDER: readonly { defId: ChipId; count: number }[] = [
   { defId: 'guard', count: 1 },
 ];
 
-/** The deterministic starter folder, every chip with its Play code. */
+/** The deterministic starter folder. */
 export function createPlayFolder(_rng: Pick<Rng, 'pick'>): FolderChip[] {
-  return STARTER_FOLDER.flatMap(({ defId, count }) => {
-    const code = PLAY_CONTENT.chips.find((chip) => chip.defId === defId)?.code ?? '*';
-    return Array.from({ length: count }, () => ({ defId, code }));
-  });
+  return STARTER_FOLDER.flatMap(({ defId, count }) => Array.from({ length: count }, () => ({ defId })));
 }
 
 /** Final-stage waves: how many random kinds each one takes, and where they stand. */

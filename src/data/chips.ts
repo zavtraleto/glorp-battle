@@ -3,10 +3,11 @@ import { tuning } from '../config/tuning';
 // Ten-chip playtest catalogue. Chips describe geometry and generic world verbs;
 // the simulation owns interactions between those verbs.
 
-export type ChipCode =
-  | 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'M'
-  | 'N' | 'O' | 'P' | 'Q' | 'R' | 'S' | 'T' | 'U' | 'V' | 'W' | 'X' | 'Y' | 'Z'
-  | '*';
+/**
+ * Chip colour, shown on the cartridge (GDD §6.1). Every chip is red for now;
+ * colours are the base of the future combination rules.
+ */
+export type ChipColor = 'red';
 
 export type ChipId =
   | 'cannon'
@@ -51,7 +52,7 @@ export interface ChipDef {
   splashPower?: number;
   kind: 'attack' | 'support' | 'field';
   useTime: UseTimeGroup;
-  codes: readonly ChipCode[];
+  color: ChipColor;
   rarity: Rarity;
   shape: Shape;
   hits?: number;
@@ -68,7 +69,7 @@ const WIDE: readonly Offset[] = [{ x: -1, y: -1 }, { x: 0, y: -1 }, { x: 1, y: -
 const SIDES: readonly Offset[] = [{ x: -1, y: 0 }, { x: 1, y: 0 }];
 const LANE: Shape = { t: 'lane' };
 const SELF: Shape = { t: 'self' };
-const BASE = { codes: ['*'], rarity: 'common' } as const;
+const BASE = { color: 'red', rarity: 'common' } as const;
 
 export const CHIPS: Record<ChipId, ChipDef> = {
   cannon: {

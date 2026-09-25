@@ -7,10 +7,10 @@ import { World } from '../src/sim/world';
 beforeEach(() => mergeTuning(tuning, JSON.parse(JSON.stringify(DEFAULT_TUNING))));
 
 const FOLDER: FolderChip[] = [
-  { defId: 'cannon', code: 'A' },
-  { defId: 'cannon', code: 'A' },
-  { defId: 'sword', code: 'L' },
-  { defId: 'areagrab', code: 'L' },
+  { defId: 'cannon' },
+  { defId: 'cannon' },
+  { defId: 'sword' },
+  { defId: 'areagrab' },
 ];
 
 function world(hand?: (FolderChip | null)[]): World {
@@ -26,14 +26,13 @@ function world(hand?: (FolderChip | null)[]): World {
 
 describe('exact hand', () => {
   it('puts the named chips in the named slots and leaves the rest empty', () => {
-    const w = world([null, null, { defId: 'sword', code: 'L' }, null, null]);
+    const w = world([null, null, { defId: 'sword' }, null, null]);
     expect(w.chips.hand.map((c) => c?.defId ?? null)).toEqual([null, null, 'sword', null, null]);
-    expect(w.chips.hand[2]?.code).toBe('L');
     expect(w.chips.hand[2]?.deal).toBeGreaterThan(0);
   });
 
   it('does not take the same folder chip twice', () => {
-    const w = world([{ defId: 'cannon', code: 'A' }, { defId: 'cannon', code: 'A' }, null, null, null]);
+    const w = world([{ defId: 'cannon' }, { defId: 'cannon' }, null, null, null]);
     expect(w.chips.hand[0]?.uid).not.toBe(w.chips.hand[1]?.uid);
   });
 
@@ -41,19 +40,19 @@ describe('exact hand', () => {
     const w = world([null, null, null, null, null]);
     const before = w.chips.hand[2];
     expect(before).toBeNull();
-    expect(w.dealChip(2, { defId: 'cannon', code: 'A' })).toBe(true);
+    expect(w.dealChip(2, { defId: 'cannon' })).toBe(true);
     expect(w.chips.hand[2]?.defId).toBe('cannon');
     expect(w.chips.slotState(2)).toBe('ready');
     expect(w.chips.attack).toEqual([]);
   });
 
   it('refuses to deal into an occupied slot', () => {
-    const w = world([{ defId: 'sword', code: 'L' }, null, null, null, null]);
-    expect(w.dealChip(0, { defId: 'cannon', code: 'A' })).toBe(false);
+    const w = world([{ defId: 'sword' }, null, null, null, null]);
+    expect(w.dealChip(0, { defId: 'cannon' })).toBe(false);
   });
 
   it('keeps dealing the rest of the folder as spent slots refill', () => {
-    const w = world([{ defId: 'cannon', code: 'A' }, null, null, null, null]);
+    const w = world([{ defId: 'cannon' }, null, null, null, null]);
     expect(w.chips.drawRemaining).toBe(FOLDER.length - 1);
   });
 });
@@ -99,7 +98,7 @@ describe('tutorial hold', () => {
   const step = (w: World, commands: Command[] = []) => w.step(1 / 60, { commands, held: null });
 
   it('freezes ACTION: no clock, no enemy, no chip, until the asked-for command', () => {
-    const w = world([{ defId: 'cannon', code: 'A' }, null, null, null, null]);
+    const w = world([{ defId: 'cannon' }, null, null, null, null]);
     w.hold = { move: true };
     const time = w.time;
     step(w, [{ type: 'useChip' }, { type: 'selectChip', slot: 0 }]);
@@ -125,7 +124,7 @@ describe('tutorial hold', () => {
   });
 
   it('lets taps on the named slots through and keeps holding', () => {
-    const w = world([{ defId: 'cannon', code: 'A' }, { defId: 'cannon', code: 'A' }, null, null, null]);
+    const w = world([{ defId: 'cannon' }, { defId: 'cannon' }, null, null, null]);
     w.hold = { slots: [1] };
     step(w, [{ type: 'selectChip', slot: 0 }, { type: 'selectChip', slot: 1 }]);
     expect(w.chips.attack).toEqual([1]);
@@ -133,7 +132,7 @@ describe('tutorial hold', () => {
   });
 
   it('an Attack press lifts an attack hold and fires on the same tick', () => {
-    const w = world([{ defId: 'cannon', code: 'A' }, null, null, null, null]);
+    const w = world([{ defId: 'cannon' }, null, null, null, null]);
     w.selectChip(0);
     w.hold = { attack: true };
     step(w, [{ type: 'useChip' }]);
@@ -144,11 +143,11 @@ describe('tutorial hold', () => {
 
 describe('lesson folder', () => {
   it('replaces the folder and the hand; new cassettes get new uids', () => {
-    const w = world([{ defId: 'cannon', code: 'A' }, null, null, null, null]);
+    const w = world([{ defId: 'cannon' }, null, null, null, null]);
     const old = w.chips.hand[0]!.uid;
-    w.setFolder([{ defId: 'sword', code: '*' }, { defId: 'areagrab', code: '*' }], [
-      { defId: 'areagrab', code: '*' },
-      { defId: 'sword', code: '*' },
+    w.setFolder([{ defId: 'sword' }, { defId: 'areagrab' }], [
+      { defId: 'areagrab' },
+      { defId: 'sword' },
       null,
       null,
       null,

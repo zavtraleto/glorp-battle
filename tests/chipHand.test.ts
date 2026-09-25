@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_TUNING, mergeTuning, secondsToTicks, tuning } from '../src/config/tuning';
 import { Rng } from '../src/core/rng';
-import { type ChipCode, type ChipId } from '../src/data/chips';
+import { type ChipId } from '../src/data/chips';
 import { ChipSystem, type FolderChip } from '../src/sim/chips/chipSystem';
 
 // Real-time hand, Attack Queue and per-slot refills (GDD §5, §7). No Custom Screen: the
@@ -11,7 +11,7 @@ beforeEach(() => {
   mergeTuning(tuning, JSON.parse(JSON.stringify(DEFAULT_TUNING)));
 });
 
-const chip = (defId: ChipId, code: ChipCode): FolderChip => ({ defId, code });
+const chip = (defId: ChipId): FolderChip => ({ defId });
 
 function sys(list: FolderChip[], seed = 5): ChipSystem {
   const s = new ChipSystem(list, new Rng(seed));
@@ -22,16 +22,16 @@ function sys(list: FolderChip[], seed = 5): ChipSystem {
 const T = (seconds: number) => secondsToTicks(seconds);
 
 /** Hand slot holding the first chip that matches, or -1. */
-function slotOf(s: ChipSystem, defId: ChipId, code: ChipCode): number {
-  return s.hand.findIndex((c) => c !== null && c.defId === defId && c.code === code);
+function slotOf(s: ChipSystem, defId: ChipId): number {
+  return s.hand.findIndex((c) => c !== null && c.defId === defId);
 }
 
 const FIVE: FolderChip[] = [
-  chip('cannon', 'A'),
-  chip('cannon', 'F'),
-  chip('guard', 'F'),
-  chip('sword', 'B'),
-  chip('airshot', 'A'),
+  chip('cannon'),
+  chip('cannon'),
+  chip('guard'),
+  chip('sword'),
+  chip('airshot'),
 ];
 
 const TEN: FolderChip[] = [...FIVE, ...FIVE.map((c) => ({ ...c }))];
@@ -45,7 +45,7 @@ describe('hand', () => {
   });
 
   it('leaves slots empty when the folder runs short', () => {
-    const s = sys([chip('cannon', 'A'), chip('sword', 'B')]);
+    const s = sys([chip('cannon'), chip('sword')]);
     expect(s.hand.filter((c) => c !== null)).toHaveLength(2);
     expect(s.slotState(4)).toBe('empty');
   });
@@ -60,8 +60,8 @@ describe('hand', () => {
 describe('attack queue', () => {
   it('adds a tapped chip at the end and numbers it', () => {
     const s = sys(FIVE);
-    const a = slotOf(s, 'cannon', 'A');
-    const b = slotOf(s, 'airshot', 'A');
+    const a = slotOf(s, 'cannon');
+    const b = slotOf(s, 'airshot');
     expect(s.toggleSelect(a)).toBe(true);
     expect(s.toggleSelect(b)).toBe(true);
     expect(s.attack).toEqual([a, b]);
@@ -72,7 +72,7 @@ describe('attack queue', () => {
 
   it('takes a chip back out before the first shot', () => {
     const s = sys(FIVE);
-    const a = slotOf(s, 'cannon', 'A');
+    const a = slotOf(s, 'cannon');
     s.toggleSelect(a);
     expect(s.toggleSelect(a)).toBe(true);
     expect(s.attack).toEqual([]);
@@ -81,8 +81,8 @@ describe('attack queue', () => {
 
   it('locks the series once the first chip has been fired', () => {
     const s = sys(FIVE);
-    const a = slotOf(s, 'cannon', 'A');
-    const b = slotOf(s, 'airshot', 'A');
+    const a = slotOf(s, 'cannon');
+    const b = slotOf(s, 'airshot');
     s.toggleSelect(a);
     s.toggleSelect(b);
     s.startAttack();
@@ -92,15 +92,15 @@ describe('attack queue', () => {
     expect(s.attack).toEqual([b]);
   });
 
-  it('can hold the whole hand when every code matches', () => {
-    const s = sys([chip('cannon', 'A'), chip('airshot', 'A'), chip('spreader', 'A'), chip('mine', 'A'), chip('guard', '*')]);
+  it('can hold the whole hand', () => {
+    const s = sys([chip('cannon'), chip('airshot'), chip('spreader'), chip('mine'), chip('guard')]);
     for (let i = 0; i < 5; i++) s.toggleSelect(i);
     expect(s.attack).toHaveLength(tuning.chips.HAND_SIZE);
     for (let i = 0; i < 5; i++) expect(s.slotState(i)).toBe('queued');
   });
 
   it('exposes the committed tail separately from the locked hand', () => {
-    const s = sys(Array.from({ length: 6 }, () => chip('cannon', 'A')));
+    const s = sys(Array.from({ length: 6 }, () => chip('cannon')));
     s.toggleSelect(0);
     s.toggleSelect(1);
     s.startAttack();
@@ -111,47 +111,19 @@ describe('attack queue', () => {
   });
 });
 
-describe('code rule', () => {
-  it('blocks incompatible chips the moment the first one is picked', () => {
+describe('combination rule', () => {
+  // Letter codes were removed (GDD §7.3, 2026-09-25): any chips combine for now.
+  it('keeps every other chip ready once the first one is picked', () => {
     const s = sys(FIVE);
-    const sword = slotOf(s, 'sword', 'B');
-    expect(s.slotState(sword)).toBe('ready');
-    s.toggleSelect(slotOf(s, 'cannon', 'A'));
-    expect(s.slotState(sword)).toBe('blocked');
-    expect(s.slotState(slotOf(s, 'airshot', 'A'))).toBe('ready');
-    expect(s.toggleSelect(sword)).toBe(false);
-  });
-
-  // The rule belongs to the whole series, not to the chips still unfired.
-  it('remembers the rule across shots of the same series', () => {
-    const s = sys(FIVE);
-    // Same name: Cannon A + Cannon F.
-    s.toggleSelect(slotOf(s, 'cannon', 'A'));
-    s.toggleSelect(slotOf(s, 'cannon', 'F'));
-    s.startAttack();
-    s.takeNext(0); // Cannon A is gone; only Cannon F is left queued
-    // Guard F shares a code with what is left, but not with the series.
-    expect(s.toggleSelect(slotOf(s, 'guard', 'F'))).toBe(false);
-  });
-
-  it('resets the rule once the series is spent', () => {
-    const s = sys(FIVE);
-    s.toggleSelect(slotOf(s, 'cannon', 'A'));
-    s.startAttack();
-    s.takeNext(0);
-    s.finishAttack();
-    expect(s.locked).toBe(true);
-    s.refillReady(T(4));
-    expect(s.locked).toBe(false);
-    const sword = slotOf(s, 'sword', 'B');
-    expect(s.slotState(sword)).toBe('ready');
-    expect(s.toggleSelect(sword)).toBe(true);
+    s.toggleSelect(slotOf(s, 'cannon'));
+    for (const id of ['guard', 'sword', 'airshot'] as const) expect(s.slotState(slotOf(s, id))).toBe('ready');
+    expect(s.toggleSelect(slotOf(s, 'sword'))).toBe(true);
   });
 });
 
 describe('shared hand cooldown', () => {
   it('can commit a combo without starting cooldown until the combo finishes', () => {
-    const s = sys(Array.from({ length: 7 }, () => chip('cannon', 'A')));
+    const s = sys(Array.from({ length: 7 }, () => chip('cannon')));
     s.toggleSelect(0);
     s.toggleSelect(1);
 
@@ -167,7 +139,7 @@ describe('shared hand cooldown', () => {
   });
 
   it('burns the committed tail into spent slots without returning it to the hand', () => {
-    const s = sys(Array.from({ length: 7 }, () => chip('cannon', 'A')));
+    const s = sys(Array.from({ length: 7 }, () => chip('cannon')));
     s.toggleSelect(0);
     s.toggleSelect(1);
     s.commitAttack();
@@ -181,7 +153,7 @@ describe('shared hand cooldown', () => {
 
   it('refills only spent slots and preserves intentionally empty hand slots', () => {
     const s = new ChipSystem(FIVE, new Rng(1));
-    s.dealHandExact([chip('cannon', 'A'), null, null, null, null]);
+    s.dealHandExact([chip('cannon'), null, null, null, null]);
     s.toggleSelect(0);
     s.startAttack();
     s.takeNext(0);
@@ -193,7 +165,7 @@ describe('shared hand cooldown', () => {
   });
 
   it('keeps a ready refill sunk until the committed charge is finished', () => {
-    const s = sys(Array.from({ length: 7 }, () => chip('cannon', 'A')));
+    const s = sys(Array.from({ length: 7 }, () => chip('cannon')));
     s.toggleSelect(0);
     s.toggleSelect(1);
     s.startAttack();
@@ -249,7 +221,7 @@ describe('shared hand cooldown', () => {
   });
 
   it('refills every spent slot together from the first shot timestamp', () => {
-    const s = sys(Array.from({ length: 7 }, () => chip('cannon', 'A')));
+    const s = sys(Array.from({ length: 7 }, () => chip('cannon')));
     s.toggleSelect(0);
     s.toggleSelect(1);
     s.startAttack();
@@ -308,7 +280,7 @@ describe('reshuffle', () => {
 
   it('gives a re-dealt chip a new deal serial', () => {
     // One chip: firing it and refilling reshuffles it straight back into slot 0.
-    const cs = new ChipSystem([chip('cannon', 'A')], new Rng(1));
+    const cs = new ChipSystem([chip('cannon')], new Rng(1));
     cs.dealHand();
     const first = cs.hand[0];
     expect(first).not.toBeNull();

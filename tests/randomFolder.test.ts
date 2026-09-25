@@ -12,7 +12,6 @@ describe('randomFolder', () => {
     for (const c of f) counts.set(c.defId, (counts.get(c.defId) ?? 0) + 1);
     expect(Math.max(...counts.values())).toBeLessThanOrEqual(RANDOM_MAX_COPIES);
     expect(f.filter((c) => CHIPS[c.defId].kind === 'field').length).toBeLessThanOrEqual(RANDOM_MAX_FIELD);
-    for (const c of f) expect(CHIPS[c.defId].codes).toContain(c.code);
   });
 
   it('is deterministic', () => {

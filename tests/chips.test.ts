@@ -3,7 +3,7 @@ import { DEFAULT_TUNING, mergeTuning, secondsToTicks, tuning } from '../src/conf
 import type { Command } from '../src/core/input/commands';
 import { CHIPS, type ChipId } from '../src/data/chips';
 import { FOLDERS, FOLDER_SIZE } from '../src/data/folders';
-import { isValidSelection, type ChipKey } from '../src/sim/chips/selection';
+import { canAddToSelection } from '../src/sim/chips/selection';
 import { Mettik } from '../src/sim/enemies/mettik';
 import { World } from '../src/sim/world';
 import { chipDesc, chipName } from '../src/i18n';
@@ -16,18 +16,10 @@ beforeEach(() => {
   mergeTuning(tuning, JSON.parse(JSON.stringify(DEFAULT_TUNING)));
 });
 
-const k = (defId: ChipKey['defId'], code: ChipKey['code']): ChipKey => ({ defId, code });
-
 describe('folders', () => {
   it('the starting folders contain exactly 30 chips', () => {
     for (const id of ['basic', 'field'] as const) {
       expect(FOLDERS[id].reduce((n, e) => n + e.count, 0)).toBe(FOLDER_SIZE);
-    }
-  });
-
-  it('use codes the chip can have', () => {
-    for (const folder of Object.values(FOLDERS)) {
-      for (const e of folder) expect(CHIPS[e.chip].codes, `${e.chip} ${e.code}`).toContain(e.code);
     }
   });
 });
@@ -86,9 +78,12 @@ describe('chip catalogue (compact MMBN3 scale)', () => {
 });
 
 describe('selection rule', () => {
-  it('allows the neutral playtest code to combine any of the ten chips', () => {
-    expect(isValidSelection([k('cannon', '*'), k('mine', '*'), k('airshot', '*')])).toBe(true);
-    expect(isValidSelection([k('areagrab', '*'), k('break', '*'), k('sword', '*')])).toBe(true);
+  it('combines any of the ten chips up to the cap', () => {
+    const max = tuning.chips.HAND_SIZE;
+    expect(canAddToSelection([{ defId: 'cannon' }, { defId: 'mine' }], { defId: 'airshot' }, max)).toBe(true);
+    expect(canAddToSelection([{ defId: 'areagrab' }, { defId: 'break' }], { defId: 'sword' }, max)).toBe(true);
+    const full = Array.from({ length: max }, () => ({ defId: 'cannon' as const }));
+    expect(canAddToSelection(full, { defId: 'sword' }, max)).toBe(false);
   });
 });
 
@@ -142,7 +137,7 @@ describe('battle flow', () => {
   });
 
   it('refills a spent slot after its cooldown without leaving ACTION', () => {
-    const folder = Array.from({ length: 8 }, () => ({ defId: 'cannon' as const, code: '*' as const }));
+    const folder = Array.from({ length: 8 }, () => ({ defId: 'cannon' as const }));
     const w = new World({ seed: 1, battleIndex: 1, folder, skipIntro: true, cheats: { god: true, aiEnabled: false } });
     for (const enemy of w.enemies) enemy.hp = 100_000;
     const slot = w.chips.hand.findIndex((c) => c !== null);
@@ -157,7 +152,7 @@ describe('battle flow', () => {
 
   it('reshuffles spent chips and emits drawReshuffled once the draw pile runs dry', () => {
     // Small folder so several slot refills exhaust the draw pile.
-    const smallFolder = Array.from({ length: 8 }, () => ({ defId: 'cannon' as const, code: 'A' as const }));
+    const smallFolder = Array.from({ length: 8 }, () => ({ defId: 'cannon' as const }));
     const w = new World({
       seed: 1,
       battleIndex: 1,

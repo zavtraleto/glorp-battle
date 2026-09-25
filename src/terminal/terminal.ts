@@ -619,7 +619,12 @@ export class Terminal {
     const queued = !inBattle || this.mode() === 'MENU' ? null : chips.attackChips()[0] ?? null;
     const shown = world.activeChip?.def ?? (queued ? CHIPS[queued.defId] : null);
     const fallback = inBattle ? t('hud.selectChip') : '';
-    this.chipDisplay.set(comboDisplayModel(shown ? toEntry(shown) : null, fallback, world.comboDisplayActive));
+    this.chipDisplay.set(comboDisplayModel(
+      shown ? toEntry(shown) : null,
+      fallback,
+      inBattle && world.comboDisplayActive,
+      inBattle ? world.selectTimeLeft : null,
+    ));
 
     // The control a tutorial callout points at pulses harder (GDD §10.5).
     const targets = callout?.targets ?? [];

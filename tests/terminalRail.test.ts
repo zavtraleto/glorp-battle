@@ -43,7 +43,7 @@ describe('railChanges', () => {
 
   it('treats a chip re-dealt into the same slot as eject + load', () => {
     // One chip: fired, then reshuffled straight back when its slot cooldown ends.
-    const cs = new ChipSystem([{ defId: 'cannon', code: 'A' }], new Rng(1));
+    const cs = new ChipSystem([{ defId: 'cannon' }], new Rng(1));
     cs.dealHand();
     const keys = () => cs.hand.map((c) => (c ? c.deal : null));
     const uid = cs.hand[0]?.uid;

@@ -48,6 +48,8 @@ const RANGES: Record<string, [number, number, number]> = {
   CHIP_INPUT_BUFFER: [0, 0.5, 0.01],
   SELECT_TIME_SCALE: [0.02, 1, 0.01],
   SELECT_SLOW_MO_ENTER: [0, 1, 0.01],
+  SELECT_SLOW_MO_TIME: [0.5, 10, 0.1],
+  SELECT_SLOW_MO_RECHARGE: [0.5, 20, 0.1],
   HOP_ALIGN_CHANCE: [0, 1, 0.05],
   BLD_AREA_GRAB_DECISIONS: [1, 10, 1],
   MINE_TARGET_DISTANCE: [1, 5, 1],
@@ -152,6 +154,8 @@ export class DebugPanel {
 
   constructor(private clock: FixedStepClock, private actions: DebugActions) {
     this.gui = new GUI({ title: 'Debug' });
+    // Desktop sizes on phones too: lil-gui's touch styles blow the panel up to 13–16px text.
+    this.gui.domElement.classList.remove('lil-allow-touch-styles');
     this.state.seed = actions.getSeed();
     this.state.timeScale = tuning.sim.TIME_SCALE;
     this.buildSession();

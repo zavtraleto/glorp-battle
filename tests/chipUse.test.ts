@@ -29,7 +29,7 @@ function addEnemy(w: World, x: number, y: number, hp = 30): Mettik {
 }
 
 function give(w: World, ...ids: ChipId[]): void {
-  for (const defId of ids) w.giveChip({ uid: uid++, defId, code: '*', state: 'queued', deal: 0 });
+  for (const defId of ids) w.giveChip({ uid: uid++, defId, state: 'queued', deal: 0 });
 }
 
 function step(w: World, commands: Command[] = []): void {

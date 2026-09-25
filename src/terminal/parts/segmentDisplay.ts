@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {
+  barCellSegments,
   DISPLAY_CHARS,
   DISPLAY_TOTAL_CHARS,
   glyph,
@@ -9,9 +10,10 @@ import {
   type SegmentDisplayModel,
 } from '../chips/segmentFont';
 
-// Amber 14-segment display under the rail, right side (TERMINAL.md §3.1): the
-// loaded chip's name or NO CHIP. Unlit segments stay faintly visible, like a
-// real vacuum fluorescent display.
+// Amber 14-segment display under the CRT (TERMINAL.md §3.1): the loaded chip's
+// name in the centre, side bars for Combo State and the selection slow-mo
+// timer. Unlit segments stay faintly visible, like a real vacuum fluorescent
+// display.
 
 const COLOR = {
   back: '#0d0904',
@@ -102,12 +104,10 @@ export class SegmentDisplay {
     this.bezel.position.set(right - w / 2, cy, 0.02);
   }
 
-  /** Shows the fixed label and optional timer-cell banks; redraws only on change. */
+  /** Shows the fixed label and the side bars; redraws only on change. */
   set(value: string | SegmentDisplayModel): void {
-    const model: SegmentDisplayModel = typeof value === 'string'
-      ? { text: value, leftLit: 0, rightLit: 0 }
-      : value;
-    const key = `${model.text}|${model.leftLit}|${model.rightLit}`;
+    const model: SegmentDisplayModel = typeof value === 'string' ? { text: value, barHalves: 0 } : value;
+    const key = `${model.text}|${model.barHalves}`;
     if (key === this.shown) return;
     this.shown = key;
     const ctx = this.ctx;
@@ -116,12 +116,14 @@ export class SegmentDisplay {
     ctx.lineWidth = STROKE;
     ctx.lineCap = 'round';
     for (let i = 0; i < DISPLAY_TOTAL_CHARS; i++) {
-      const inLeftBank = i < TIMER_BANK_CHARS;
-      const inRightBank = i >= TIMER_BANK_CHARS + DISPLAY_CHARS;
-      const timerOn = (inLeftBank && i < model.leftLit)
-        || (inRightBank && i >= DISPLAY_TOTAL_CHARS - model.rightLit);
-      const labelIndex = i - TIMER_BANK_CHARS;
-      const on = new Set(timerOn ? SEGMENTS : glyph(model.text[labelIndex] ?? ' '));
+      const right = TIMER_BANK_CHARS + DISPLAY_CHARS;
+      const on = new Set(
+        i < TIMER_BANK_CHARS
+          ? barCellSegments('left', TIMER_BANK_CHARS - 1 - i, model.barHalves)
+          : i >= right
+            ? barCellSegments('right', i - right, model.barHalves)
+            : glyph(model.text[i - TIMER_BANK_CHARS] ?? ' '),
+      );
       const x0 = PAD + i * CELL_W;
       // A slight italic slant, as on real segment displays.
       const slant = (y: number) => (CELL_H - y) * 0.12;

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { tuning } from '../../config/tuning';
-import type { ChipCode, ChipId } from '../../data/chips';
+import type { ChipId } from '../../data/chips';
 import { Spring } from '../anim/spring';
 import { Cartridge } from '../chips/cartridge';
 import { cooldownBodyLevel } from '../chips/chipFace';
@@ -31,7 +31,6 @@ export interface RailChip {
   /** Draw serial: a chip dealt again gets a new one, so the rail reloads it. */
   deal: number;
   defId: ChipId;
-  code: ChipCode;
 }
 
 /** How a rail slot looks, straight from the simulation (GDD §7.1). */
@@ -78,7 +77,7 @@ const COLOR = {
   glowAttract: new THREE.Color(0xffc98a),
   /** Nothing tints the plastic of a cartridge that is in play. */
   tintPlain: new THREE.Color(0xffffff),
-  /** Refused by the code rule: dark and cold, clearly out of play. */
+  /** Refused by the combination rule: dark and cold, clearly out of play. */
   tintBlocked: new THREE.Color(0x59636e),
   /**
    * Face brightness is the state's own scale (decision 2026-09-20). The face is
@@ -469,7 +468,7 @@ export class ChipRail {
   }
 
   private makeCart(chip: RailChip, slot: number, delay: number): Cart {
-    const cart = new Cartridge(chip.defId, chip.code);
+    const cart = new Cartridge(chip.defId);
     cart.shape(this.texel, this.maxH);
     cart.setTint(COLOR.tintPlain, COLOR.faceNormal);
     cart.setGlow(COLOR.glowAttract, GLOW_IDLE);

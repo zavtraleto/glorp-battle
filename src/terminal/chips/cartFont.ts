@@ -1,7 +1,7 @@
 import type { PixelSink } from '../crt/pixelFont';
 
 // Big pixel font for the cartridge's top panel (TERMINAL.md §6.1): 6×10 with
-// two-pixel strokes, so the damage number and the code letter stay readable at
+// two-pixel strokes, so the damage number stays readable at
 // the size a cartridge actually gets on screen (~65 render pixels wide). The
 // CRT's 5×7 font is too light here and doubling it is too heavy, hence a set of
 // its own. '#' is ink, '.' is empty.

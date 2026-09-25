@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { Rng } from '../src/core/rng';
-import type { ChipCode, ChipId } from '../src/data/chips';
+import type { ChipId } from '../src/data/chips';
 import type { EnemyKind } from '../src/sim/enemies/enemyBase';
 import type { FolderChip } from '../src/sim/chips/chipSystem';
 import * as runModule from '../src/app/run';
 
 interface PlayEntry {
   defId: ChipId;
-  code: ChipCode;
 }
 
 interface PlayApi {
@@ -25,16 +24,16 @@ describe('Play content profile', () => {
   it('contains only the ten approved chips and four approved enemies', () => {
     expect(api.PLAY_CONTENT).toEqual({
       chips: [
-        { defId: 'cannon', code: '*' },
-        { defId: 'sword', code: '*' },
-        { defId: 'areagrab', code: '*' },
-        { defId: 'mine', code: '*' },
-        { defId: 'block', code: '*' },
-        { defId: 'break', code: '*' },
-        { defId: 'airshot', code: '*' },
-        { defId: 'spreader', code: '*' },
-        { defId: 'widesword', code: '*' },
-        { defId: 'guard', code: '*' },
+        { defId: 'cannon' },
+        { defId: 'sword' },
+        { defId: 'areagrab' },
+        { defId: 'mine' },
+        { defId: 'block' },
+        { defId: 'break' },
+        { defId: 'airshot' },
+        { defId: 'spreader' },
+        { defId: 'widesword' },
+        { defId: 'guard' },
       ],
       enemies: ['mettik', 'canodron', 'bladdy', 'hopzap'],
     });
@@ -49,8 +48,7 @@ describe('Play content profile', () => {
     const counts = new Map<ChipId, number>();
     for (const chip of a) counts.set(chip.defId, (counts.get(chip.defId) ?? 0) + 1);
     expect(Object.fromEntries(counts)).toEqual({ cannon: 3, sword: 2, areagrab: 2, guard: 1 });
-    const allowed = new Map((api.PLAY_CONTENT?.chips ?? []).map((entry) => [entry.defId, entry.code]));
-    for (const chip of a) expect(chip.code).toBe(allowed.get(chip.defId));
+    for (const chip of a) expect(chip).toEqual({ defId: chip.defId });
   });
 
   it('does not let the RNG alter the prototype folder', () => {

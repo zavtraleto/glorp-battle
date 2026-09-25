@@ -62,7 +62,7 @@ export interface TutorialLesson {
 /** One fixed seed: the tutorial plays the same way every time. */
 export const TUTORIAL_SEED = 20260919;
 
-const chip = (defId: FolderChip['defId']): FolderChip => ({ defId, code: '*' });
+const chip = (defId: FolderChip['defId']): FolderChip => ({ defId });
 const EMPTY_HAND: readonly (FolderChip | null)[] = [null, null, null, null, null];
 
 /** The player can press Attack right now and the loaded chip would hit someone. */

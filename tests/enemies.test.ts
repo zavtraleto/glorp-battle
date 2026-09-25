@@ -158,7 +158,7 @@ describe('battles 2–4 are winnable', () => {
         run(w, T(tuning.player.CELL_MOVE_TIME));
         continue;
       }
-      w.giveChip({ uid: 20_000 + i, defId: 'cannon', code: '*', state: 'queued', deal: 0 });
+      w.giveChip({ uid: 20_000 + i, defId: 'cannon', state: 'queued', deal: 0 });
       step(w, [{ type: 'useChip' }]);
       run(w, useTicks(CHIPS.cannon));
     }
@@ -205,7 +205,7 @@ describe('levels and player paralysis', () => {
     move(w, 'left');
     expect(w.player.x).toBe(1);
     expect(w.player.invulnerable).toBe(false);
-    w.giveChip({ uid: 30_001, defId: 'cannon', code: '*', state: 'queued', deal: 0 });
+    w.giveChip({ uid: 30_001, defId: 'cannon', state: 'queued', deal: 0 });
     step(w, [{ type: 'useChip' }]);
     expect(w.activeChip).toBeNull();
     run(w, T(1));

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { ChipCode, ChipId } from '../../data/chips';
+import type { ChipId } from '../../data/chips';
 import {
   cartridgeBackTexture,
   chipFaceTexture,
@@ -89,14 +89,11 @@ export class Cartridge {
   private faceY = 0;
   private faceZ = 0;
 
-  constructor(
-    readonly defId: ChipId,
-    readonly code: ChipCode,
-  ) {
+  constructor(readonly defId: ChipId) {
     this.bodyMat = new THREE.MeshLambertMaterial({ color: COLOR.body, flatShading: true });
     // Unlit on purpose: the label's brightness is decided by the rail's tint
     // alone, never by the cabinet's lights (spec §6.1, decision 2026-09-20).
-    const faceMap = chipFaceTexture(defId, code);
+    const faceMap = chipFaceTexture(defId);
     this.faceMat = new THREE.MeshBasicMaterial({ map: faceMap });
     this.cooldownMap = faceMap.clone();
     this.cooldownMap.needsUpdate = true;

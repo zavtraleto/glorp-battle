@@ -135,7 +135,7 @@ describe('waves (GDD §10.4)', () => {
     for (const enemy of w.enemies) enemy.hp = 10_000;
     let uid = 90_000;
     for (const defId of ['cannon', 'cannon', 'cannon'] as const) {
-      w.giveChip({ uid: uid++, defId, code: '*', state: 'queued', deal: 0 });
+      w.giveChip({ uid: uid++, defId, state: 'queued', deal: 0 });
     }
     w.step(DT, { commands: [{ type: 'useChip' }], held: null });
     expect(w.combo).not.toBeNull();
