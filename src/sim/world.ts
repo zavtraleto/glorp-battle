@@ -841,6 +841,11 @@ export class World implements EnemyContext, AttackContext {
   private commitChipResolution(active: ActiveChip): void {
     if (active.resolved) return;
     active.resolved = true;
+    // Spent before the refill so an exhausted copy is not dealt straight back.
+    this.chips.spendCharge(active.chip);
+    if (active.chip.charges === 0) {
+      this.events.push({ type: 'chipExhausted', defId: active.chip.defId, deal: active.chip.deal });
+    }
     const reshuffles = this.chips.reshuffles;
     this.chips.reserveRefill(active.slot);
     if (this.chips.reshuffles > reshuffles) {
@@ -940,15 +945,16 @@ export class World implements EnemyContext, AttackContext {
 
   /**
    * Debug: put a chip into the hand and queue it. Prefers a free slot; with a
-   * full hand it takes over a slot that is not already queued.
+   * full hand it takes over a slot that is not already queued. Charges default
+   * to the chip's full count.
    */
-  giveChip(chip: ChipInstance): void {
+  giveChip(chip: Omit<ChipInstance, 'charges' | 'maxCharges'> & Partial<ChipInstance>): void {
     const hand = this.chips.hand;
     let slot = hand.indexOf(null);
     if (slot < 0) slot = hand.findIndex((_, i) => this.chips.queueIndexOf(i) < 0);
     if (slot < 0) return;
-    chip.state = 'hand';
-    hand[slot] = chip;
+    const charges = CHIPS[chip.defId].charges;
+    hand[slot] = { charges, maxCharges: charges, ...chip, state: 'hand' };
     this.chips.toggleSelect(slot);
   }
 

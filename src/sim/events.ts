@@ -19,6 +19,8 @@ export type SimEvent =
   | { type: 'stateChanged'; from: string; to: string }
   | { type: 'chipUsed'; defId: ChipId; x: number; y: number }
   | { type: 'chipInterrupted'; defId: ChipId }
+  /** A resolved chip spent its copy's last charge (GDD §6.1); `deal` names the flying cartridge. */
+  | { type: 'chipExhausted'; defId: ChipId; deal: number }
   /** Frozen-chain cartridges that did not resolve and returned to ready. */
   | { type: 'chipChainCancelled'; chips: { slot: number; deal: number }[] }
   /** Visual footprint of a resolved chip; `cells` are the panels it swept or hit. */

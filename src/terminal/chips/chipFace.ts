@@ -17,7 +17,7 @@ import { CHIP_ICONS, ICON_PALETTE } from './chipIcons';
 export const FACE_W = 60;
 export const FACE_H = 74;
 /** Bumped whenever the face design changes, so cached textures are not reused. */
-const FACE_GEN = 7;
+const FACE_GEN = 8;
 
 /**
  * Top panel colour per chip colour (GDD §6.1): dark enough for the light number
@@ -27,12 +27,15 @@ export const CHIP_COLOR: Record<ChipColor, string> = {
   red: '#a3302a',
 };
 
+/** Label paper, also the colour of its shards (chipShards.ts). */
+export const LABEL_COLOR = '#f4f1e6';
+
 const COLOR = {
   /** Sunk edges: one texel of it above and left of each panel. */
   recess: '#2b2822',
   /** Worn plastic catching the light: one texel below and right. */
   lip: '#cfc8b8',
-  label: '#f4f1e6',
+  label: LABEL_COLOR,
   labelWear: '#ded8c6',
   ink: '#fdfbf2',
 };
@@ -57,6 +60,28 @@ export function cooldownBodyLevel(progress: number): number {
   return 0.18 + p * 0.82;
 }
 
+/** One charge segment of the top panel, in texels. */
+export interface ChargeSegment {
+  x: number;
+  w: number;
+  lit: boolean;
+}
+
+/**
+ * The top panel split into one segment per charge with a one-texel gap; spent
+ * charges go dark from the right (GDD §6.1).
+ */
+export function chargeSegments(charges: number, max: number, width = FACE_W): ChargeSegment[] {
+  const n = Math.max(1, Math.floor(max));
+  const out: ChargeSegment[] = [];
+  for (let i = 0; i < n; i++) {
+    const x = Math.round((i * (width + 1)) / n);
+    const end = Math.min(width, Math.round(((i + 1) * (width + 1)) / n) - 1);
+    out.push({ x, w: end - x, lit: i < charges });
+  }
+  return out;
+}
+
 /** The number on the top panel: damage, or nothing. */
 export function faceNumber(defId: ChipId): string {
   const power = CHIPS[defId].power;
@@ -73,8 +98,8 @@ function sink(ctx: CanvasRenderingContext2D, r: { x: number; y: number; w: numbe
   ctx.fillRect(r.x + r.w - 1, r.y, 1, r.h);
 }
 
-export function chipFaceTexture(defId: ChipId): THREE.CanvasTexture {
-  const key = `${defId}:${FACE_GEN}`;
+export function chipFaceTexture(defId: ChipId, charges: number, maxCharges: number): THREE.CanvasTexture {
+  const key = `${defId}:${charges}/${maxCharges}:${FACE_GEN}`;
   const hit = cache.get(key);
   if (hit) return hit;
 
@@ -87,9 +112,14 @@ export function chipFaceTexture(defId: ChipId): THREE.CanvasTexture {
   const def = CHIPS[defId];
 
   // Top panel: the chip's colour with the number left in a light ink — no
-  // outline (decision 2026-09-20); letter codes are gone (2026-09-25).
-  ctx.fillStyle = CHIP_COLOR[def.color];
+  // outline (decision 2026-09-20); letter codes are gone (2026-09-25). It is
+  // cut into charge segments; spent ones show the sunk plastic.
+  ctx.fillStyle = COLOR.recess;
   ctx.fillRect(PANEL.x, PANEL.y, PANEL.w, PANEL.h);
+  ctx.fillStyle = CHIP_COLOR[def.color];
+  for (const seg of chargeSegments(charges, maxCharges, PANEL.w)) {
+    if (seg.lit) ctx.fillRect(PANEL.x + seg.x, PANEL.y, seg.w, PANEL.h);
+  }
   sink(ctx, PANEL);
   const number = faceNumber(defId);
   const textY = PANEL.y + 5;

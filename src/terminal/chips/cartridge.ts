@@ -36,8 +36,11 @@ const CONTACTS = 5;
 const CONTACT_FILL = 0.62;
 const CONTACT_DEPTH = 0.16;
 
+/** Cartridge plastic, also the colour of its body shards (chipShards.ts). */
+export const CART_BODY_COLOR = 0xa39d90;
+
 const COLOR = {
-  body: 0xa39d90,
+  body: CART_BODY_COLOR,
   contactOff: 0x4a4a2e,
   contactOn: 0xffe9a8,
 };
@@ -89,11 +92,11 @@ export class Cartridge {
   private faceY = 0;
   private faceZ = 0;
 
-  constructor(readonly defId: ChipId) {
+  constructor(readonly defId: ChipId, charges: number, maxCharges: number) {
     this.bodyMat = new THREE.MeshLambertMaterial({ color: COLOR.body, flatShading: true });
     // Unlit on purpose: the label's brightness is decided by the rail's tint
     // alone, never by the cabinet's lights (spec §6.1, decision 2026-09-20).
-    const faceMap = chipFaceTexture(defId);
+    const faceMap = chipFaceTexture(defId, charges, maxCharges);
     this.faceMat = new THREE.MeshBasicMaterial({ map: faceMap });
     this.cooldownMap = faceMap.clone();
     this.cooldownMap.needsUpdate = true;

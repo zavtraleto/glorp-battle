@@ -8,9 +8,11 @@ import { canAddToSelection, type ChipKey } from './selection';
 //
 // There is no Custom Screen: the hand of five sits in the rail for the whole
 // battle and the player builds a series of chips while dodging. A fired chip
-// leaves its slot empty until that chip's refill cooldown elapses.
+// leaves its slot empty until that chip's refill cooldown elapses. Every copy
+// has charges for the battle; at zero it leaves the folder (GDD §6.1, §7.5).
 
-export type ChipState = 'folder' | 'hand' | 'pending' | 'queued' | 'used';
+/** `exhausted`: no charges left, out of the folder until the battle ends. */
+export type ChipState = 'folder' | 'hand' | 'pending' | 'queued' | 'used' | 'exhausted';
 
 /** What a hand slot shows right now; derived, never stored. */
 export type SlotState = 'empty' | 'cooling' | 'ready' | 'queued' | 'blocked' | 'committed' | 'locked';
@@ -22,6 +24,9 @@ export interface ChipInstance {
   state: ChipState;
   /** Serial of the draw that put this chip in the hand (0 = never drawn); a re-dealt chip gets a new one. */
   deal: number;
+  /** Uses left in this battle (GDD §6.1). */
+  charges: number;
+  readonly maxCharges: number;
 }
 
 /** A chip in a run's folder. */
@@ -89,7 +94,10 @@ export class ChipSystem {
   private fill(list: readonly FolderChip[]): void {
     const first = (this.chips[this.chips.length - 1]?.uid ?? 0) + 1;
     this.chips.length = 0;
-    list.forEach((c, i) => this.chips.push({ uid: first + i, defId: c.defId, state: 'folder', deal: 0 }));
+    list.forEach((c, i) => {
+      const charges = CHIPS[c.defId].charges;
+      this.chips.push({ uid: first + i, defId: c.defId, state: 'folder', deal: 0, charges, maxCharges: charges });
+    });
     this.drawPile = this.rng.shuffle([...this.chips]);
     this.drawIndex = 0;
   }
@@ -135,9 +143,15 @@ export class ChipSystem {
     return chip;
   }
 
-  /** Empty pile: every spent chip is shuffled back in (GDD §7.5). */
+  /** Empty pile: every spent chip with charges left is shuffled back in (GDD §7.5). */
   private reshuffleSpent(reservedUid: number | null = null): void {
-    const spent = this.chips.filter((c) => c.state === 'used' && c.uid !== reservedUid);
+    let spent = this.chips.filter((c) => c.state === 'used' && c.uid !== reservedUid);
+    // TEMP until T3 (empty folder): with nothing left to draw, exhausted copies
+    // come back with full charges so the battle never stalls.
+    if (spent.length === 0) {
+      spent = this.chips.filter((c) => c.state === 'exhausted');
+      for (const c of spent) c.charges = c.maxCharges;
+    }
     if (spent.length === 0) return;
     for (const c of spent) c.state = 'folder';
     this.drawPile.length = 0;
@@ -302,7 +316,16 @@ export class ChipSystem {
     return chip;
   }
 
-  /** Permanently consumes every unstarted chip in the committed tail. */
+  /**
+   * A fired chip reached its hit frame: one charge is gone, and a spent copy
+   * at zero leaves the folder. Interrupted and burned chips keep theirs.
+   */
+  spendCharge(chip: ChipInstance): void {
+    chip.charges = Math.max(0, chip.charges - 1);
+    if (chip.charges === 0 && chip.state === 'used') chip.state = 'exhausted';
+  }
+
+  /** Discards every unstarted chip in the committed tail without spending charges. */
   burnAttackTail(): number[] {
     const burned: number[] = [];
     while (this.attack.length > 0) {

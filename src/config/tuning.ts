@@ -53,6 +53,10 @@ export const DEFAULT_TUNING = {
     CHIP_RECOVERY_FIELD: 0.15,
     /** Shared delay from the first charged shot until the next hand may activate. */
     HAND_REFILL_COOLDOWN: 4.0,
+    /** Uses per battle of one attack chip copy (GDD §6.1). */
+    CHIP_CHARGES_ATTACK: 2,
+    /** Uses per battle of one field or support chip copy (GDD §6.1). */
+    CHIP_CHARGES_SUPPORT: 1,
     CHIP_DAMAGE_CANNON: 4,
     CHIP_DAMAGE_SWORD: 6,
     CHIP_DAMAGE_MINE: 6,
@@ -339,6 +343,18 @@ export const DEFAULT_TUNING = {
     CONTACT_FLASH_TIME: 0.2,
     /** Three red body pulses when a chip chain is cancelled before use. */
     CHIP_CANCEL_FLASH_TIME: 1.2,
+    /** A last-charge cartridge flies its eject arc this much slower until it bursts (GDD §6.1). */
+    LAST_CHARGE_FLIGHT_SCALE: 0.3,
+    /** Last charge spent: shards are born red-hot and cool to their own colours over this (s). */
+    SHATTER_FLASH_TIME: 0.1,
+    /** Life of the shards (s). */
+    SHATTER_TIME: 0.6,
+    /** Shard burst speed, cartridge widths per second. */
+    SHATTER_SPEED: 6,
+    /** Pull on the shards, cartridge widths per second squared. */
+    SHATTER_GRAVITY: 30,
+    /** How long the segment display shows `<CHIP> LOST` (s). */
+    CHIP_LOST_TIME: 0.9,
     /** Nothing queued this long in battle: the cassette faces start flashing to call for a pick (s). */
     RAIL_ATTRACT_DELAY: 1.5,
     /** One beat of those flashing patterns (s). */

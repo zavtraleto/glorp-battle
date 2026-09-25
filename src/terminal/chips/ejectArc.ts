@@ -57,14 +57,16 @@ const SLOT_CORRIDORS: readonly (readonly number[])[] = [
   [5, 4, 3],
 ];
 
-function mix(value: number): number {
+/** Integer hash for decorative variation. */
+export function mix(value: number): number {
   let x = (value | 0) + 0x6d2b79f5;
   x = Math.imul(x ^ (x >>> 15), x | 1);
   x ^= x + Math.imul(x ^ (x >>> 7), x | 61);
   return (x ^ (x >>> 14)) >>> 0;
 }
 
-function unit(bits: number): number {
+/** Hash bits as 0..1. */
+export function unit(bits: number): number {
   return (bits >>> 0) / 0xffffffff;
 }
 

@@ -18,7 +18,12 @@ import {
 // The amber chip display under the rail and the trackball ring (TERMINAL.md §3.1).
 describe('14-segment display', () => {
   it('has a glyph for every character it can be asked to show', () => {
-    const texts = [t('hud.selectChip'), '+0123456789', ...(Object.keys(CHIPS) as ChipId[]).map((id) => chipName(id))];
+    const ids = Object.keys(CHIPS) as ChipId[];
+    const texts = [
+      t('hud.selectChip'), '+0123456789',
+      ...ids.map((id) => chipName(id)),
+      ...ids.map((id) => t('hud.chipLost', { name: chipName(id) })),
+    ];
     for (const text of texts) {
       for (const ch of text) expect(hasGlyph(ch), `${text}: '${ch}'`).toBe(true);
     }
@@ -30,6 +35,12 @@ describe('14-segment display', () => {
       const key = [...glyph(ch)].sort().join(',');
       expect(seen.get(key), `${ch} looks like ${seen.get(key)}`).toBeUndefined();
       seen.set(key, ch);
+    }
+  });
+
+  it('fits every <CHIP> LOST line into the centre characters', () => {
+    for (const id of Object.keys(CHIPS) as ChipId[]) {
+      expect(t('hud.chipLost', { name: chipName(id) }).length).toBeLessThanOrEqual(DISPLAY_CHARS);
     }
   });
 

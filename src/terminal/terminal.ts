@@ -132,6 +132,9 @@ export class Terminal {
   private readonly corners: THREE.Vector3[] = [];
   private readonly activeChipAt = new THREE.Vector3();
   private hpHitLeft = 0;
+  /** `<CHIP> LOST` on the segment display after a last charge (GDD §6.1). */
+  private chipLost = '';
+  private chipLostLeft = 0;
   private readonly battle: BattleTarget;
   private readonly router: PointerRouter;
 
@@ -338,6 +341,12 @@ export class Terminal {
       this.shakeCabinet(shape === 'near' ? SHAKE.sword : SHAKE.chip);
     }
     if (e.type === 'chipChainCancelled') this.rail.flashCancelled(e.chips);
+    // The last charge is gone: the cartridge bursts and the display names it (TERMINAL.md §6.5).
+    if (e.type === 'chipExhausted') {
+      this.rail.shatter(e.deal);
+      this.chipLost = t('hud.chipLost', { name: chipName(e.defId) });
+      this.chipLostLeft = tuning.terminal.CHIP_LOST_TIME;
+    }
     if (e.type === 'damaged' && e.targetId !== PLAYER_ID && e.amount > 0) this.crt.edgeFlash(EDGE_HIT, EDGE.hit);
     // A kill is the big beat: bright edges, a flash and a jolt of the cabinet.
     if (e.type === 'enemyKilled') {
@@ -394,6 +403,7 @@ export class Terminal {
     this.resize();
     this.time += dt;
     this.hpHitLeft = Math.max(0, this.hpHitLeft - dt);
+    this.chipLostLeft = Math.max(0, this.chipLostLeft - dt);
     renderer.info.reset();
 
     const screen = this.battle.render(sceneRenderer, world, alpha, dt);
@@ -615,9 +625,10 @@ export class Terminal {
     });
     const queued = !inBattle || this.mode() === 'MENU' ? null : chips.attackChips()[0] ?? null;
     const shown = world.activeChip?.def ?? (queued ? CHIPS[queued.defId] : null);
-    const fallback = inBattle ? t('hud.selectChip') : '';
+    const lost = inBattle && this.chipLostLeft > 0;
+    const fallback = lost ? this.chipLost : inBattle ? t('hud.selectChip') : '';
     this.chipDisplay.set(comboDisplayModel(
-      shown ? toEntry(shown) : null,
+      shown && !lost ? toEntry(shown) : null,
       fallback,
       inBattle && world.comboDisplayActive,
       inBattle ? world.selectTimeLeft : null,
