@@ -4,6 +4,7 @@ import mettikUrl from '../assets/sprites/mettik.png';
 import canodronUrl from '../assets/sprites/canodron.png';
 import hopzapUrl from '../assets/sprites/hopzap.png';
 import bladdyUrl from '../assets/sprites/bladdy.png';
+import punchyUrl from '../assets/sprites/punchy.png';
 
 // Hand-drawn sprites (BATTLE_VISUAL.md §5): full-colour art drawn on its own
 // render layer after the palette pass, toned down to sit on the dark CRT.
@@ -11,7 +12,7 @@ import bladdyUrl from '../assets/sprites/bladdy.png';
 // hard-alpha cut-downs (player: 128×128; enemies: within 128×160) that ship
 // with the game. Kinds without art use one static placeholder bitmap.
 
-export type ArtId = 'player' | 'mettik' | 'canodron' | 'hopzap' | 'bladdy';
+export type ArtId = 'player' | 'mettik' | 'canodron' | 'hopzap' | 'bladdy' | 'punchy';
 export type EnemySpriteId = Exclude<ArtId, 'player'> | 'placeholder';
 
 const URLS: Record<ArtId, string> = {
@@ -20,6 +21,7 @@ const URLS: Record<ArtId, string> = {
   canodron: canodronUrl,
   hopzap: hopzapUrl,
   bladdy: bladdyUrl,
+  punchy: punchyUrl,
 };
 
 /** Enemy kinds drawn with hand-made art. */
@@ -28,6 +30,7 @@ export const ENEMY_ART: Readonly<Record<string, EnemySpriteId>> = {
   canodron: 'canodron',
   hopzap: 'hopzap',
   bladdy: 'bladdy',
+  punchy: 'punchy',
 };
 
 /** Shipped art id, or the one placeholder used by future enemy kinds. */

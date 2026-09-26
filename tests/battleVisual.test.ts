@@ -294,11 +294,12 @@ describe('enemy sprite art', () => {
     }).enemyArtId;
 
     expect(enemyArtId).toBeTypeOf('function');
-    expect(['mettik', 'canodron', 'hopzap', 'bladdy'].map((kind) => enemyArtId?.(kind))).toEqual([
+    expect(['mettik', 'canodron', 'hopzap', 'bladdy', 'punchy'].map((kind) => enemyArtId?.(kind))).toEqual([
       'mettik',
       'canodron',
       'hopzap',
       'bladdy',
+      'punchy',
     ]);
     expect(enemyArtId?.('future-enemy')).toBe('placeholder');
   });

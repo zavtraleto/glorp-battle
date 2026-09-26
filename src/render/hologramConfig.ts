@@ -35,6 +35,7 @@ export const HOLOGRAM_CHARACTER_OVERRIDES: Partial<Record<HologramCharacter, Par
   canodron: { glowColor: '#FFB45E' },
   hopzap: { glowColor: '#7EE7FF' },
   bladdy: { glowColor: '#FF7A7A' },
+  punchy: { glowColor: '#FFD9A0' },
 };
 
 function configFromTuning(v: Tuning['hologram']): HologramConfig {
@@ -75,6 +76,7 @@ const CHARACTER_SEED: Record<HologramCharacter, number> = {
   canodron: 37,
   hopzap: 53,
   bladdy: 71,
+  punchy: 89,
 };
 
 /** Small positive float with stable variation between art types and actor instances. */
