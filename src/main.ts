@@ -195,7 +195,7 @@ const loop = new GameLoop(
         paused: loop.clock.paused,
         simTime: world.time,
         perf: perf.snapshot(),
-        deadTime: formatDeadTime(deadTime.stats),
+        deadTime: formatDeadTime(deadTime.stats) + (panelError ? `\npanel failed: ${panelError}` : ''),
         extra:
           (benchReport ? `${benchReport}\n` : '') +
           `player ${p.x},${p.y} hp ${p.hp} hits ${p.hitsTaken} ${p.flinched ? 'FLINCH ' : ''}${p.invulnerable ? 'IFR' : ''}\n` +
@@ -290,10 +290,27 @@ function loadPanel(): Promise<DebugPanel> {
     panel.syncSeed(session.seed, Math.min(4, session.battleIndex));
     return panel;
   });
-  // A failed chunk load (offline, a dev-server restart) retries on the next press.
-  panelLoad.catch(() => (panelLoad = null));
+  // A failed load retries on the next press; the reason shows in the overlay.
+  panelLoad.then(() => (panelError = ''), (e: unknown) => {
+    panelLoad = null;
+    panelError = e instanceof Error ? e.message : String(e);
+    console.error('[debug panel]', e);
+  });
   return panelLoad;
 }
+let panelError = '';
+// A page cached from an older deploy asks for chunks that no longer exist:
+// reload once to pick up the current build (Safari keeps stale pages longest).
+window.addEventListener('vite:preloadError', (e) => {
+  try {
+    if (sessionStorage.getItem('glorp.chunkReload')) return;
+    sessionStorage.setItem('glorp.chunkReload', '1');
+  } catch {
+    return;
+  }
+  e.preventDefault();
+  location.reload();
+});
 
 // Small toggle in the bottom-left corner: debug tools on phones and in the published build.
 const debugToggle = document.createElement('button');

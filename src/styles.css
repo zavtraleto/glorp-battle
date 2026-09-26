@@ -163,21 +163,12 @@ body {
   color: #ffd45e;
 }
 
-/* Fingers: taller rows and text. */
-@media (pointer: coarse) {
+/* Phones keep desktop sizes (as lil-gui did since 2026-09-25): a narrower,
+   shorter panel leaves the field visible. */
+@media (max-width: 600px) {
   .debug-panel {
+    width: min(280px, calc(100vw - var(--safe-left) - var(--safe-right) - 12px));
     max-height: 60vh;
-    --tp-container-unit-size: 28px;
-    --tp-blade-value-width: 48%;
-  }
-  .debug-panel .tp-rotv,
-  .debug-panel-bar input,
-  .debug-panel-bar button {
-    font-size: 13px;
-  }
-  .debug-panel-bar input,
-  .debug-panel-bar button {
-    padding: 6px 8px;
   }
 }
 
