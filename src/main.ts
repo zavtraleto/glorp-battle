@@ -246,6 +246,13 @@ const debugActions: DebugActions = {
     else sceneRenderer.field.overrides.set(key, state);
   },
   runDepth: (depth) => session.debugDepth(depth),
+  runLab: (encounter, folder, wave) => {
+    session.debugCustom(encounter, folder, wave);
+    syncWorld();
+    // On a phone the panel covers the field: straight into the fight, DBG brings the Lab back.
+    // With a mouse it stays open for the next edit.
+    if (window.matchMedia('(pointer: coarse)').matches) setDebugVisible(false);
+  },
   tutorial: (lesson) => {
     session.debugTutorial(lesson);
     syncWorld();

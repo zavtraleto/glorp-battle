@@ -72,7 +72,7 @@ export const STAGES: readonly Encounter[] = [
     id: 's4', tier: 'normal', minDepth: 4, maxDepth: 4,
     waves: [
       wave(e('hopzap', 1, 1)),
-      wave(e('hopzap', 0, 0), e('canodron', 2, 1)),
+      wave(e('hopzap', 0, 0), e('punchy', 2, 1)),
       wave(e('hopzap', 0, 2), e('hopzap', 2, 0), e('mettik', 1, 1)),
     ],
   },
@@ -80,7 +80,7 @@ export const STAGES: readonly Encounter[] = [
     id: 's5', tier: 'elite', minDepth: 5, maxDepth: 5,
     waves: [
       wave(e('bladdy', 0, 0), e('canodron', 2, 1)),
-      wave(e('mettik', 0, 2), e('hopzap', 2, 0), e('canodron', 1, 0)),
+      wave(e('mettik', 0, 2), e('hopzap', 2, 0), e('punchy', 1, 0)),
       wave(e('bladdy', 1, 0), e('hopzap', 0, 2), e('canodron', 2, 1)),
     ],
   },
@@ -97,6 +97,7 @@ export const ENCOUNTERS: readonly Encounter[] = [
   { id: 'n4', tier: 'normal', minDepth: 1, maxDepth: 4, waves: [wave(e('hopzap', 1, 1))] },
   { id: 'n5', tier: 'normal', minDepth: 3, maxDepth: 7, waves: [wave(e('bladdy', 1, 0))] },
   { id: 'n6', tier: 'normal', minDepth: 4, maxDepth: 9, waves: [wave(e('hopzap', 0, 0), e('canodron', 2, 1))] },
+  { id: 'n7', tier: 'normal', minDepth: 4, maxDepth: 9, waves: [wave(e('punchy', 1, 0))] },
   { id: 'e1', tier: 'elite', minDepth: 5, maxDepth: 5, waves: [wave(e('bladdy', 1, 0, 2), e('mettik', 0, 2))] },
   { id: 'e2', tier: 'elite', minDepth: 8, maxDepth: 8, waves: [wave(e('bladdy', 0, 0, 2), e('hopzap', 2, 2, 2))] },
 ];

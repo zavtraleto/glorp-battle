@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { secondsToTicks, tuning } from '../config/tuning';
 import type { Enemy } from '../sim/enemies/enemyBase';
+import { fuseProgress, type Telegraph } from '../sim/enemies/telegraph';
 import type { Player } from '../sim/player';
 import { CELL_DEPTH, CELL_WIDTH, cellToWorld } from './field';
 import { PixelSprite } from './pixelSprite';
@@ -27,6 +28,12 @@ const TINT_ACCENT = new THREE.Color(PALETTE.accent);
 const IDLE_BOB_HZ = 1.2;
 /** A hit enemy ripples for this long, seconds (decision 2026-09-19). */
 const HIT_RIPPLE_TIME = 0.3;
+/** Arrival ghost (GDD §8.1.1): dissolve when the fuse is lit and when it burns out, and its brightness. */
+const GHOST_DISSOLVE_START = 0.75;
+const GHOST_DISSOLVE_END = 0.3;
+const GHOST_BRIGHTNESS = 0.6;
+/** Ghost sprites need hologram instance ids of their own. */
+const GHOST_ID_OFFSET = 100_000;
 
 export interface SpriteFrame {
   camera: THREE.PerspectiveCamera;
@@ -113,6 +120,9 @@ export class PlayerView {
 export class EnemyView {
   private readonly pixels: PixelSprite;
   readonly sprite: THREE.Sprite;
+  /** Arrival ghost of a warping enemy (Punchy), hidden otherwise. */
+  private readonly ghost: PixelSprite;
+  readonly ghostSprite: THREE.Sprite;
   private readonly phase: number;
   private readonly widthShare: number;
 
@@ -120,18 +130,43 @@ export class EnemyView {
     const spriteId = enemyArtId(enemy.kind);
     const artId = spriteId === 'placeholder' ? null : spriteId;
     const art = artId ? spriteArt(artId) : null;
-    this.pixels = new PixelSprite(
-      art ?? enemyPlaceholderBitmap(),
-      'red',
-      artId && art ? { character: artId, instanceId: enemy.id } : undefined,
-    );
+    const make = (instanceId: number) =>
+      new PixelSprite(art ?? enemyPlaceholderBitmap(), 'red', artId && art ? { character: artId, instanceId } : undefined);
+    this.pixels = make(enemy.id);
     this.sprite = this.pixels.sprite;
+    this.ghost = make(enemy.id + GHOST_ID_OFFSET);
+    this.ghostSprite = this.ghost.sprite;
+    this.ghostSprite.visible = false;
     this.widthShare = art ? ENEMY_ART_WIDTH : tuning.battleVisual.SPRITE_CELL_FRAC;
     this.phase = enemy.id * 1.7;
   }
 
+  /**
+   * Red, blinking and half dissolved on the arrival cell; it firms up as the
+   * fuse burns (GDD §8.1.1).
+   */
+  private updateGhost(warp: Telegraph | null, tick: number, alpha: number, frame: SpriteFrame): void {
+    if (!warp) {
+      this.ghostSprite.visible = false;
+      return;
+    }
+    const cell = warp.cells[0]!;
+    const time = (tick + alpha) / tuning.sim.SIM_HZ;
+    cellToWorld(cell.x, cell.y, anchor);
+    anchor.z += FOOT_OFFSET * CELL_DEPTH;
+    this.ghost.setTime(time);
+    this.ghost.place(anchor, CELL_WIDTH * this.widthShare, frame.camera, frame.width, frame.height, 0);
+    this.ghostSprite.renderOrder = rowRenderOrder(cell.y);
+    const progress = fuseProgress(warp, tick + alpha);
+    this.ghost.setDissolve(GHOST_DISSOLVE_START + (GHOST_DISSOLVE_END - GHOST_DISSOLVE_START) * progress);
+    this.ghost.setLook(TINT_RED, 1, GHOST_BRIGHTNESS);
+    const blink = Math.sin(time * Math.PI * 2 * tuning.battleVisual.DANGER_PULSE_HZ) > -0.3;
+    if (!blink) this.ghostSprite.visible = false;
+  }
+
   /** `spawn` runs 0 → 1 while a wave materializes (GDD §10.4); 1 otherwise. */
-  update(enemy: Enemy, tick: number, alpha: number, dt: number, frame: SpriteFrame, spawn = 1): void {
+  update(enemy: Enemy, tick: number, alpha: number, dt: number, frame: SpriteFrame, spawn = 1, warp: Telegraph | null = null): void {
+    this.updateGhost(enemy.alive ? warp : null, tick, alpha, frame);
     const a = slideAnchor(
       enemy.prevX,
       enemy.prevY,
@@ -169,5 +204,6 @@ export class EnemyView {
 
   dispose(): void {
     this.pixels.dispose();
+    this.ghost.dispose();
   }
 }

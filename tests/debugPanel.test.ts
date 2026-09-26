@@ -61,7 +61,7 @@ describe('panel layout', () => {
     const chips = TUNE_LAYOUT.find((f) => f.title === 'Chips');
     const enemies = TUNE_LAYOUT.find((f) => f.title === 'Enemies');
     expect(layoutGroups(chips ? [chips] : []).sort()).toEqual(Object.keys(CHIPS).sort());
-    expect(layoutGroups(enemies ? [enemies] : [])).toEqual(['enemy', 'mettik', 'canodron', 'hopzap', 'bladdy']);
+    expect(layoutGroups(enemies ? [enemies] : [])).toEqual(['enemy', 'mettik', 'canodron', 'hopzap', 'bladdy', 'punchy']);
   });
 });
 

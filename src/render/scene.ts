@@ -128,7 +128,7 @@ export class SceneRenderer {
   /** Drops all per-battle views (called when a new World is created). */
   reset(): void {
     for (const v of this.enemyViews.values()) {
-      this.scene.remove(v.sprite);
+      this.scene.remove(v.sprite, v.ghostSprite);
       v.dispose();
     }
     this.enemyViews.clear();
@@ -139,19 +139,20 @@ export class SceneRenderer {
   private syncEnemies(world: World, alpha: number, dt: number, frame: SpriteFrame): void {
     const live = new Set<number>();
     const spawn = this.spawnProgress(world);
+    const warps = world.state === 'ACTION' ? world.telegraphs().filter((t) => t.kind === 'warp') : [];
     for (const e of world.enemies) {
       live.add(e.id);
       let view = this.enemyViews.get(e.id);
       if (!view) {
         view = new EnemyView(e);
         this.enemyViews.set(e.id, view);
-        this.scene.add(view.sprite);
+        this.scene.add(view.sprite, view.ghostSprite);
       }
-      view.update(e, world.tick, alpha, dt, frame, spawn);
+      view.update(e, world.tick, alpha, dt, frame, spawn, warps.find((t) => t.enemyId === e.id) ?? null);
     }
     for (const [id, view] of this.enemyViews) {
       if (live.has(id)) continue;
-      this.scene.remove(view.sprite);
+      this.scene.remove(view.sprite, view.ghostSprite);
       view.dispose();
       this.enemyViews.delete(id);
     }

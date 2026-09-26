@@ -43,6 +43,7 @@ export const TUNE_LAYOUT: readonly TuneFolder[] = [
       leaf('Canodron', 'canodron'),
       leaf('Hopzap', 'hopzap'),
       leaf('Bladdy', 'bladdy'),
+      leaf('Punchy', 'punchy'),
     ],
   },
   leaf('Field', 'field'),

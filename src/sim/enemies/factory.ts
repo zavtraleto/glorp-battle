@@ -4,6 +4,7 @@ import { Canodron } from './canodron';
 import type { Enemy } from './enemyBase';
 import { Hopzap } from './hopzap';
 import { Mettik } from './mettik';
+import { Punchy } from './punchy';
 
 export function createEnemy(spawn: EnemySpawn, id: number, tick: number): Enemy {
   const level = spawn.level ?? 1;
@@ -17,5 +18,7 @@ export function createEnemy(spawn: EnemySpawn, id: number, tick: number): Enemy 
       return new Hopzap(...args);
     case 'bladdy':
       return new Bladdy(...args);
+    case 'punchy':
+      return new Punchy(...args);
   }
 }

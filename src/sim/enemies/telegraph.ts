@@ -8,8 +8,9 @@ import type { Cell } from '../grid';
  * - `lane`: a corridor down a lane, cells ordered from the source.
  * - `area`: cells hit at once (swords).
  * - `grab`: the cells change owner (AreaGrab); drawn as a field change.
+ * - `warp`: the cell the enemy is about to appear on (Punchy); a ghost of it stands there.
  */
-export type TelegraphKind = 'lane' | 'area' | 'grab';
+export type TelegraphKind = 'lane' | 'area' | 'grab' | 'warp';
 
 export interface Telegraph {
   enemyId: number;

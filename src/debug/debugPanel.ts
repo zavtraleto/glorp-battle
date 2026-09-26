@@ -12,6 +12,9 @@ import { CHIPS, type ChipId } from '../data/chips';
 import { FOLDERS } from '../data/folders';
 import type { DebugCellState } from '../render/cellStates';
 import type { Cheats } from '../sim/world';
+import type { Encounter } from '../data/encounters';
+import type { FolderId } from '../data/folders';
+import { LabView } from './labView';
 import {
   TUNE_LAYOUT,
   changedValues,
@@ -45,6 +48,8 @@ export interface DebugActions {
   /** Tutorial (GDD §10.5): start from lesson 1–4, get past the current beat. */
   tutorial(lesson: number): void;
   skipTutorialBeat(): void;
+  /** Encounter Lab (GDD §15.5): play a drafted encounter from `wave` (1-based). */
+  runLab(encounter: Encounter, folder: FolderId, wave: number): void;
   /** Changes the real panels (roguelite spec §3). */
   simPanel(x: number, y: number, action: 'crack' | 'break' | 'repair' | 'grab' | 'rock'): void;
 }
@@ -128,16 +133,23 @@ export class DebugPanel {
 
     this.state.seed = actions.getSeed();
     this.state.timeScale = tuning.sim.TIME_SCALE;
-    const tab = this.pane.addTab({ pages: [{ title: 'Tune' }, { title: 'Tools' }] });
-    tab.pages[Math.min(1, Math.max(0, this.ui.tab))]!.selected = true;
+    const tab = this.pane.addTab({ pages: [{ title: 'Tune' }, { title: 'Tools' }, { title: 'Lab' }] });
+    tab.pages[Math.min(2, Math.max(0, this.ui.tab))]!.selected = true;
+    // The filter bar only serves the Tune tab.
+    const showBar = (index: number) => (bar.style.display = index === 0 ? '' : 'none');
     tab.on('select', (ev) => {
       this.ui.tab = ev.index;
+      showBar(ev.index);
       this.saveUi();
     });
     for (const f of TUNE_LAYOUT) this.buildTune(tab.pages[0]!, f, []);
     this.buildTools(tab.pages[1]!);
+    // Tab pages expose no element: the Lab's DOM lives inside a separator blade.
+    const labBlade = tab.pages[2]!.addBlade({ view: 'separator' });
+    labBlade.element.replaceChildren(new LabView({ run: (enc, folder, wave) => actions.runLab(enc, folder, wave) }).root);
     // After the blades: Tweakpane inserts its own blades at the start of the content.
     (this.pane.element.querySelector('.tp-rotv_c') ?? this.pane.element).prepend(bar);
+    showBar(Math.min(2, Math.max(0, this.ui.tab)));
     this.refreshVisibility();
   }
 

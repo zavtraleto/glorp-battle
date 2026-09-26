@@ -130,6 +130,8 @@ export const DEFAULT_TUNING = {
   /** Shared by every enemy (GDD §8.1). */
   enemy: {
     COUNTER_STAGGER_TIME: 0.5,
+    /** After a warp the counter window is never shorter than this, at any level (GDD §8.1.1). */
+    WARP_MIN_WINDOW: 0.3,
   },
   // Enemy timings follow MMBN6 as the Hub-OS mods recreate it (GDD §8.2–8.4):
   // frame counts / 60, rounded, then shortened for tempo (2026-09-25). Bunny has
@@ -203,6 +205,24 @@ export const DEFAULT_TUNING = {
     AREA_GRAB_DMG: 1,
     /** AreaGrab never leaves the player fewer rows than this behind the grabbed one. */
     MIN_PLAYER_ROWS: 2,
+  },
+  // Champy (BN6) has no frame data in Hub-OS: timings are [оценка].
+  punchy: {
+    /** Looks at the player's lane this often. */
+    ACTION_DELAY: 0.3,
+    /** Still home; the arrival ghost stands on the target cell. */
+    INTENTION_TIME: 0.4,
+    /** Arrived: the fist is raised. */
+    LOCK_TIME: 0.1,
+    /** Raised to `enemy.WARP_MIN_WINDOW` if shorter. */
+    COUNTER_TIME: 0.3,
+    STRIKE_TIME: 0.1,
+    /** Stands next to the player, open, before warping home. */
+    RECOVERY_TIME: 0.6,
+    /** Home again: no new check for this long. */
+    REST_TIME: 0.8,
+    HP: 6,
+    DMG: 2,
   },
   fx: {
     HIT_FLASH: 0.1,

@@ -70,6 +70,7 @@ export const en = {
   'enemy.canodron': 'Canodron',
   'enemy.hopzap': 'Hopzap',
   'enemy.bladdy': 'Bladdy',
+  'enemy.punchy': 'Punchy',
 } as const;
 
 export type StringKey = keyof typeof en;

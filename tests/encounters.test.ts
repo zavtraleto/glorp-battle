@@ -3,7 +3,7 @@ import { debugEncounter, encounterById, ENCOUNTERS, STAGES, type Encounter } fro
 import { sideOfRow } from '../src/sim/grid';
 import { World } from '../src/sim/world';
 
-const CURRENT_ENEMIES = new Set(['mettik', 'canodron', 'hopzap', 'bladdy']);
+const CURRENT_ENEMIES = new Set(['mettik', 'canodron', 'hopzap', 'bladdy', 'punchy']);
 
 function checkWaves(encounter: Encounter): void {
   expect(encounter.waves.length, encounter.id).toBeGreaterThan(0);

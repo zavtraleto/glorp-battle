@@ -15,7 +15,9 @@ import type { Telegraph, TelegraphKind } from './telegraph';
 // IDLE/MOVE → INTENTION → LOCK → COUNTER → STRIKE → RECOVERY; DEAD is terminal.
 // Hits never interrupt an enemy's action; they only flash.
 
-export type EnemyKind = 'mettik' | 'canodron' | 'hopzap' | 'bladdy';
+export type EnemyKind = 'mettik' | 'canodron' | 'hopzap' | 'bladdy' | 'punchy';
+/** Every kind, in catalogue order (Encounter Lab, tests). */
+export const ENEMY_KINDS: readonly EnemyKind[] = ['mettik', 'canodron', 'hopzap', 'bladdy', 'punchy'];
 export type EnemyState =
   | 'IDLE'
   | 'MOVE'
@@ -143,7 +145,9 @@ export abstract class Enemy {
 
   /** Render interpolation duration matching this level's rounded simulation cadence. */
   moveDurationSeconds(): number {
-    return this.ticks(tuning[this.kind].MOVE_TIME) / tuning.sim.SIM_HZ;
+    const g = tuning[this.kind];
+    // Kinds that only warp (Punchy) have no slide.
+    return 'MOVE_TIME' in g ? this.ticks(g.MOVE_TIME) / tuning.sim.SIM_HZ : 0;
   }
 
   /** Debug "force enemy attack": start the attack sequence as soon as possible. */
@@ -162,7 +166,7 @@ export abstract class Enemy {
     return null;
   }
 
-  private phaseTicks(state: EnemyState): number {
+  protected phaseTicks(state: EnemyState): number {
     const g = tuning[this.kind];
     if (state === 'INTENTION') return this.ticks(g.INTENTION_TIME);
     if (state === 'LOCK') return this.ticks(g.LOCK_TIME);
@@ -270,6 +274,12 @@ export abstract class Enemy {
   /** Instant relocation (Hopzap): no slide animation. */
   protected warpTo(ctx: EnemyContext, nx: number, ny: number): boolean {
     if (!Enemy.canEnter(ctx, nx, ny)) return false;
+    this.relocate(ctx, nx, ny);
+    return true;
+  }
+
+  /** Warp without the territory check; the caller made sure the cell is free. */
+  protected relocate(ctx: EnemyContext, nx: number, ny: number): void {
     const fromX = this.x;
     const fromY = this.y;
     ctx.occupancy.move(this.id, this.x, this.y, nx, ny);
@@ -277,7 +287,6 @@ export abstract class Enemy {
     this.x = this.prevX = nx;
     this.y = this.prevY = ny;
     ctx.emit({ type: 'enemyWarped', id: this.id, fromX, fromY, x: nx, y: ny });
-    return true;
   }
 
   protected tryStep(ctx: EnemyContext, nx: number, ny: number): boolean {

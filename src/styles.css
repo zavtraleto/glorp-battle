@@ -180,3 +180,96 @@ body {
     padding: 6px 8px;
   }
 }
+
+/* Encounter Lab tab (src/debug/labView.ts). */
+.debug-panel .lab {
+  padding: 4px;
+  font: 11px var(--mono);
+  color: #bbbcc4;
+}
+.lab-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.lab-label {
+  opacity: 0.7;
+}
+.lab-btn,
+.lab-input {
+  min-height: 24px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 2px;
+  background: rgba(187, 188, 196, 0.12);
+  color: #d8d9df;
+  font: 600 11px var(--mono);
+}
+.lab-btn.on {
+  background: #ffd45e;
+  color: #28292e;
+}
+.lab-btn.go {
+  background: #58e08a;
+  color: #10231a;
+}
+.lab-id {
+  width: 5em;
+}
+.lab-depth {
+  width: 3.5em;
+}
+.lab-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
+  margin: 6px 0;
+}
+.lab-cell {
+  height: 34px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  color: #fff;
+  font: 700 12px var(--mono);
+}
+.lab-cell.enemy {
+  background: #253048;
+}
+.lab-cell.player {
+  background: #1f3a2a;
+}
+/* The border between the territories. */
+.lab-grid .lab-cell.player:nth-child(-n + 12):nth-child(n + 10) {
+  margin-top: 4px;
+}
+.lab-cell.cracked {
+  border-color: #c9a24a;
+  background-image: repeating-linear-gradient(45deg, transparent 0 5px, rgba(201, 162, 74, 0.35) 5px 7px);
+}
+.lab-cell.broken {
+  background: #0b0b0d;
+  border-color: #ff5c5c;
+}
+.lab-cell sup {
+  color: #ffd45e;
+}
+.lab-status {
+  opacity: 0.8;
+}
+.lab-status.bad {
+  color: #ff7a7a;
+  opacity: 1;
+}
+@media (pointer: coarse) {
+  .lab-btn,
+  .lab-input {
+    min-height: 32px;
+    font-size: 13px;
+  }
+  .lab-cell {
+    height: 42px;
+    font-size: 14px;
+  }
+}

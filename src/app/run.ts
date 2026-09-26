@@ -11,7 +11,7 @@ import type { EnemyKind } from '../sim/enemies/enemyBase';
 export const RUN_STEPS = 6;
 
 /** Enemy kinds the seeded final stage draws from. */
-export const PLAY_ENEMIES: readonly EnemyKind[] = ['mettik', 'canodron', 'bladdy', 'hopzap'];
+export const PLAY_ENEMIES: readonly EnemyKind[] = ['mettik', 'canodron', 'bladdy', 'hopzap', 'punchy'];
 
 /** Final-stage waves: how many random kinds each one takes, and where they stand. */
 const FINAL_WAVES = [

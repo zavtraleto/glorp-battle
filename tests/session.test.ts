@@ -153,6 +153,15 @@ describe('Session', () => {
     expect(s.debugEncounter('nope')).toBe(false);
   });
 
+  it('runs a Lab encounter from any wave with the chosen folder', () => {
+    const s = make();
+    const enc = { id: 'lab', tier: 'normal' as const, minDepth: 1, maxDepth: 1, waves: [{ enemies: [{ kind: 'mettik' as const, x: 1, y: 1 }] }, { enemies: [{ kind: 'punchy' as const, x: 1, y: 0 }] }] };
+    s.debugCustom(enc, 'all', 2);
+    expect(s.screen).toBe('BATTLE');
+    expect(s.world.enemies.map((e) => e.kind)).toEqual(['punchy']);
+    expect(s.world.chips.chips).toHaveLength(folderChips('all').length);
+  });
+
   it('PATH shows the debug folder size after a debug jump', () => {
     const s = new Session({ seed: 42, cheats: { god: false, aiEnabled: false }, folder: 'all' });
     s.debugJump(1);

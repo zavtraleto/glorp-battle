@@ -259,11 +259,11 @@ export class Session {
   // ---------- Debug ----------
 
   /** A fresh run that jumps straight into an encounter with the debug folder. */
-  private debugBattle(encounter: Encounter, seed?: number, wave = 1): void {
+  private debugBattle(encounter: Encounter, seed?: number, wave = 1, folder = this.options.folder): void {
     if (seed !== undefined) this.seed = seed >>> 0;
     this.run = this.newRun();
     this.run.encounter = encounter;
-    this.debugFolder = folderChips(this.options.folder);
+    this.debugFolder = folderChips(folder);
     this.startBattle(encounter, wave - 1);
   }
 
@@ -278,6 +278,11 @@ export class Session {
     if (!enc) return false;
     this.debugBattle(enc, seed, wave);
     return true;
+  }
+
+  /** Encounter Lab (GDD §15.5): a drafted encounter from wave `wave` (1-based) with `folder`. */
+  debugCustom(encounter: Encounter, folder: FolderId, wave = 1): void {
+    this.debugBattle(encounter, undefined, Math.max(1, Math.min(encounter.waves.length, Math.floor(wave))), folder);
   }
 
   /** Debug: the tutorial from lesson `lesson` (1-based), from anywhere. */
