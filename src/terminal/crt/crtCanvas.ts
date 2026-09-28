@@ -2,7 +2,14 @@ import * as THREE from 'three';
 import { tuning } from '../../config/tuning';
 import { PALETTE } from '../../render/palette';
 import { blinkPhase } from '../terminalMode';
-import { hudKey, type HpTag, type HudLabel, type HudModel, type HudStatus, type LabelTone } from './hudModel';
+import {
+  hudKey,
+  type HpTag,
+  type HudLabel,
+  type HudModel,
+  type HudStatus,
+  type LabelTone,
+} from './hudModel';
 import { HUD_PX_PER_SCALE, menuLayout, type MenuSpec, type MenuTone } from './menuModel';
 import { drawText, measureText, type PixelSink } from './pixelFont';
 

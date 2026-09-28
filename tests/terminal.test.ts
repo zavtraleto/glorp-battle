@@ -61,8 +61,8 @@ describe('terminal layout', () => {
   it('fills a typical phone viewport edge to edge', () => {
     const l = computeLayout(390, 844); // aspect 0.462, inside [0.42, 0.62]
     expect(l.body).toEqual({ x: 0, y: 0, w: 390, h: 844 });
-    // No top bar: the CRT starts at the top edge.
-    expect(l.crt.y).toBe(0);
+    // The queue display is the top strip; the CRT follows it.
+    expect(l.display.y).toBe(0);
     expect(l.deck.y + l.deck.h).toBeCloseTo(844, 5);
     expect(l.crt.h + l.display.h + l.rail.h + l.deck.h).toBeCloseTo(844, 5);
   });
@@ -117,10 +117,10 @@ describe('terminal layout', () => {
     expect(Object.keys(l.zones).sort()).toEqual(['pause', 'rail', 'trackball']);
   });
 
-  it('puts the segment display between the unchanged CRT and the chip rail', () => {
+  it('puts the segment display above the CRT, and the rail right under the CRT', () => {
     const l = computeLayout(390, 844);
-    expect(l.display.y).toBeCloseTo(l.crt.y + l.crt.h, 5);
-    expect(l.rail.y).toBeCloseTo(l.display.y + l.display.h, 5);
+    expect(l.crt.y).toBeCloseTo(l.display.y + l.display.h, 5);
+    expect(l.rail.y).toBeCloseTo(l.crt.y + l.crt.h, 5);
     expect(l.deck.y).toBeCloseTo(l.rail.y + l.rail.h, 5);
     expect(l.display.h).toBeGreaterThan(0);
     expect(l.display.h).toBeLessThan(l.rail.h * 0.26);

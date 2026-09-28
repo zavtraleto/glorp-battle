@@ -31,11 +31,11 @@ import {
 import { DeckControls } from './parts/deckControls';
 import { ChipRail } from './parts/chipRail';
 import { HitZones } from './parts/hitZones';
-import { Housing } from './parts/housing';
+import { CRT_BEZEL, Housing } from './parts/housing';
 import { DarkLighting } from './parts/lighting';
-import { Pcb, PCB_PULSE_HZ } from './parts/pcb';
+import { Pcb } from './parts/pcb';
 import { SegmentDisplay } from './parts/segmentDisplay';
-import { comboDisplayModel, type ChipDisplayEntry } from './chips/segmentFont';
+import { queueDisplayModel, type ChipDisplayEntry } from './chips/segmentFont';
 import { cooldownForSlot } from './chips/railPlan';
 import { Mount } from './parts/mount';
 import { mountCorners, screenBounds } from './interaction/project';
@@ -77,8 +77,9 @@ const EDGE_HURT = 0xff2020;
 const EDGE = { hit: 0.18, kill: 0.6, hurt: 0.5 };
 /** HP segments sit this many CRT pixels above an enemy's head. */
 const HP_BAR_GAP = 1;
-/** User-tuned size of the framed 14-segment module under the CRT. */
-const CHIP_DISPLAY_SCALE = 0.6;
+/** The display's gap above the CRT frame in render pixels, and its rim share. */
+const CHIP_DISPLAY_GAP_PX = 3;
+const CHIP_DISPLAY_RIM = 0.06;
 /** "Wave 1" stays up this long after the battle intro, seconds. */
 const WAVE1_BANNER_HOLD = 0.5;
 
@@ -165,14 +166,15 @@ export class Terminal {
     this.battle = new BattleTarget(renderer);
     this.crt.setHud(this.hud.texture);
 
-    this.crtMount.inner.add(this.housing.crtGroup);
+    // The queue display rides on the CRT, right above its frame (decision 2026-09-28).
+    this.crtMount.inner.add(this.housing.crtGroup, this.chipDisplay.group);
     this.controlMount.inner.add(
       this.pcb.group,
       this.rail.group,
       this.trackball.group,
       this.deck.group,
     );
-    this.scene.add(this.lighting.group, this.housing.group, this.chipDisplay.group, this.crtMount, this.controlMount, this.hitZones.group);
+    this.scene.add(this.lighting.group, this.housing.group, this.crtMount, this.controlMount, this.hitZones.group);
 
     this.layout = computeLayout(container.clientWidth, container.clientHeight);
     // A shot runs through the PCB and flares the ring.
@@ -180,7 +182,6 @@ export class Terminal {
       this.pcb.fire(slot);
       this.trackball.flashTap();
     };
-    this.trackball.breatheHz = PCB_PULSE_HZ;
     this.router = new PointerRouter((x, y) => this.zoneAt(x, y), {
       press: (z) => this.press(z, true),
       release: (z) => this.release(z),
@@ -262,7 +263,7 @@ export class Terminal {
     const texel = k / scale; // world size of one render pixel
     this.housing.build(this.layout, texel, this.crtPx.w / this.crtPx.h);
     this.rail.build(this.layout, texel);
-    this.placeChipDisplay();
+    this.placeChipDisplay(texel);
     this.hitZones.build(this.layout);
     this.deck.build(this.layout);
     const tb = rectToWorld(this.layout, this.layout.zones.trackball);
@@ -399,6 +400,7 @@ export class Terminal {
 
     const screen = this.battle.render(sceneRenderer, world, alpha, dt);
     this.crt.setScreen(screen, this.battle.width, this.battle.height);
+    this.crt.setSlowMo(this.slowMoLeft(world));
     this.crt.update(dt);
     const callout = this.opts.session.tutorialCallout();
     this.syncRail(world, callout);
@@ -613,15 +615,15 @@ export class Terminal {
       name: chipBrief(def.id),
       power: def.power,
     });
-    const queued = !inBattle || this.mode() === 'MENU' ? null : chips.attackChips()[0] ?? null;
-    const shown = world.activeChip?.def ?? (queued ? CHIPS[queued.defId] : null);
-    const fallback = inBattle ? t('hud.selectChip') : '';
-    this.chipDisplay.set(comboDisplayModel(
-      shown ? toEntry(shown) : null,
-      fallback,
-      inBattle && world.comboDisplayActive,
-      inBattle ? world.selectTimeLeft : null,
-    ));
+    // The queue as text: the active chip first, then the queued ones, then the
+    // empty slots while it is being built (GDD §7.2, decision 2026-09-28).
+    const showQueue = inBattle && this.mode() !== 'MENU';
+    const entries: ChipDisplayEntry[] = [];
+    if (showQueue && world.activeChip) entries.push(toEntry(world.activeChip.def));
+    if (showQueue) for (const c of chips.attackChips()) entries.push(toEntry(CHIPS[c.defId]));
+    const slots = showQueue && chips.phase === 'selecting' ? Math.max(0, tuning.hand.QUEUE_CELLS - chips.attack.length) : 0;
+    const pulse = 0.5 + 0.5 * Math.cos(this.time * tuning.terminal.QUEUE_PULSE_HZ * Math.PI * 2);
+    this.chipDisplay.set(queueDisplayModel(entries, slots), pulse);
 
     // The control a tutorial callout points at pulses harder (GDD §10.5).
     const targets = callout?.targets ?? [];
@@ -743,16 +745,26 @@ export class Terminal {
     };
   }
 
+  /** The slow-mo vignette runs only while a queue is being built (GDD §6.7). */
+  private slowMoLeft(world: World): number | null {
+    const building = this.mode() === 'BATTLE' && world.chips.phase === 'selecting' && world.chips.attack.length > 0;
+    return building ? world.selectTimeLeft : null;
+  }
+
   /** The ring burns while a tap on the ball would act (spec §10.2). */
   private trackballArmed(world: World): boolean {
     return trackballArmed(this.mode(), shotAvailability(world));
   }
 
-  /** The segment display is centred in the frontal lower frame of the CRT. */
-  private placeChipDisplay(): void {
-    const row = rectToWorld(this.layout, this.layout.display);
-    const h = Math.min(row.h * 0.92, (row.w * 0.96) / this.chipDisplay.aspect) * CHIP_DISPLAY_SCALE;
-    this.chipDisplay.place(row.cx + (h * this.chipDisplay.aspect) / 2, row.cy + row.h * 0.025, h);
+  /**
+   * The segment display is as wide as the CRT glass and sits a few pixels above
+   * its frame, so the queue reads as part of the screen; the strip above it is margin.
+   */
+  private placeChipDisplay(texel: number): void {
+    const glass = rectToWorld(this.layout, glassRect(this.layout, this.crtPx.w / this.crtPx.h));
+    const h = glass.w / this.chipDisplay.aspect;
+    const bottom = glass.cy + glass.h / 2 + CRT_BEZEL + texel * CHIP_DISPLAY_GAP_PX + h * CHIP_DISPLAY_RIM;
+    this.chipDisplay.place(glass.cx + glass.w / 2, bottom + h / 2, h);
     this.chipDisplay.group.position.z = 0.23;
   }
 

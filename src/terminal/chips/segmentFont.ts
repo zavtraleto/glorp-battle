@@ -1,4 +1,4 @@
-// 14-segment font for the chip display under the rail (TERMINAL.md §3.1). Pure.
+// 14-segment font and text of the queue display above the CRT (TERMINAL.md §3.1). Pure.
 //
 //  ─── a ───
 // │\   │   /│
@@ -55,39 +55,17 @@ const GLYPHS: Record<string, readonly Segment[]> = {
   Z: ['a', 'd', 'j', 'k'],
   '-': ['g1', 'g2'],
   '+': ['g1', 'g2', 'i', 'l'],
+  _: ['d'],
 };
 
-/** Character cells on the wider display in the CRT's lower frame. */
-export const DISPLAY_CHARS = 14;
-/** Extra character cells on each side of the fixed centre label. */
-export const TIMER_BANK_CHARS = 8;
-export const DISPLAY_TOTAL_CHARS = DISPLAY_CHARS + TIMER_BANK_CHARS * 2;
-
-/** Half-cell steps of one side bar. */
-export const TIMER_BANK_HALVES = TIMER_BANK_CHARS * 2;
+/** Character cells of the display over the CRT, as wide as the glass (decision 2026-09-28). */
+export const DISPLAY_CHARS = 34;
 
 export interface SegmentDisplayModel {
-  /** Fixed-width centre label. */
+  /** Exactly DISPLAY_CHARS characters, left-aligned. */
   text: string;
-  /** Lit half-cells of each side bar, counted from the label outward. */
-  barHalves: number;
-}
-
-/** Segments of each half of a cell; the full-width `a` and `d` belong to neither. */
-const HALF: Record<'left' | 'right', readonly Segment[]> = {
-  left: ['f', 'e', 'g1', 'h', 'k'],
-  right: ['b', 'c', 'g2', 'j', 'm'],
-};
-
-/**
- * Lit segments of a side-bar cell: `fromLabel` counts cells outward from the
- * label, and a half-lit cell keeps its half nearest the label.
- */
-export function barCellSegments(side: 'left' | 'right', fromLabel: number, barHalves: number): readonly Segment[] {
-  const lit = barHalves - fromLabel * 2;
-  if (lit >= 2) return SEGMENTS;
-  if (lit === 1) return HALF[side === 'left' ? 'right' : 'left'];
-  return [];
+  /** Cells [from, to) that breathe: the next empty queue slot. */
+  pulse: readonly [number, number] | null;
 }
 
 export function hasGlyph(ch: string): boolean {
@@ -104,32 +82,27 @@ export interface ChipDisplayEntry {
   power?: number | null;
 }
 
-function centre(text: string, width: number): string {
-  const clipped = text.toUpperCase().slice(0, width);
-  const left = Math.floor((width - clipped.length) / 2);
-  return `${' '.repeat(left)}${clipped}`.padEnd(width, ' ');
-}
+/** An empty Attack Queue slot and the mark between entries (decision 2026-09-28). */
+export const QUEUE_SLOT = '____';
+export const QUEUE_SEP = ' + ';
 
-/** The first Attack Queue chip with its damage, centred without a queue count. */
-export function chipDisplayText(queued: readonly ChipDisplayEntry[], noChip: string, width = DISPLAY_CHARS): string {
-  const first = queued[0];
-  if (first === undefined) return centre(noChip, width);
-  const value = first.power ?? null;
-  return centre(value === null ? first.name : `${first.name} ${value}`, width);
+function entryText(e: ChipDisplayEntry): string {
+  const power = e.power ?? null;
+  return (power === null ? e.name : `${e.name} ${power}`).toUpperCase();
 }
 
 /**
- * Fixed centre label plus symmetric side bars: full through Combo State,
- * otherwise the selection slow-mo left (GDD §6.7), shrinking toward the label.
+ * The Attack Queue on the display (GDD §7.2): the active chip first, then the
+ * queued ones as `BRIEF POWER`, then `slots` empty slots, the first of which
+ * breathes. Chip text is clipped before the slots, so the next slot always shows.
  */
-export function comboDisplayModel(
-  entry: ChipDisplayEntry | null,
-  noChip: string,
-  combo: boolean,
-  selectTimeLeft: number | null = null,
-): SegmentDisplayModel {
-  const text = chipDisplayText(entry ? [entry] : [], noChip);
-  if (combo) return { text, barHalves: TIMER_BANK_HALVES };
-  const left = selectTimeLeft === null ? 0 : Math.max(0, Math.min(1, selectTimeLeft));
-  return { text, barHalves: Math.ceil(left * TIMER_BANK_HALVES) };
+export function queueDisplayModel(entries: readonly ChipDisplayEntry[], slots: number, width = DISPLAY_CHARS): SegmentDisplayModel {
+  const chips = entries.map(entryText).join(QUEUE_SEP);
+  if (slots <= 0) return { text: chips.slice(0, width).padEnd(width, ' '), pulse: null };
+  const sep = chips ? QUEUE_SEP : '';
+  const head = chips.slice(0, Math.max(0, width - QUEUE_SLOT.length - sep.length));
+  const prefix = head + sep;
+  const tail = Array.from({ length: slots }, () => QUEUE_SLOT).join(QUEUE_SEP);
+  const text = (prefix + tail).slice(0, width).padEnd(width, ' ');
+  return { text, pulse: [prefix.length, Math.min(width, prefix.length + QUEUE_SLOT.length)] };
 }

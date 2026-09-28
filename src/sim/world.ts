@@ -206,7 +206,7 @@ export class World implements EnemyContext, AttackContext {
     return this.worldTickAccumulator + Math.max(0, Math.min(1, actionAlpha)) * this.worldTimeScale;
   }
 
-  /** The side display banks are a binary Combo State indicator. */
+  /** Combo State is running (GDD §6.6). */
   get comboDisplayActive(): boolean {
     return this.combo !== null;
   }

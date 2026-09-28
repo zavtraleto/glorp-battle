@@ -28,6 +28,8 @@ uniform float uAberr;
 uniform float uShake;
 uniform float uTime;
 uniform vec3 uEdge;
+uniform float uSlowMo;
+uniform float uSlowMoW;
 varying vec2 vUv;
 
 vec2 curve(vec2 uv) {
@@ -99,6 +101,9 @@ void main() {
     float d = min(toEdge.x, toEdge.y);
     float rim = 1.0 - smoothstep(0.0, 0.07, d);
     c += uEdge * rim * rim;
+    // Selection slow-mo: a soft white vignette that narrows as the budget runs out (GDD §6.7).
+    float calm = 1.0 - smoothstep(0.0, max(uSlowMoW, 1e-4), d);
+    c += vec3(uSlowMo * calm * calm);
     // Mostly multiplicative: a flat add would lift the black field to grey and
     // wash out the whole picture on every chip use.
     c = c * (1.15 + uFlash * 0.55) + uFlash * 0.06;
@@ -113,6 +118,9 @@ export class CrtMaterial extends THREE.ShaderMaterial {
   private edgeLeft = 0;
   private readonly edgeColor = new THREE.Color(0, 0, 0);
   private time = 0;
+  private slowMoTarget = 0;
+  /** Eased toward the target so the vignette fades in and out instead of popping. */
+  private slowMo = 0;
 
   constructor() {
     super({
@@ -134,6 +142,8 @@ export class CrtMaterial extends THREE.ShaderMaterial {
         uShake: { value: 0 },
         uTime: { value: 0 },
         uEdge: { value: new THREE.Vector3() },
+        uSlowMo: { value: 0 },
+        uSlowMoW: { value: 0 },
       },
     });
   }
@@ -166,6 +176,11 @@ export class CrtMaterial extends THREE.ShaderMaterial {
     return this.edgeLeft / EDGE_TIME;
   }
 
+  /** Selection slow-mo left (0..1), or null when it is not running (GDD §6.7). */
+  setSlowMo(left: number | null): void {
+    this.slowMoTarget = left === null ? 0 : Math.max(0, Math.min(1, left));
+  }
+
   /** Starts the picture shake shown when the player is hit. */
   shake(): void {
     this.shakeLeft = SHAKE_TIME;
@@ -191,6 +206,10 @@ export class CrtMaterial extends THREE.ShaderMaterial {
     u.uTime!.value = this.time;
     u.uFlash!.value = t.CRT_FLASH_TIME > 0 ? this.flashLeft / t.CRT_FLASH_TIME : 0;
     u.uShake!.value = t.CRT_SHAKE * (this.shakeLeft / SHAKE_TIME);
+    this.slowMo += (this.slowMoTarget - this.slowMo) * (1 - Math.exp(-dt * SLOW_MO_EASE));
+    const pulse = 0.5 + 0.5 * Math.cos(this.time * t.SLOW_MO_PULSE_HZ * Math.PI * 2);
+    u.uSlowMo!.value = this.slowMo > 0.001 ? t.SLOW_MO_VIGNETTE * (1 - SLOW_MO_PULSE_DEPTH * pulse) : 0;
+    u.uSlowMoW!.value = t.SLOW_MO_VIGNETTE_W * this.slowMo;
   }
 }
 
@@ -198,3 +217,6 @@ export class CrtMaterial extends THREE.ShaderMaterial {
 const SHAKE_TIME = 0.15;
 /** How long an edge flash takes to fade, seconds. */
 const EDGE_TIME = 0.3;
+/** Slow-mo vignette easing, 1/s, and how deep its slow pulse dims it. */
+const SLOW_MO_EASE = 8;
+const SLOW_MO_PULSE_DEPTH = 0.35;

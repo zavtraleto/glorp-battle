@@ -18,7 +18,8 @@ const COLOR = {
 };
 
 /** Thickness of the black frame around the glass, world units. */
-const BEZEL = 0.09;
+/** CRT frame around the glass, world units. */
+export const CRT_BEZEL = 0.09;
 /** Centre depth of the backing panel; its front face must clear the tilted CRT and the top of the control panel. */
 const BODY_Z = -6;
 
@@ -50,14 +51,10 @@ export class Housing {
 
     // CRT frame and glass (the glass keeps the render target's aspect).
     const glass = W(glassRect(layout, crtAspect));
-    this.addBox(glass.cx, glass.cy, 0.05, glass.w + BEZEL * 2, glass.h + BEZEL * 2, 0.3, this.bezelMat, this.crtGroup);
+    this.addBox(glass.cx, glass.cy, 0.05, glass.w + CRT_BEZEL * 2, glass.h + CRT_BEZEL * 2, 0.3, this.bezelMat, this.crtGroup);
     this.glass.scale.set(glass.w, glass.h, 1);
     this.glass.position.set(glass.cx, glass.cy, 0.21);
     this.crtGroup.add(this.glass);
-    // The 14-segment module is part of a frontal extension of the lower CRT
-    // frame, so it faces the player instead of inheriting the control tilt.
-    const display = W(layout.display);
-    this.addBox(display.cx, display.cy, 0.05, glass.w + BEZEL * 2, display.h, 0.3, this.bezelMat);
     void texel;
   }
 

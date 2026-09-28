@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { tuning } from '../config/tuning';
 
 // "Dark Terminal" palette (spec §6.1). The battle scene is drawn with unlit
 // "signal" colours — red channel carries the palette index, green the
@@ -14,10 +15,22 @@ export const PALETTE = {
   purple: 0xb05cff,
 } as const;
 
-export type Role = 'phosphor' | 'red' | 'accent' | 'blue' | 'purple';
+/** Field-only roles (decision 2026-09-28): own palette slots, coloured from `tuning.crtField`. */
+export const FIELD_ROLE_KEYS = {
+  fieldPlayer: 'PLAYER',
+  fieldEnemy: 'ENEMY',
+  fieldDanger: 'DANGER',
+  fieldHit: 'HIT',
+  fieldBorder: 'BORDER',
+  fieldBroken: 'BROKEN',
+  fieldAim: 'AIM',
+} as const;
+export type FieldRole = keyof typeof FIELD_ROLE_KEYS;
+
+export type Role = 'phosphor' | 'red' | 'accent' | 'blue' | 'purple' | FieldRole;
 
 /** Palette index: 0 background, then one per role. */
-export type PaletteIndex = 0 | 1 | 2 | 3 | 4 | 5;
+export type PaletteIndex = number;
 
 export const ROLE_INDEX: Record<Role, PaletteIndex> = {
   phosphor: 1,
@@ -25,17 +38,38 @@ export const ROLE_INDEX: Record<Role, PaletteIndex> = {
   accent: 3,
   blue: 4,
   purple: 5,
+  fieldPlayer: 6,
+  fieldEnemy: 7,
+  fieldDanger: 8,
+  fieldHit: 9,
+  fieldBorder: 10,
+  fieldBroken: 11,
+  fieldAim: 12,
 };
 
-/** Palette colours by index; the pass uploads this as a uniform array. */
-export const PALETTE_COLORS: readonly number[] = [
-  PALETTE.bg,
-  PALETTE.phosphor,
-  PALETTE.red,
-  PALETTE.accent,
-  PALETTE.blue,
-  PALETTE.purple,
-];
+/** Palette entries, background included; the pass uploads them as a uniform array. */
+export const PALETTE_SIZE = 13;
+
+const BASE_COLORS: readonly number[] = [PALETTE.bg, PALETTE.phosphor, PALETTE.red, PALETTE.accent, PALETTE.blue, PALETTE.purple];
+
+function parseHex(value: unknown, fallback: number): number {
+  return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? parseInt(value.slice(1), 16) : fallback;
+}
+
+/**
+ * Palette colours by index, live: the background and the field roles come
+ * from `tuning.crtField`, so they can be tuned in the debug panel.
+ */
+export function paletteColors(out: number[] = []): number[] {
+  const f = tuning.crtField as unknown as Record<string, unknown>;
+  for (let i = 0; i < BASE_COLORS.length; i++) out[i] = BASE_COLORS[i]!;
+  out[0] = parseHex(f.BACKGROUND, PALETTE.bg);
+  for (const [role, key] of Object.entries(FIELD_ROLE_KEYS)) {
+    out[ROLE_INDEX[role as FieldRole]] = parseHex(f[key], PALETTE.phosphor);
+  }
+  out.length = PALETTE_SIZE;
+  return out;
+}
 
 /**
  * Unlit scene colour for a role at a brightness (0..1): index in red,
@@ -57,14 +91,15 @@ export function dimSignal(src: THREE.Color, k: number, out = new THREE.Color()):
 /** Palette index a signal pixel resolves to; 0 (background) when dark or unknown. */
 export function paletteIndex(r: number, g: number): PaletteIndex {
   const index = Math.round(r * 255);
-  if (index <= 0 || index >= PALETTE_COLORS.length || g <= 0) return 0;
-  return index as PaletteIndex;
+  if (index <= 0 || index >= PALETTE_SIZE || g <= 0) return 0;
+  return index;
 }
 
 /** JS mirror of the palette pass for one pixel: the colour, mixed from the background by brightness. */
 export function paletteColor(r: number, g: number, out = new THREE.Color()): THREE.Color {
-  const bg = new THREE.Color(PALETTE_COLORS[0]);
+  const colors = paletteColors();
+  const bg = new THREE.Color(colors[0]);
   const index = paletteIndex(r, 1);
   if (index === 0) return out.copy(bg);
-  return out.copy(bg).lerp(new THREE.Color(PALETTE_COLORS[index]), Math.max(0, Math.min(1, g)));
+  return out.copy(bg).lerp(new THREE.Color(colors[index]), Math.max(0, Math.min(1, g)));
 }

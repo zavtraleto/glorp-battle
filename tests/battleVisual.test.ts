@@ -9,7 +9,8 @@ import {
   paletteIndex,
   signal,
   PALETTE,
-  PALETTE_COLORS,
+  PALETTE_SIZE,
+  paletteColors,
   ROLE_INDEX,
   type Role,
 } from '../src/render/palette';
@@ -29,14 +30,32 @@ describe('palette', () => {
     for (const [role, index] of Object.entries(ROLE_INDEX)) {
       const c = signal(role as Role, 1);
       expect(paletteIndex(c.r, c.g)).toBe(index);
-      expect(paletteColor(c.r, c.g).getHex()).toBe(new THREE.Color(PALETTE_COLORS[index]).getHex());
+      expect(paletteColor(c.r, c.g).getHex()).toBe(new THREE.Color(paletteColors()[index]).getHex());
     }
   });
 
-  it('has six palette entries, background first', () => {
-    expect(PALETTE_COLORS).toHaveLength(6);
-    expect(PALETTE_COLORS[0]).toBe(PALETTE.bg);
-    expect(new Set(Object.values(ROLE_INDEX)).size).toBe(5);
+  it('gives every role its own palette entry after the background', () => {
+    expect(paletteColors()).toHaveLength(PALETTE_SIZE);
+    expect(paletteColors()[0]).toBe(PALETTE.bg);
+    const indices = Object.values(ROLE_INDEX);
+    expect(new Set(indices).size).toBe(PALETTE_SIZE - 1);
+    expect(Math.min(...indices)).toBe(1);
+    expect(Math.max(...indices)).toBe(PALETTE_SIZE - 1);
+  });
+
+  // Field colours are tunable without touching sprites (decision 2026-09-28).
+  it('takes the background and field colours from tuning', () => {
+    const saved = JSON.parse(JSON.stringify(tuning.crtField));
+    tuning.crtField.ENEMY = '#123456';
+    tuning.crtField.BACKGROUND = '#010203';
+    try {
+      const colors = paletteColors();
+      expect(colors[ROLE_INDEX.fieldEnemy]).toBe(0x123456);
+      expect(colors[0]).toBe(0x010203);
+      expect(colors[ROLE_INDEX.blue]).toBe(PALETTE.blue);
+    } finally {
+      Object.assign(tuning.crtField, saved);
+    }
   });
 
   it('reads zero brightness as background whatever the index', () => {

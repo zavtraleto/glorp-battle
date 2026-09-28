@@ -52,7 +52,7 @@ export class SceneRenderer {
 
   private fitCamera(w: number, h: number): void {
     const v = tuning.battleVisual;
-    const key = `${v.VIEW_PITCH}|${v.VIEW_FOV}|${v.VIEW_FILL}|${v.VIEW_OFFSET_X}|${v.VIEW_OFFSET_Y}|${v.HUD_BAND}|${w}|${h}`;
+    const key = `${v.VIEW_PITCH}|${v.VIEW_FOV}|${v.VIEW_FILL}|${v.VIEW_OFFSET_X}|${v.VIEW_OFFSET_Y}|${w}|${h}`;
     if (key === this.lastCameraKey) return;
     this.lastCameraKey = key;
     fitView(this.camera, this.corners, {
@@ -61,8 +61,7 @@ export class SceneRenderer {
       aspect: w / h,
       fill: v.VIEW_FILL,
       offsetX: v.VIEW_OFFSET_X,
-      // The status band owns the top of the picture, so the field sits below it.
-      offsetY: -v.HUD_BAND + v.VIEW_OFFSET_Y,
+      offsetY: v.VIEW_OFFSET_Y,
     });
   }
 

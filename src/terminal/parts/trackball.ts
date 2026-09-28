@@ -28,10 +28,8 @@ const SPIN_FROM_DRAG = 60;
 const GRAB_TRAVEL = 0.04;
 /** Ring polygon count: low-poly, but reads as a circle. */
 const RING_SIDES = 40;
-/** Ring colour follows the armed state at this rate, 1/s. */
-const ARM_RATE = 18;
-/** While armed the ring breathes: brightness range and rate (synced with the PCB pulses). */
-export const ARM_BREATHE = 0.35;
+/** Ring colour follows the armed state at this rate, 1/s: a soft fade, not a switch. */
+const ARM_RATE = 6;
 /** Tutorial callout target: the breathing amplitude is multiplied by this (GDD §10.5). */
 export const HINT_PULSE_GAIN = 2.2;
 /** A tap that fires flares the ring toward white for this long, seconds. */
@@ -53,6 +51,8 @@ const RING_Z = 0.02;
 /** Triangle size and its gap from the ring, shares of the ring's outer radius. */
 const ARROW_SIZE = 0.16;
 const ARROW_GAP = 0.06;
+/** The halo lies between the plate and the ring. */
+const HALO_Z = 0.012;
 const AXIS_X = new THREE.Vector3(1, 0, 0);
 const AXIS_Y = new THREE.Vector3(0, 1, 0);
 const turn = new THREE.Quaternion();
@@ -64,8 +64,13 @@ const turn = new THREE.Quaternion();
  * (`armed` 0) — the level is never lower than what plain arming would give
  * (GDD §10.5).
  */
-export function ringPulseLevel(armed: number, beat: number, hintPulse: boolean): number {
-  const breathe = ARM_BREATHE * (hintPulse ? HINT_PULSE_GAIN : 1);
+export function ringPulseLevel(
+  armed: number,
+  beat: number,
+  hintPulse: boolean,
+  depth = tuning.terminal.RING_BREATHE,
+): number {
+  const breathe = Math.min(1, depth * (hintPulse ? HINT_PULSE_GAIN : 1));
   const armedLevel = armed * (1 - breathe + breathe * beat);
   if (!hintPulse) return armedLevel;
   const hintFloor = 1 - breathe + breathe * beat;
@@ -84,6 +89,20 @@ export class Trackball {
   private readonly plateMat = new THREE.MeshLambertMaterial({ color: 0x15161a, flatShading: true });
   private readonly ringMat = new THREE.MeshBasicMaterial({ color: COLOR.idle.clone() });
   private ring: THREE.Mesh | null = null;
+  /**
+   * Fake light of the ring (decision 2026-09-28): a rim on the ball's edge and
+   * an additive halo on the panel, both following the ring's colour. Cheaper
+   * than extra lamps, which would weigh on every lit material.
+   */
+  private readonly rimColor = { value: new THREE.Color(0, 0, 0) };
+  private readonly haloMat = new THREE.MeshBasicMaterial({
+    vertexColors: true,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  private readonly halo = new THREE.Mesh(new THREE.BufferGeometry(), this.haloMat);
+  private haloReach = 0;
   private readonly arrowGeo: THREE.BufferGeometry;
   private readonly arrows = new Map<Dir, { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; left: number }>();
   private readonly spin = new THREE.Vector2();
@@ -91,16 +110,23 @@ export class Trackball {
   private tapLeft = 0;
   private time = 0;
   private hintPulse = false;
-  /** Breathing rate while armed, Hz (the PCB pulses arrive on the beat). */
-  breatheHz = 1.4;
   /** Ring centre and radii in the control panel's plan space. */
   readonly ring3 = { x: 0, y: 0, inner: 0, outer: 0 };
 
   constructor() {
-    this.ball = new THREE.Mesh(
-      new THREE.SphereGeometry(1, 12, 8),
-      new THREE.MeshPhongMaterial({ color: 0x4a4c50, specular: 0x3c3c3c, shininess: 22, flatShading: true }),
-    );
+    const ballMat = new THREE.MeshPhongMaterial({ color: 0x4a4c50, specular: 0x3c3c3c, shininess: 22, flatShading: true });
+    ballMat.onBeforeCompile = (shader) => {
+      shader.uniforms.uRimColor = this.rimColor;
+      shader.fragmentShader = shader.fragmentShader
+        .replace('void main() {', 'uniform vec3 uRimColor;\nvoid main() {')
+        .replace(
+          '#include <opaque_fragment>',
+          // Edge-on faces sit next to the ring and catch its light.
+          'float rim = 1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0);\n' +
+            'outgoingLight += uRimColor * rim * rim;\n#include <opaque_fragment>',
+        );
+    };
+    this.ball = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), ballMat);
     this.socket = new THREE.Mesh(
       // The lip of the hole the ball sits in; the yellow ring lies on the panel outside it.
       new THREE.TorusGeometry(HOLE_R, 0.06, 6, 24),
@@ -119,7 +145,7 @@ export class Trackball {
       this.arrows.set(dir, { mesh, mat, left: 0 });
       this.group.add(mesh);
     }
-    this.group.add(this.plate, this.cavity, this.socket, this.key.object);
+    this.group.add(this.plate, this.halo, this.cavity, this.socket, this.key.object);
   }
 
   /** `unit` is the terminal body width in world units; sizes are shares of it. */
@@ -144,6 +170,8 @@ export class Trackball {
     this.ring = new THREE.Mesh(new THREE.RingGeometry(inner, outer, RING_SIDES), this.ringMat);
     this.ring.position.set(cx, cy, RING_Z);
     this.group.add(this.ring);
+    this.halo.position.set(cx, cy, HALO_Z);
+    this.haloReach = 0;
     // The plate: a disc of panel with the hole cut out, under the ring and the PCB.
     this.plate.geometry.dispose();
     this.plate.geometry = new THREE.RingGeometry(radius * HOLE_R, outer * PLATE_REACH, RING_SIDES);
@@ -197,6 +225,31 @@ export class Trackball {
     else this.roll(0, dir === 'down' ? nudge : -nudge);
   }
 
+  /** The ring's fake light: halo on the panel, rim and a faint glow on the ball. */
+  private updateGlow(): void {
+    const t = tuning.terminal;
+    const reach = Math.max(1, t.RING_HALO_REACH);
+    if (reach !== this.haloReach) this.buildHalo(reach);
+    this.haloMat.color.copy(this.ringMat.color).multiplyScalar(t.RING_HALO);
+    this.rimColor.value.copy(this.ringMat.color).multiplyScalar(t.BALL_RIM);
+    const ballMat = this.ball.material as THREE.MeshPhongMaterial;
+    ballMat.emissive.copy(COLOR.armed).multiplyScalar(t.BALL_GLOW);
+  }
+
+  /** A band from the ring outward, bright at the ring and fading to nothing. */
+  private buildHalo(reach: number): void {
+    this.haloReach = reach;
+    const { outer } = this.ring3;
+    const geo = new THREE.RingGeometry(outer, outer * reach, RING_SIDES, 1);
+    const count = geo.attributes.position!.count;
+    const colors = new Float32Array(count * 3);
+    // RingGeometry lists the inner circle's vertices first.
+    for (let i = 0; i <= RING_SIDES; i++) colors.set([1, 1, 1], i * 3);
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    this.halo.geometry.dispose();
+    this.halo.geometry = geo;
+  }
+
   /** `armed`: a tap on the ball would act right now (spec §10.2), so the ring burns. */
   update(dt: number, armed: boolean): void {
     this.key.update(dt);
@@ -210,11 +263,12 @@ export class Trackball {
     this.tapLeft = Math.max(0, this.tapLeft - dt);
     const k = 1 - Math.exp(-dt * ARM_RATE);
     this.armed += ((armed ? 1 : 0) - this.armed) * k;
-    // Armed: breathing between a strong and a full yellow, peaking with each PCB pulse.
-    const beat = 0.5 + 0.5 * Math.cos(this.time * this.breatheHz * Math.PI * 2);
+    // Armed: a slow, shallow breath between a strong and a full yellow.
+    const beat = 0.5 + 0.5 * Math.cos(this.time * tuning.terminal.RING_BREATHE_HZ * Math.PI * 2);
     const level = ringPulseLevel(this.armed, beat, this.hintPulse);
     this.ringMat.color.copy(COLOR.idle).lerp(COLOR.armed, level);
     if (this.tapLeft > 0) this.ringMat.color.lerp(TAP_WHITE, this.tapLeft / TAP_FLASH_TIME);
+    this.updateGlow();
 
     const flash = tuning.terminal.ARROW_FLASH_TIME;
     for (const a of this.arrows.values()) {

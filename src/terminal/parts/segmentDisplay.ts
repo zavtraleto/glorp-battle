@@ -1,19 +1,9 @@
 import * as THREE from 'three';
-import {
-  barCellSegments,
-  DISPLAY_CHARS,
-  DISPLAY_TOTAL_CHARS,
-  glyph,
-  SEGMENTS,
-  TIMER_BANK_CHARS,
-  type Segment,
-  type SegmentDisplayModel,
-} from '../chips/segmentFont';
+import { DISPLAY_CHARS, glyph, SEGMENTS, type Segment, type SegmentDisplayModel } from '../chips/segmentFont';
 
-// Amber 14-segment display under the CRT (TERMINAL.md §3.1): the loaded chip's
-// name in the centre, side bars for Combo State and the selection slow-mo
-// timer. Unlit segments stay faintly visible, like a real vacuum fluorescent
-// display.
+// Amber 14-segment display above the CRT (TERMINAL.md §3.1): the Attack Queue
+// as text, the next empty slot breathing (decision 2026-09-28). Unlit segments
+// stay faintly visible, like a real vacuum fluorescent display.
 
 const COLOR = {
   back: '#0d0904',
@@ -21,6 +11,11 @@ const COLOR = {
   unlit: '#2a1a08',
   bezel: 0x0a0a0c,
 };
+
+/** Brightness steps of a breathing cell: it redraws only when it crosses one. */
+const PULSE_STEPS = 12;
+/** Dimmest level of a breathing cell, share of full brightness. */
+const PULSE_FLOOR = 0.2;
 
 /** Canvas pixels per character cell and the stroke of a segment. */
 const CELL_W = 16;
@@ -59,6 +54,13 @@ function segmentLines(): Record<Segment, Line> {
 
 const LINES = segmentLines();
 
+/** `a` → `b` by `k`, as a CSS colour; both are #rrggbb. */
+function mixColor(a: string, b: string, k: number): string {
+  const ch = (c: string, i: number) => parseInt(c.slice(1 + i * 2, 3 + i * 2), 16);
+  const out = [0, 1, 2].map((i) => Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * k));
+  return `rgb(${out.join(',')})`;
+}
+
 export class SegmentDisplay {
   readonly group = new THREE.Group();
   private readonly canvas = document.createElement('canvas');
@@ -69,7 +71,7 @@ export class SegmentDisplay {
   private shown: string | null = null;
 
   constructor() {
-    this.canvas.width = DISPLAY_TOTAL_CHARS * CELL_W + PAD * 2;
+    this.canvas.width = DISPLAY_CHARS * CELL_W + PAD * 2;
     this.canvas.height = CELL_H + PAD * 2;
     const ctx = this.canvas.getContext('2d');
     if (!ctx) throw new Error('2D canvas unavailable');
@@ -85,7 +87,7 @@ export class SegmentDisplay {
       new THREE.MeshLambertMaterial({ color: COLOR.bezel, flatShading: true }),
     );
     this.group.add(this.bezel, this.screen);
-    this.set('');
+    this.set({ text: '', pulse: null });
   }
 
   /** Aspect (w/h) of the glass; the caller sizes the display with it. */
@@ -104,10 +106,10 @@ export class SegmentDisplay {
     this.bezel.position.set(right - w / 2, cy, 0.02);
   }
 
-  /** Shows the fixed label and the side bars; redraws only on change. */
-  set(value: string | SegmentDisplayModel): void {
-    const model: SegmentDisplayModel = typeof value === 'string' ? { text: value, barHalves: 0 } : value;
-    const key = `${model.text}|${model.barHalves}`;
+  /** Shows the text; `pulse` (0..1) is the breathing cells' level. Redraws only on change. */
+  set(model: SegmentDisplayModel, pulse = 1): void {
+    const level = model.pulse ? Math.round(Math.max(0, Math.min(1, pulse)) * PULSE_STEPS) : 0;
+    const key = `${model.text}|${model.pulse?.join(',') ?? ''}|${level}`;
     if (key === this.shown) return;
     this.shown = key;
     const ctx = this.ctx;
@@ -115,21 +117,16 @@ export class SegmentDisplay {
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     ctx.lineWidth = STROKE;
     ctx.lineCap = 'round';
-    for (let i = 0; i < DISPLAY_TOTAL_CHARS; i++) {
-      const right = TIMER_BANK_CHARS + DISPLAY_CHARS;
-      const on = new Set(
-        i < TIMER_BANK_CHARS
-          ? barCellSegments('left', TIMER_BANK_CHARS - 1 - i, model.barHalves)
-          : i >= right
-            ? barCellSegments('right', i - right, model.barHalves)
-            : glyph(model.text[i - TIMER_BANK_CHARS] ?? ' '),
-      );
+    const breathe = mixColor(COLOR.unlit, COLOR.lit, PULSE_FLOOR + (1 - PULSE_FLOOR) * (level / PULSE_STEPS));
+    for (let i = 0; i < DISPLAY_CHARS; i++) {
+      const on = new Set(glyph(model.text[i] ?? ' '));
+      const lit = model.pulse && i >= model.pulse[0] && i < model.pulse[1] ? breathe : COLOR.lit;
       const x0 = PAD + i * CELL_W;
       // A slight italic slant, as on real segment displays.
       const slant = (y: number) => (CELL_H - y) * 0.12;
       for (const seg of SEGMENTS) {
         const [x1, y1, x2, y2] = LINES[seg];
-        ctx.strokeStyle = on.has(seg) ? COLOR.lit : COLOR.unlit;
+        ctx.strokeStyle = on.has(seg) ? lit : COLOR.unlit;
         ctx.beginPath();
         ctx.moveTo(x0 + x1 + slant(y1), PAD + y1);
         ctx.lineTo(x0 + x2 + slant(y2), PAD + y2);

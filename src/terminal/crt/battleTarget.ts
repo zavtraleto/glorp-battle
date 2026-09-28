@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { tuning } from '../../config/tuning';
 import type { SceneRenderer } from '../../render/scene';
 import type { World } from '../../sim/world';
-import { PALETTE_COLORS } from '../../render/palette';
+import { PALETTE_SIZE, paletteColors } from '../../render/palette';
 
 // Battle → CRT render target (TERMINAL.md §9.1). With CRT_GHOSTING > 0 a
 // ping-pong pass keeps a decaying copy of previous frames (phosphor persistence).
@@ -17,7 +17,7 @@ void main() {
 // Index + brightness → palette colour, dimmed toward the background by the
 // brightness (spec §6.1). No dithering [decision 2026-09-19]: a faint line is a
 // dimmer solid line. Mirrors paletteColor() in render/palette.ts (tested).
-const PALETTE_COUNT = PALETTE_COLORS.length;
+const PALETTE_COUNT = PALETTE_SIZE;
 const PALETTE_FRAG = /* glsl */ `
 uniform sampler2D uScene;
 uniform vec3 uColors[${PALETTE_COUNT}];
@@ -60,12 +60,14 @@ export class BattleTarget {
     fragmentShader: PALETTE_FRAG,
     uniforms: {
       uScene: { value: null },
-      uColors: { value: PALETTE_COLORS.map((c) => new THREE.Color(c)) },
+      uColors: { value: paletteColors().map((c) => new THREE.Color(c)) },
     },
     depthTest: false,
     depthWrite: false,
   });
   private readonly paletteScene = new THREE.Scene();
+  /** Scratch for the live palette (field colours are tunable). */
+  private readonly colors: number[] = [];
   private ghostA = makeTarget(1, 1, false);
   private ghostB = makeTarget(1, 1, false);
   private readonly composeScene = new THREE.Scene();
@@ -122,6 +124,8 @@ export class BattleTarget {
   render(scene: SceneRenderer, world: World, alpha: number, dt: number): THREE.Texture {
     scene.renderInto(this.battle, world, alpha, dt);
     this.paletteMat.uniforms.uScene!.value = this.battle.texture;
+    const uColors = this.paletteMat.uniforms.uColors!.value as THREE.Color[];
+    paletteColors(this.colors).forEach((c, i) => uColors[i]!.setHex(c));
     this.renderer.setRenderTarget(this.paletted);
     this.renderer.render(this.paletteScene, this.composeCamera);
     this.renderer.setRenderTarget(null);

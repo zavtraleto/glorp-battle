@@ -60,6 +60,8 @@ export const DEFAULT_TUNING = {
     REFILL_COOLDOWN: 4.0,
     /** A completed combo cuts each of its slots' cooldown by this × the combo's size. */
     COMBO_CUT_PER_CHIP: 0.4,
+    /** Empty queue slots the display offers while a charge is built; more chips may still be added (GDD §7.2). */
+    QUEUE_CELLS: 3,
   },
   // Chips (GDD §6): one group per chip id; STARTUP → impact → RECOVERY (GDD §6.5).
   cannon: {
@@ -261,8 +263,6 @@ export const DEFAULT_TUNING = {
     VIEW_OFFSET_Y: 0.01,
     /** Gap between cell outlines (share of a cell). */
     CELL_GAP: 0.08,
-    /** Brightness of idle grid lines. */
-    GRID_DIM: 0.75,
     /** Fill brightness of the player's cell. */
     ACTIVE_FILL: 0.0,
     /** Creature sprite width as a share of a cell; texels are then rounded to whole CRT pixels. */
@@ -284,8 +284,29 @@ export const DEFAULT_TUNING = {
     /** Spawn markers at the battle intro, seconds. */
     SPAWN_TIME: 0.6,
     DAMAGE_SCALE: 4,
-    /** Height of the CRT status band, share of the picture (spec §8). */
-    HUD_BAND: 0.11,
+  },
+  /**
+   * CRT colours of the field (decision 2026-09-28): each has its own palette
+   * slot, so tuning one never repaints sprites or effects.
+   */
+  crtField: {
+    /** Background of the whole battle picture. */
+    BACKGROUND: '#05070a',
+    /** Lines of the player's and the enemy's panels, and their idle brightness. */
+    PLAYER: '#3cffd2',
+    PLAYER_DIM: 0.75,
+    ENEMY: '#4a7cff',
+    ENEMY_DIM: 0.75,
+    /** Enemy telegraphs, danger outlines, enemy hits, armed mines. */
+    DANGER: '#ff2a3a',
+    /** The player's hits and the flash of struck cells. */
+    HIT: '#ffd45e',
+    /** Dashes on the line between the two territories. */
+    BORDER: '#b05cff',
+    /** Broken panels and spawn rings. */
+    BROKEN: '#b05cff',
+    /** The loaded chip's aim brackets and beam. */
+    AIM: '#ffd45e',
   },
   /** Object-space projection effect for hand-drawn PNG actors. */
   hologram: {
@@ -362,6 +383,20 @@ export const DEFAULT_TUNING = {
     LIGHT_CRT: 1.0,
     LIGHT_RING: 1.6,
     LIGHT_CHIP: 0.7,
+    /** Fake ring light (decision 2026-09-28): rim on the ball's edge, the ball's own faint glow, halo on the panel and its reach (share of the ring radius). */
+    BALL_RIM: 0.1,
+    BALL_GLOW: 0,
+    RING_HALO: 0.05,
+    RING_HALO_REACH: 1.1,
+    /** Armed ring breathing: depth (share of brightness) and rate, Hz (decision 2026-09-28: calmer). */
+    RING_BREATHE: 0.12,
+    RING_BREATHE_HZ: 0.7,
+    /** Selection slow-mo (GDD §6.7): white edge vignette, its width at a full budget (share of the picture) and its slow pulse. */
+    SLOW_MO_VIGNETTE: 0.25,
+    SLOW_MO_VIGNETTE_W: 0.12,
+    SLOW_MO_PULSE_HZ: 0.6,
+    /** Breathing of the next empty queue slot on the display, Hz. */
+    QUEUE_PULSE_HZ: 0.6,
     /** Darkening of the terminal frame's edges. */
     VIGNETTE: 0.6,
     /** Button travel when pressed, world units. */

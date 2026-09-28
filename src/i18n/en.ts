@@ -18,7 +18,6 @@ export const en = {
   'btn.title': 'Title',
   'btn.resume': 'Resume',
   'btn.debug': 'DBG',
-  'hud.selectChip': 'SELECT CHIP',
   'tutorial.title': 'TUTORIAL',
   'tutorial.complete.title': 'TUTORIAL CLEAR',
   'tutorial.complete.hint': 'YOU KNOW THE BASICS',

@@ -65,9 +65,10 @@ export function computeLayout(viewportW: number, viewportH: number): TerminalLay
   const sum = t.LAYOUT_CRT + t.LAYOUT_DISPLAY + t.LAYOUT_RAIL + t.LAYOUT_DECK;
   const share = (v: number) => (sum > 0 ? v / sum : 0.25) * body.h;
   const row = (y: number, h: number): Rect => ({ x: body.x, y, w: body.w, h });
-  const crtRow = row(body.y, share(t.LAYOUT_CRT));
-  const display = row(crtRow.y + crtRow.h, share(t.LAYOUT_DISPLAY));
-  const rail = row(display.y + display.h, share(t.LAYOUT_RAIL));
+  // The queue display sits on top, above the CRT (decision 2026-09-28).
+  const display = row(body.y, share(t.LAYOUT_DISPLAY));
+  const crtRow = row(display.y + display.h, share(t.LAYOUT_CRT));
+  const rail = row(crtRow.y + crtRow.h, share(t.LAYOUT_RAIL));
   const deck = row(rail.y + rail.h, body.y + body.h - (rail.y + rail.h));
 
   const margin = body.w * t.CRT_MARGIN_X;

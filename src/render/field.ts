@@ -43,13 +43,17 @@ const AIM_DOT_GAP = 0.3;
 const AIM_DOT_LEN = 0.1;
 
 const col = {
-  phosphor: new THREE.Color(),
+  player: new THREE.Color(),
   dim: new THREE.Color(),
+  enemy: new THREE.Color(),
+  dimEnemy: new THREE.Color(),
+  danger: new THREE.Color(),
+  hit: new THREE.Color(),
+  border: new THREE.Color(),
+  broken: new THREE.Color(),
+  aim: new THREE.Color(),
   red: new THREE.Color(),
   blue: new THREE.Color(),
-  dimBlue: new THREE.Color(),
-  accent: new THREE.Color(),
-  purple: new THREE.Color(),
   tmp: new THREE.Color(),
 };
 
@@ -156,13 +160,18 @@ export class FieldView {
 
   update(world: World, alpha: number, spawns: ReadonlyMap<number, number>, fx: GridSignal = NO_SIGNAL, aim: Aim | null = null): void {
     const v = tuning.battleVisual;
-    signal('phosphor', 1, col.phosphor);
-    signal('phosphor', v.GRID_DIM, col.dim);
+    const f = tuning.crtField;
+    signal('fieldPlayer', 1, col.player);
+    signal('fieldPlayer', f.PLAYER_DIM, col.dim);
+    signal('fieldEnemy', 1, col.enemy);
+    signal('fieldEnemy', f.ENEMY_DIM, col.dimEnemy);
+    signal('fieldDanger', 1, col.danger);
+    signal('fieldHit', 1, col.hit);
+    signal('fieldBorder', 1, col.border);
+    signal('fieldBroken', 1, col.broken);
+    signal('fieldAim', 1, col.aim);
     signal('red', 1, col.red);
     signal('blue', 1, col.blue);
-    signal('blue', v.GRID_DIM, col.dimBlue);
-    signal('accent', 1, col.accent);
-    signal('purple', 1, col.purple);
     const telegraphs = this.telegraphsOf(world);
     const views = this.views(world, spawns, telegraphs);
     const time = world.tick + alpha;
@@ -186,9 +195,9 @@ export class FieldView {
         // Enemy territory is blue; red stays with attacks so an enemy shot
         // never blends into the enemy half of the field (spec §6.2).
         const enemySide = view.owner === 'enemy';
-        const line = fx.red ? col.red : enemySide ? col.blue : col.phosphor;
-        const dim = enemySide ? col.dimBlue : col.dim;
-        const base = flash > 0 ? dimSignal(col.accent, Math.min(1, flash), col.tmp) : line;
+        const line = fx.red ? col.red : enemySide ? col.enemy : col.player;
+        const dim = enemySide ? col.dimEnemy : col.dim;
+        const base = flash > 0 ? dimSignal(col.hit, Math.min(1, flash), col.tmp) : line;
         const s = reveal < 1 ? reveal : 1;
         const cellHw = hw * s;
         const cellHd = hd * s;
@@ -198,10 +207,10 @@ export class FieldView {
             this.corners(c, cellHw, cellHd, dim, 0.08);
             break;
           case 'BROKEN':
-            this.brokenOutline(c, cellHw, cellHd, col.purple, (x * 7 + y * 3 + Math.floor(time / 3)) % 5);
+            this.brokenOutline(c, cellHw, cellHd, col.broken, (x * 7 + y * 3 + Math.floor(time / 3)) % 5);
             break;
           case 'ATTACK': {
-            const tone = view.tone === 'red' ? col.red : col.accent;
+            const tone = view.tone === 'red' ? col.danger : col.hit;
             this.outline(c, cellHw, cellHd, tone);
             const k = 1 - view.age / attackTicks;
             this.fills.flat(c.x, c.z, cellHw, cellHd * 0.22 * (0.5 + k), FILL_Y, tone);
@@ -209,14 +218,14 @@ export class FieldView {
           }
           case 'DANGER':
             // The telegraph pass draws the fill and inner frame over it.
-            this.outline(c, cellHw, cellHd, col.red);
+            this.outline(c, cellHw, cellHd, col.danger);
             break;
           case 'SPAWN': {
             this.outline(c, cellHw, cellHd, base);
             const t = view.age / spawnTicks;
             for (let r = 0; r < SPAWN_RINGS; r++) {
               const k = 1 - ((r / SPAWN_RINGS + t * 2) % 1);
-              this.outline(c, cellHw * k, cellHd * k, col.purple);
+              this.outline(c, cellHw * k, cellHd * k, col.broken);
             }
             break;
           }
@@ -225,9 +234,9 @@ export class FieldView {
             this.box(c, cellHw * 0.55, OBJECT_HEIGHT, cellHd * 0.55, col.blue);
             break;
           case 'ARM':
-            this.outline(c, cellHw, cellHd, col.red);
-            this.lines.line(c.x - cellHw * 0.45, LINE_Y, c.z - cellHd * 0.45, c.x + cellHw * 0.45, LINE_Y, c.z + cellHd * 0.45, col.red);
-            this.lines.line(c.x - cellHw * 0.45, LINE_Y, c.z + cellHd * 0.45, c.x + cellHw * 0.45, LINE_Y, c.z - cellHd * 0.45, col.red);
+            this.outline(c, cellHw, cellHd, col.danger);
+            this.lines.line(c.x - cellHw * 0.45, LINE_Y, c.z - cellHd * 0.45, c.x + cellHw * 0.45, LINE_Y, c.z + cellHd * 0.45, col.danger);
+            this.lines.line(c.x - cellHw * 0.45, LINE_Y, c.z + cellHd * 0.45, c.x + cellHw * 0.45, LINE_Y, c.z - cellHd * 0.45, col.danger);
             break;
           case 'ACTIVE':
             this.outline(c, cellHw, cellHd, base);
@@ -236,7 +245,7 @@ export class FieldView {
             break;
           case 'AFTER': {
             const on = Math.floor(view.age / 2) % 2 === 0;
-            this.outline(c, cellHw, cellHd, on ? (view.tone === 'red' ? col.red : col.accent) : base);
+            this.outline(c, cellHw, cellHd, on ? (view.tone === 'red' ? col.danger : col.hit) : base);
             break;
           }
           case 'NORMAL':
@@ -273,7 +282,7 @@ export class FieldView {
     const frame = new THREE.Color();
     for (const cell of t.cells) {
       const blue = t.kind === 'grab' && !this.playerOn(world, cell);
-      const color = blue ? col.blue : col.red;
+      const color = blue ? col.enemy : col.danger;
       cellToWorld(cell.x, cell.y, c);
       this.fills.flat(c.x, c.z, hw, hd, FILL_Y, dimSignal(color, level, col.tmp));
       if (blue) this.outline(c, hw, hd, color);
@@ -290,7 +299,7 @@ export class FieldView {
     const hw = (CELL_WIDTH * (1 - v.CELL_GAP)) / 2;
     const hd = (CELL_DEPTH * (1 - v.CELL_GAP)) / 2;
     const breathe = 0.5 + 0.5 * Math.sin(seconds * Math.PI * 2 * AIM_PULSE_HZ);
-    const color = dimSignal(col.accent, 0.75 + 0.25 * breathe, col.tmp);
+    const color = dimSignal(col.aim, 0.75 + 0.25 * breathe, col.tmp);
     const c = new THREE.Vector3();
     for (const cell of aim.cells) {
       cellToWorld(cell.x, cell.y, c);
@@ -305,7 +314,7 @@ export class FieldView {
     const len = from - to;
     if (len <= 0) return;
     const offset = (seconds * AIM_MARCH) % AIM_DOT_GAP;
-    const dot = dimSignal(col.accent, 0.6, new THREE.Color());
+    const dot = dimSignal(col.aim, 0.6, new THREE.Color());
     for (let d = offset; d < len; d += AIM_DOT_GAP) {
       const z = from - d;
       this.lines.line(x, LINE_Y, z, x, LINE_Y, Math.max(to, z - AIM_DOT_LEN), dot);
@@ -385,7 +394,7 @@ export class FieldView {
     }
   }
 
-  /** Red dashes where ownership changes between a cell and the one in front of it. */
+  /** Dashes where ownership changes between a cell and the one in front of it. */
   private borders(views: readonly CellView[], fx: GridSignal): void {
     const dashes = DASHES / COLS;
     for (let y = 1; y < ROWS; y++) {
@@ -400,7 +409,7 @@ export class FieldView {
         const step = CELL_WIDTH / dashes;
         for (let i = 0; i < dashes; i++) {
           const x0 = left + i * step + step * 0.2;
-          this.lines.line(x0, LINE_Y, z, x0 + step * 0.6 * reveal, LINE_Y, z, col.purple);
+          this.lines.line(x0, LINE_Y, z, x0 + step * 0.6 * reveal, LINE_Y, z, col.border);
         }
       }
     }

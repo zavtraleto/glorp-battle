@@ -1,24 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { CHIPS, type ChipId } from '../src/data/chips';
-import { chipBrief, chipName, t } from '../src/i18n';
+import { chipBrief, chipName } from '../src/i18n';
 import { trackballArmed } from '../src/terminal/controlRules';
 import {
-  barCellSegments,
-  chipDisplayText,
-  comboDisplayModel,
   DISPLAY_CHARS,
-  DISPLAY_TOTAL_CHARS,
   glyph,
   hasGlyph,
-  SEGMENTS,
-  TIMER_BANK_CHARS,
-  TIMER_BANK_HALVES,
+  queueDisplayModel,
+  QUEUE_SEP,
+  QUEUE_SLOT,
 } from '../src/terminal/chips/segmentFont';
 
-// The amber chip display under the rail and the trackball ring (TERMINAL.md §3.1).
+// The amber queue display above the CRT (TERMINAL.md §3.1, decision 2026-09-28).
 describe('14-segment display', () => {
   it('has a glyph for every character it can be asked to show', () => {
-    const texts = [t('hud.selectChip'), '+0123456789', ...(Object.keys(CHIPS) as ChipId[]).map((id) => chipName(id))];
+    const texts = [QUEUE_SLOT, QUEUE_SEP, '0123456789', ...(Object.keys(CHIPS) as ChipId[]).map((id) => chipName(id))];
     for (const text of texts) {
       for (const ch of text) expect(hasGlyph(ch), `${text}: '${ch}'`).toBe(true);
     }
@@ -26,80 +22,56 @@ describe('14-segment display', () => {
 
   it('draws different characters with different segments', () => {
     const seen = new Map<string, string>();
-    for (const ch of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-+') {
+    for (const ch of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-+_') {
       const key = [...glyph(ch)].sort().join(',');
       expect(seen.get(key), `${ch} looks like ${seen.get(key)}`).toBeUndefined();
       seen.set(key, ch);
     }
   });
 
-  it('shows NO CHIP for an empty queue', () => {
-    expect(chipDisplayText([], t('hud.selectChip'))).toBe(' SELECT CHIP  ');
-  });
-
-  it('centres the first loaded chip with its damage and never shows the queue count', () => {
-    expect(chipDisplayText([{ name: 'Cannon', power: 4 }], 'NO CHIP')).toBe('   CANNON 4   ');
-    expect(chipDisplayText([
-      { name: 'Cannon', power: 4 },
-      { name: 'Sword', power: 8 },
-      { name: 'Sword', power: 8 },
-    ], 'NO CHIP')).toBe('   CANNON 4   ');
-  });
-
-  it('shows only the name of a chip without damage', () => {
-    expect(chipDisplayText([{ name: 'Guard', power: null }], 'NO CHIP')).toBe('    GUARD     ');
-  });
-
-  it('shows every chip as its brief plus power, whole and drawable (GDD §6.5)', () => {
+  it('shows every chip as its brief plus power, drawable (GDD §6.5)', () => {
     for (const id of Object.keys(CHIPS) as ChipId[]) {
       const power = CHIPS[id].power;
       const full = power === null ? chipBrief(id) : `${chipBrief(id)} ${power}`;
-      expect(full.length, id).toBeLessThanOrEqual(DISPLAY_CHARS);
       for (const ch of full) expect(hasGlyph(ch), `${id}: ${ch}`).toBe(true);
     }
-    expect(chipDisplayText([{ name: chipBrief('cannon'), power: CHIPS.cannon.power }], 'NO CHIP').trim())
-      .toBe(`LINE HIT ${CHIPS.cannon.power}`);
+  });
+});
+
+describe('queue display', () => {
+  const cannon = { name: chipBrief('cannon'), power: CHIPS.cannon.power };
+  const sword = { name: chipBrief('sword'), power: CHIPS.sword.power };
+
+  it('offers three empty slots before anything is chosen, the first breathing', () => {
+    const m = queueDisplayModel([], 3);
+    expect(m.text.trimEnd()).toBe('____ + ____ + ____');
+    expect(m.text).toHaveLength(DISPLAY_CHARS);
+    expect(m.pulse).toEqual([0, QUEUE_SLOT.length]);
   });
 
-  it('always fits the wider display', () => {
-    expect(DISPLAY_CHARS).toBe(14);
-    for (const id of Object.keys(CHIPS) as ChipId[]) {
-      const def = CHIPS[id];
-      const text = chipDisplayText([{ name: chipName(id), power: def.power }], 'NO CHIP');
-      expect(text).toHaveLength(DISPLAY_CHARS);
-      expect(text).not.toContain('+');
-    }
+  it('lists the chosen chips left to right, then the remaining slots', () => {
+    const m = queueDisplayModel([cannon], 2);
+    expect(m.text.trimEnd()).toBe(`LINE HIT ${CHIPS.cannon.power} + ____ + ____`);
+    expect(m.text.slice(m.pulse![0], m.pulse![1])).toBe(QUEUE_SLOT);
   });
 
-  it('keeps full side bars while Combo State is active', () => {
-    const entry = { name: 'Sword', power: 6 };
-    const active = comboDisplayModel(entry, 'NO CHIP', true, 0.2);
-
-    expect(active).toEqual({ text: '   SWORD 6    ', barHalves: TIMER_BANK_HALVES });
-    expect(active.text).toHaveLength(DISPLAY_CHARS);
-    expect(DISPLAY_TOTAL_CHARS).toBe(DISPLAY_CHARS + TIMER_BANK_CHARS * 2);
+  it('clips chip text so the next empty slot always shows', () => {
+    const long = { name: 'CRACK 3 AHEAD', power: 9 };
+    const m = queueDisplayModel([long, long], 1);
+    expect(m.text).toHaveLength(DISPLAY_CHARS);
+    expect(m.text.endsWith(QUEUE_SEP + QUEUE_SLOT)).toBe(true);
+    expect(m.text.startsWith('CRACK 3 AHEAD 9 + ')).toBe(true);
+    expect(m.pulse).toEqual([DISPLAY_CHARS - QUEUE_SLOT.length, DISPLAY_CHARS]);
   });
 
-  it('turns the side bars off with no combo and no selection timer', () => {
-    expect(comboDisplayModel({ name: 'Cannon', power: 4 }, 'NO CHIP', false)).toEqual({
-      text: '   CANNON 4   ',
-      barHalves: 0,
-    });
+  it('shows no slots once the charge runs: the active chip leads, nothing breathes', () => {
+    const m = queueDisplayModel([sword, cannon], 0);
+    expect(m.text.trimEnd()).toBe(`FRONT CUT ${CHIPS.sword.power} + LINE HIT ${CHIPS.cannon.power}`);
+    expect(m.pulse).toBeNull();
   });
 
-  it('shows the selection slow-mo left in half-cell steps (GDD §6.7)', () => {
-    const bars = (left: number) => comboDisplayModel(null, 'NO CHIP', false, left).barHalves;
-    expect(bars(1)).toBe(TIMER_BANK_HALVES);
-    expect(bars(0.5)).toBe(TIMER_BANK_HALVES / 2);
-    expect(bars(0.001)).toBe(1);
-    expect(bars(0)).toBe(0);
-  });
-
-  it('shrinks the bars toward the label, splitting the last cell in half', () => {
-    expect(barCellSegments('left', 0, 3)).toBe(SEGMENTS);
-    expect(barCellSegments('left', 1, 3)).toEqual(['b', 'c', 'g2', 'j', 'm']);
-    expect(barCellSegments('right', 1, 3)).toEqual(['f', 'e', 'g1', 'h', 'k']);
-    expect(barCellSegments('right', 2, 3)).toEqual([]);
+  it('blanks the display with nothing to show', () => {
+    expect(queueDisplayModel([], 0)).toEqual({ text: ' '.repeat(DISPLAY_CHARS), pulse: null });
   });
 });
 
