@@ -70,6 +70,9 @@ describe('control rules', () => {
     expect(acceptsPress('TRANSITION', 'trackball')).toBe(false);
     expect(acceptsPress('TRANSITION', 'pause')).toBe(true);
     expect(acceptsPress('MENU', 'trackball')).toBe(true);
+    // In menus the CRT takes taps on items, not swipes.
+    expect(acceptsPress('MENU', 'screen')).toBe(false);
+    expect(acceptsPress('BATTLE', 'screen')).toBe(true);
   });
 
   // There is no EXECUTE key any more: the shot keys animate the ball (spec §11.2).

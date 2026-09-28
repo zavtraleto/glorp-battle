@@ -1,14 +1,15 @@
 import { tuning } from '../../config/tuning';
 import type { Dir } from '../../core/input/commands';
 import { SwipeRecognizer } from '../../core/input/swipe';
-import type { ZoneId } from '../layout';
+import { isSwipeZone, type ZoneId } from '../layout';
 import { attachPointers } from './pointerEvents';
 
 // Pointer Events → terminal controls (spec §10.2). Each pointer captures the
 // zone it went down in until it is lifted; a trackball gesture continues
 // outside its zone. The pause key fires on press, in the same frame. The
 // trackball moves as soon as a swipe crosses the threshold; on release it is
-// known whether a gesture without movement was a tap.
+// known whether a gesture without movement was a tap. A drag over the battle
+// screen steps exactly like the trackball; a tap there does nothing (GDD §12).
 
 export interface RouterHandlers {
   /** A control was pressed (visual reaction, same frame). */
@@ -80,7 +81,7 @@ export class PointerRouter {
     if (!zone || this.handlers.accepts?.(zone) === false) return false;
     let swipe: SwipeRecognizer | null = null;
     let gesture: GestureStats | null = null;
-    if (zone === 'trackball') {
+    if (isSwipeZone(zone)) {
       const now = this.now();
       const i = tuning.input;
       swipe = new SwipeRecognizer(i.SWIPE_MIN_PX, tuning.terminal.TAP_MAX_TIME, {
@@ -97,7 +98,7 @@ export class PointerRouter {
     }
     this.captures.set(id, { zone, downX: x, downY: y, lastX: x, lastY: y, swipe, gesture });
     this.handlers.press(zone);
-    if (zone !== 'trackball') this.handlers.action(zone, x, y);
+    if (!isSwipeZone(zone)) this.handlers.action(zone, x, y);
     return true;
   }
 
@@ -142,7 +143,8 @@ export class PointerRouter {
       c.gesture.active = false;
       c.gesture.duration = this.now() - c.gesture.startedAt;
     }
-    if (c.swipe?.end(this.now()) === 'tap' && allowAction) this.handlers.action(c.zone, c.downX, c.downY);
+    const tap = c.swipe?.end(this.now()) === 'tap';
+    if (tap && allowAction && c.zone === 'trackball') this.handlers.action(c.zone, c.downX, c.downY);
     this.handlers.release(c.zone);
   }
 

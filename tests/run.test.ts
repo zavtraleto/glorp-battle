@@ -13,8 +13,8 @@ describe('Run', () => {
   it('uses the six-stage Play progression, two or three waves each (GDD §10.2)', () => {
     const run = new Run(5);
     expect(RUN_STEPS).toBe(6);
-    // Stage 1 is fixed by the design: Mettik, two Mettiks, Mettik + Canodron.
-    expect(waves(run)).toEqual([['mettik'], ['mettik', 'mettik'], ['mettik', 'canodron']]);
+    // Stage 1 is fixed by the design: Mettik, two Mettiks, two Mettiks + Canodron.
+    expect(waves(run)).toEqual([['mettik'], ['mettik', 'mettik'], ['mettik', 'mettik', 'canodron']]);
     const allowed = new Set<EnemyKind>(PLAY_ENEMIES);
     for (let step = 1; step <= RUN_STEPS; step++) {
       const w = waves(run);

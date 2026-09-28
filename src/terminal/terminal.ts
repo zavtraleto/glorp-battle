@@ -297,16 +297,19 @@ export class Terminal {
   }
 
   /**
-   * Which organ is under a screen point. Every zone lies on the tilted control
-   * panel, so it is projected through the camera (spec §3.1).
+   * Which organ is under a screen point. Zones lie on the tilted control
+   * panel or, for the battle screen, on the tilted CRT, so they are projected
+   * through the camera (spec §3.1).
    */
   private zoneAt(x: number, y: number): ZoneId | null {
     const { w: vw, h: vh } = this.layout.viewport;
     this.camera.updateMatrixWorld();
-    const tilt = THREE.MathUtils.degToRad(tuning.terminal.CONTROL_TILT);
+    const t = tuning.terminal;
     for (const id of ZONE_ORDER) {
       const world = rectToWorld(this.layout, this.layout.zones[id]);
-      mountCorners(world, tilt, this.pivots.control, this.corners);
+      const onCrt = id === 'screen';
+      const tilt = THREE.MathUtils.degToRad(onCrt ? t.CRT_TILT : t.CONTROL_TILT);
+      mountCorners(world, tilt, onCrt ? this.pivots.crt : this.pivots.control, this.corners);
       if (rectContains(screenBounds(this.corners, this.camera, vw, vh), x, y)) return id;
     }
     return null;
@@ -400,7 +403,6 @@ export class Terminal {
 
     const screen = this.battle.render(sceneRenderer, world, alpha, dt);
     this.crt.setScreen(screen, this.battle.width, this.battle.height);
-    this.crt.setSlowMo(this.slowMoLeft(world));
     this.crt.update(dt);
     const callout = this.opts.session.tutorialCallout();
     this.syncRail(world, callout);
@@ -743,12 +745,6 @@ export class Terminal {
       hpLow: world.player.maxHp > 0 && world.player.hp <= world.player.maxHp * HP_LOW_SHARE,
       hpHit: this.hpHitLeft > 0,
     };
-  }
-
-  /** The slow-mo vignette runs only while a queue is being built (GDD §6.7). */
-  private slowMoLeft(world: World): number | null {
-    const building = this.mode() === 'BATTLE' && world.chips.phase === 'selecting' && world.chips.attack.length > 0;
-    return building ? world.selectTimeLeft : null;
   }
 
   /** The ring burns while a tap on the ball would act (spec §10.2). */

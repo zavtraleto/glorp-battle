@@ -391,10 +391,6 @@ export const DEFAULT_TUNING = {
     /** Armed ring breathing: depth (share of brightness) and rate, Hz (decision 2026-09-28: calmer). */
     RING_BREATHE: 0.12,
     RING_BREATHE_HZ: 0.7,
-    /** Selection slow-mo (GDD §6.7): white edge vignette, its width at a full budget (share of the picture) and its slow pulse. */
-    SLOW_MO_VIGNETTE: 0.25,
-    SLOW_MO_VIGNETTE_W: 0.12,
-    SLOW_MO_PULSE_HZ: 0.6,
     /** Breathing of the next empty queue slot on the display, Hz. */
     QUEUE_PULSE_HZ: 0.6,
     /** Darkening of the terminal frame's edges. */

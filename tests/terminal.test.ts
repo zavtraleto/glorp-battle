@@ -112,9 +112,9 @@ describe('terminal layout', () => {
     expect(trackball.h).toBeCloseTo(l.deck.h, 5);
   });
 
-  it('has three organs: pause, the chip rail and the trackball', () => {
+  it('has four zones: pause, the chip rail, the trackball and the battle screen', () => {
     const l = computeLayout(390, 844);
-    expect(Object.keys(l.zones).sort()).toEqual(['pause', 'rail', 'trackball']);
+    expect(Object.keys(l.zones).sort()).toEqual(['pause', 'rail', 'screen', 'trackball']);
   });
 
   it('puts the segment display above the CRT, and the rail right under the CRT', () => {
@@ -161,11 +161,11 @@ describe('terminal layout', () => {
     for (const z of Object.values(l.zones)) expect(Math.min(z.w, z.h)).toBeGreaterThanOrEqual(56);
   });
 
-  it('finds zones by point and ignores the CRT', () => {
+  it('finds zones by point, the CRT included', () => {
     const l = computeLayout(390, 844);
     const tb = l.zones.trackball;
     expect(zoneAt(l, tb.x + tb.w / 2, tb.y + tb.h / 2)).toBe('trackball');
-    expect(zoneAt(l, l.crt.x + l.crt.w / 2, l.crt.y + l.crt.h / 2)).toBeNull();
+    expect(zoneAt(l, l.crt.x + l.crt.w / 2, l.crt.y + l.crt.h / 2)).toBe('screen');
     const p = l.zones.pause;
     expect(zoneAt(l, p.x + 1, p.y + 1)).toBe('pause');
     expect(rectContains(p, p.x + p.w, p.y)).toBe(false); // right edge is exclusive
@@ -231,6 +231,26 @@ describe('PointerRouter', () => {
     clock.now = 0.1;
     router.up(1);
     expect(log).toEqual(['press:trackball', 'action:trackball', 'release:trackball']);
+  });
+
+  // GDD §12: a drag over the battle screen steps exactly like the trackball.
+  it('steps on a swipe over the battle screen', () => {
+    const { router, log, center, clock } = makeRouter();
+    const [x, y] = center('screen');
+    router.down(1, x, y);
+    router.move(1, x, y - 30);
+    clock.now = 0.1;
+    router.up(1);
+    expect(log).toEqual(['press:screen', 'move:up', 'release:screen']);
+  });
+
+  it('never shoots on a tap on the battle screen', () => {
+    const { router, log, center, clock } = makeRouter();
+    const [x, y] = center('screen');
+    router.down(1, x, y);
+    clock.now = 0.1;
+    router.up(1);
+    expect(log).toEqual(['press:screen', 'release:screen']);
   });
 
   it('does not shoot when the gesture produced a step', () => {
@@ -301,8 +321,9 @@ describe('PointerRouter', () => {
 
   it('ignores presses outside any zone', () => {
     const { router, log, layout } = makeRouter();
-    expect(router.down(1, layout.crt.x + 5, layout.crt.y + 100)).toBe(false);
-    router.move(1, layout.crt.x + 100, layout.crt.y + 100);
+    const d = layout.display;
+    expect(router.down(1, d.x + 5, d.y + d.h / 2)).toBe(false);
+    router.move(1, d.x + 100, d.y + d.h / 2);
     router.up(1);
     expect(log).toEqual([]);
   });
@@ -432,19 +453,27 @@ describe('PointerRouter hover and gate', () => {
     });
     const tb = layout.zones.trackball;
     router.hoverAt(tb.x + tb.w / 2, tb.y + tb.h / 2);
-    router.hoverAt(layout.crt.x + 5, layout.crt.y + 100);
+    router.hoverAt(layout.display.x + 5, layout.display.y + layout.display.h / 2);
     expect(seen).toEqual(['trackball', null]);
   });
 });
 
 describe('glassRect', () => {
-  it('centres the CRT glass inside the CRT row with the image aspect', () => {
+  it('centres the CRT glass inside the CRT row, never narrower than the image aspect', () => {
     const l = computeLayout(390, 844);
     const g = glassRect(l, 0.75);
     expect(g.w / g.h).toBeCloseTo(0.75, 5);
     expect(g.x + g.w / 2).toBeCloseTo(l.crt.x + l.crt.w / 2, 5);
     expect(g.y + g.h / 2).toBeCloseTo(l.crt.y + l.crt.h / 2, 5);
     expect(g.w).toBeLessThanOrEqual(l.crt.w);
+  });
+
+  // Decision 2026-09-28: a short viewport widens the picture instead of leaving bars.
+  it('takes the whole CRT width on a short phone viewport', () => {
+    const l = computeLayout(390, 700);
+    const g = glassRect(l, tuning.terminal.CRT_RES_W / tuning.terminal.CRT_RES_H);
+    expect(g.w).toBeCloseTo(l.crt.w, 5);
+    expect(g.h).toBeLessThanOrEqual(l.crt.h);
   });
 });
 

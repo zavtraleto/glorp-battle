@@ -50,19 +50,31 @@ export class SceneRenderer {
     this.scene.add(this.playerView.sprite, this.fx.group);
   }
 
+  /**
+   * The field is framed for the reference CRT aspect; a wider picture only
+   * widens the frame (same vertical FOV), so cells keep their size and the
+   * extra width shows more of the scene around the field (decision 2026-09-28).
+   */
   private fitCamera(w: number, h: number): void {
     const v = tuning.battleVisual;
-    const key = `${v.VIEW_PITCH}|${v.VIEW_FOV}|${v.VIEW_FILL}|${v.VIEW_OFFSET_X}|${v.VIEW_OFFSET_Y}|${w}|${h}`;
+    const t = tuning.terminal;
+    const key = `${v.VIEW_PITCH}|${v.VIEW_FOV}|${v.VIEW_FILL}|${v.VIEW_OFFSET_X}|${v.VIEW_OFFSET_Y}|${w}|${h}|${t.CRT_RES_W}|${t.CRT_RES_H}`;
     if (key === this.lastCameraKey) return;
     this.lastCameraKey = key;
+    const aspect = w / h;
+    const reference = Math.min(aspect, t.CRT_RES_W / t.CRT_RES_H);
     fitView(this.camera, this.corners, {
       pitchDeg: v.VIEW_PITCH,
       fovDeg: v.VIEW_FOV,
-      aspect: w / h,
+      aspect: reference,
       fill: v.VIEW_FILL,
       offsetX: v.VIEW_OFFSET_X,
       offsetY: v.VIEW_OFFSET_Y,
     });
+    if (aspect !== reference) {
+      this.camera.aspect = aspect;
+      this.camera.updateProjectionMatrix();
+    }
   }
 
   /** 0 → 1 while the new wave materializes (GDD §10.4); 1 otherwise. */
@@ -119,6 +131,7 @@ export class SceneRenderer {
   /** Sprite art arrived: rebuild the views so they pick it up. */
   refreshArt(): void {
     this.scene.remove(this.playerView.sprite);
+    this.playerView.dispose();
     this.playerView = new PlayerView();
     this.scene.add(this.playerView.sprite);
     this.reset();

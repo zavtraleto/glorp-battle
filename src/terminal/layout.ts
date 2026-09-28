@@ -11,7 +11,12 @@ export interface Rect {
   h: number;
 }
 
-export type ZoneId = 'pause' | 'rail' | 'trackball';
+export type ZoneId = 'pause' | 'rail' | 'trackball' | 'screen';
+
+/** Zones where a drag steps the player like the trackball (GDD §12). */
+export function isSwipeZone(zone: ZoneId): boolean {
+  return zone === 'trackball' || zone === 'screen';
+}
 
 export interface TerminalLayout {
   viewport: { w: number; h: number };
@@ -43,7 +48,8 @@ const RAIL_ZONE_PAD_DOWN = 0.12;
 export const RAIL_ZONE_SLOTS = 5;
 
 
-export const ZONE_ORDER: readonly ZoneId[] = ['pause', 'rail', 'trackball'];
+/** Hit-test order: the rail reaches into the bottom of the screen row and wins there. */
+export const ZONE_ORDER: readonly ZoneId[] = ['pause', 'rail', 'trackball', 'screen'];
 
 export function computeLayout(viewportW: number, viewportH: number): TerminalLayout {
   const t = tuning.terminal;
@@ -90,6 +96,9 @@ export function computeLayout(viewportW: number, viewportH: number): TerminalLay
     // The trackball is the only other battle organ and owns the whole deck: a
     // gesture steps, a tap shoots (spec §10.2).
     trackball: { ...deck },
+    // The whole CRT row, frame included: a drag over the battle steps like the
+    // trackball; a tap there does nothing (GDD §12, decision 2026-09-28).
+    screen: { ...crtRow },
   };
 
   return {
@@ -131,14 +140,16 @@ export function rectToWorld(layout: TerminalLayout, r: Rect): { cx: number; cy: 
 const GLASS_FILL = 0.97;
 
 /**
- * CRT glass rect in CSS px, `aspect` = w/h of the CRT image. The aspect is
- * always kept: a stretched picture would break the square texel the whole
- * pixel look depends on, so the glass shrinks instead.
+ * CRT glass rect in CSS px. The glass always takes the whole CRT width; its
+ * height is the smaller of the row and what `minAspect` (w/h) allows, so the
+ * picture is never narrower than `minAspect` (decision 2026-09-28: no black
+ * bars beside the screen on short phone viewports). The picture is drawn 1:1
+ * on it, so a wider glass shows more of the scene, never a stretched one.
  */
-export function glassRect(layout: TerminalLayout, aspect: number): Rect {
+export function glassRect(layout: TerminalLayout, minAspect: number): Rect {
   const c = layout.crt;
-  const w = Math.min(c.w, c.h * GLASS_FILL * aspect);
-  const h = w / aspect;
+  const w = c.w;
+  const h = Math.min(c.h * GLASS_FILL, w / minAspect);
   return { x: c.x + (c.w - w) / 2, y: c.y + (c.h - h) / 2, w, h };
 }
 

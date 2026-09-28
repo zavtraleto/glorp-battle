@@ -48,9 +48,9 @@ export const STAGES: readonly Encounter[] = [
   {
     id: 's1', tier: 'normal', minDepth: 1, maxDepth: 1,
     waves: [
-      wave(e('mettik', 1, 1)),
-      wave(e('mettik', 0, 1), e('mettik', 2, 1)),
-      wave(e('mettik', 0, 2), e('canodron', 2, 0)),
+      wave(e('mettik', 0, 1)),
+      wave(e('mettik', 0, 2), e('mettik', 2, 0)),
+      wave(e('mettik', 0, 2), e('mettik', 2, 0), e('canodron', 1, 1)),
     ],
   },
   {

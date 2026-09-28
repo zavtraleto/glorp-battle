@@ -115,6 +115,10 @@ export class PlayerView {
     this.pixels.setDissolve(!player.alive ? 0.6 : 0);
     this.pixels.setRipple(player.guard ? 0.2 : 0, time);
   }
+
+  dispose(): void {
+    this.pixels.dispose();
+  }
 }
 
 export class EnemyView {
