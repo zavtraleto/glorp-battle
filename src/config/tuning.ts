@@ -345,20 +345,18 @@ export const DEFAULT_TUNING = {
     TERMINAL_ASPECT_MIN: 0.42,
     TERMINAL_ASPECT_MAX: 0.62,
     /** Vertical shares of the terminal, top to bottom (spec §3; sum = 1). */
-    LAYOUT_CRT: 0.64,
-    /** Lower CRT frame holding the 14-segment display. */
-    LAYOUT_DISPLAY: 0.037,
+    LAYOUT_CRT: 0.677,
     LAYOUT_RAIL: 0.15,
     LAYOUT_DECK: 0.173,
     /** Horizontal bezel around the CRT glass, as a share of terminal width on each side. */
     CRT_MARGIN_X: 0.015,
-    /** The control panel (rail, draw strip, trackball, pause) is one plane; its top edge leans away from the player, degrees. */
+    /** The control panel (rail, trackball, battle log) is one plane; its top edge leans away from the player, degrees. */
     CONTROL_TILT: 45,
     /** The screen leans back about its lower edge, degrees (spec §3.1). */
     CRT_TILT: 4,
     /** A trackball gesture that never travelled counts as a chip shot within this long (spec §10.2). */
     TAP_MAX_TIME: 0.35,
-    /** Pause key in the bottom-left corner of the control panel: zone side, share of terminal width. */
+    /** Pause icon in the top-left corner of the CRT: tap zone side, share of terminal width (decision 2026-09-28). */
     PAUSE_ZONE_W: 0.16,
     /** Vertical field of view, degrees. */
     CAMERA_FOV: 45,
@@ -391,8 +389,8 @@ export const DEFAULT_TUNING = {
     /** Armed ring breathing: depth (share of brightness) and rate, Hz (decision 2026-09-28: calmer). */
     RING_BREATHE: 0.12,
     RING_BREATHE_HZ: 0.7,
-    /** Breathing of the next empty queue slot on the display, Hz. */
-    QUEUE_PULSE_HZ: 0.6,
+    /** Combo Break: the burned tail flashes red in the charge strip this long, s (GDD §7.2). */
+    STRIP_BURN_TIME: 0.6,
     /** Darkening of the terminal frame's edges. */
     VIGNETTE: 0.6,
     /** Button travel when pressed, world units. */

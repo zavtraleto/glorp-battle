@@ -1,9 +1,11 @@
 import * as THREE from 'three';
-import { DISPLAY_CHARS, glyph, SEGMENTS, type Segment, type SegmentDisplayModel } from '../chips/segmentFont';
+import type { LogRow } from '../chips/battleLog';
+import { glyph, SEGMENTS, type Segment } from '../chips/segmentFont';
 
-// Amber 14-segment display above the CRT (TERMINAL.md §3.1): the Attack Queue
-// as text, the next empty slot breathing (decision 2026-09-28). Unlit segments
-// stay faintly visible, like a real vacuum fluorescent display.
+// Amber 14-segment display on the control panel, left of the trackball
+// (TERMINAL.md §3.1): the battle log, newest line on top, older lines dimmer
+// (decision 2026-09-28). Unlit segments stay faintly visible, like a real
+// vacuum fluorescent display.
 
 const COLOR = {
   back: '#0d0904',
@@ -12,15 +14,11 @@ const COLOR = {
   bezel: 0x0a0a0c,
 };
 
-/** Brightness steps of a breathing cell: it redraws only when it crosses one. */
-const PULSE_STEPS = 12;
-/** Dimmest level of a breathing cell, share of full brightness. */
-const PULSE_FLOOR = 0.2;
-
-/** Canvas pixels per character cell and the stroke of a segment. */
+/** Canvas pixels per character cell, the gap between rows and the stroke of a segment. */
 const CELL_W = 16;
 const CELL_H = 26;
-const PAD = 3;
+const ROW_GAP = 6;
+const PAD = 4;
 const STROKE = 2.4;
 
 type Line = [number, number, number, number];
@@ -70,9 +68,12 @@ export class SegmentDisplay {
   private readonly bezel: THREE.Mesh;
   private shown: string | null = null;
 
-  constructor() {
-    this.canvas.width = DISPLAY_CHARS * CELL_W + PAD * 2;
-    this.canvas.height = CELL_H + PAD * 2;
+  constructor(
+    readonly cols: number,
+    readonly rows: number,
+  ) {
+    this.canvas.width = cols * CELL_W + PAD * 2;
+    this.canvas.height = rows * CELL_H + (rows - 1) * ROW_GAP + PAD * 2;
     const ctx = this.canvas.getContext('2d');
     if (!ctx) throw new Error('2D canvas unavailable');
     this.ctx = ctx;
@@ -87,7 +88,7 @@ export class SegmentDisplay {
       new THREE.MeshLambertMaterial({ color: COLOR.bezel, flatShading: true }),
     );
     this.group.add(this.bezel, this.screen);
-    this.set({ text: '', pulse: null });
+    this.set([]);
   }
 
   /** Aspect (w/h) of the glass; the caller sizes the display with it. */
@@ -95,21 +96,20 @@ export class SegmentDisplay {
     return this.canvas.width / this.canvas.height;
   }
 
-  /** Right edge at `right`, vertically centred on `cy`, `h` tall (world units). */
-  place(right: number, cy: number, h: number): void {
+  /** Centred on (`cx`, `cy`), `h` tall (world units). */
+  place(cx: number, cy: number, h: number): void {
     const w = h * this.aspect;
     this.screen.scale.set(w, h, 1);
     // In front of the bezel's face (z 0.06), or the bezel wins the depth test.
-    this.screen.position.set(right - w / 2, cy, 0.09);
-    const rim = h * 0.06;
+    this.screen.position.set(cx, cy, 0.09);
+    const rim = h * 0.04;
     this.bezel.scale.set(w + rim * 2, h + rim * 2, 0.08);
-    this.bezel.position.set(right - w / 2, cy, 0.02);
+    this.bezel.position.set(cx, cy, 0.02);
   }
 
-  /** Shows the text; `pulse` (0..1) is the breathing cells' level. Redraws only on change. */
-  set(model: SegmentDisplayModel, pulse = 1): void {
-    const level = model.pulse ? Math.round(Math.max(0, Math.min(1, pulse)) * PULSE_STEPS) : 0;
-    const key = `${model.text}|${model.pulse?.join(',') ?? ''}|${level}`;
+  /** Shows `rows` top to bottom, each at its own brightness. Redraws only on change. */
+  set(rows: readonly LogRow[]): void {
+    const key = rows.map((r) => `${r.text}@${r.level}`).join('|');
     if (key === this.shown) return;
     this.shown = key;
     const ctx = this.ctx;
@@ -117,20 +117,23 @@ export class SegmentDisplay {
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     ctx.lineWidth = STROKE;
     ctx.lineCap = 'round';
-    const breathe = mixColor(COLOR.unlit, COLOR.lit, PULSE_FLOOR + (1 - PULSE_FLOOR) * (level / PULSE_STEPS));
-    for (let i = 0; i < DISPLAY_CHARS; i++) {
-      const on = new Set(glyph(model.text[i] ?? ' '));
-      const lit = model.pulse && i >= model.pulse[0] && i < model.pulse[1] ? breathe : COLOR.lit;
-      const x0 = PAD + i * CELL_W;
-      // A slight italic slant, as on real segment displays.
-      const slant = (y: number) => (CELL_H - y) * 0.12;
-      for (const seg of SEGMENTS) {
-        const [x1, y1, x2, y2] = LINES[seg];
-        ctx.strokeStyle = on.has(seg) ? lit : COLOR.unlit;
-        ctx.beginPath();
-        ctx.moveTo(x0 + x1 + slant(y1), PAD + y1);
-        ctx.lineTo(x0 + x2 + slant(y2), PAD + y2);
-        ctx.stroke();
+    // A slight italic slant, as on real segment displays.
+    const slant = (y: number) => (CELL_H - y) * 0.12;
+    for (let row = 0; row < this.rows; row++) {
+      const r = rows[row];
+      const lit = mixColor(COLOR.unlit, COLOR.lit, r?.level ?? 0);
+      const y0 = PAD + row * (CELL_H + ROW_GAP);
+      for (let i = 0; i < this.cols; i++) {
+        const on = new Set(glyph(r?.text[i] ?? ' '));
+        const x0 = PAD + i * CELL_W;
+        for (const seg of SEGMENTS) {
+          const [x1, y1, x2, y2] = LINES[seg];
+          ctx.strokeStyle = on.has(seg) ? lit : COLOR.unlit;
+          ctx.beginPath();
+          ctx.moveTo(x0 + x1 + slant(y1), y0 + y1);
+          ctx.lineTo(x0 + x2 + slant(y2), y0 + y2);
+          ctx.stroke();
+        }
       }
     }
     this.texture.needsUpdate = true;

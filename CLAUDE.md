@@ -6,7 +6,7 @@ Vite + TypeScript (strict) + Three.js. The whole interface is a 3D physical term
 - Spec: `docs/GDD.md` (Russian). It is the contract: read the relevant section before changing gameplay.
 - Interface spec: `docs/TERMINAL.md` (Russian) — the physical terminal NET-01 (stages T1–T3). It wins over the GDD for controls and presentation.
 - Battle look: `docs/BATTLE_VISUAL.md` (Russian). **Before changing how anything looks, read its §10.1–10.2 and TERMINAL.md §9.1–9.2**: the code map (which file owns which part of the look) and the pitfalls we already hit.
-- Current plan: `docs/superpowers/specs/2026-09-25-battle-feel-plan.md` — tasks 1–5 after the 2026-09-25 playtest (tempo, hand, telegraphs, encounter lab, enemies); each task records its status and decisions there.
+- Current plan: `docs/superpowers/specs/2026-09-25-battle-feel-plan.md` — tasks 1–4 after the 2026-09-25 playtest (tempo, hand, telegraphs, encounter lab + Champy); each task records its status and decisions there.
 - Live build: https://zavtraleto.github.io/glorp-battle/ (public repo `zavtraleto/glorp-battle`).
 
 ## Language
@@ -33,7 +33,7 @@ Before every commit: `npm test` and `npm run build` must pass. Pushing to `main`
   - There is no Buster (GDD §4): only chips deal damage. Spent chips reshuffle into the draw pile when it runs dry (GDD §5).
   - The run is linear and the folder never changes during it: no path choice, rewards, legacy or saves between runs (GDD §10).
   - One trackball micro-swipe = exactly one panel. After each accepted step, the current finger position becomes the next gesture anchor; a stationary finger never repeats movement. No hold-to-repeat on gestures (keyboard keeps it).
-  - A `DBG` button (bottom-right) toggles debug tools in every build; the pause key sits bottom-left on the control panel.
+  - A `DBG` button (bottom-right) toggles debug tools in every build; pause is an icon in the top-left corner of the CRT.
   - Working names replace Capcom names: Mettik, Canodron, Hopzap, Bladdy, … (see GDD §0.1).
 - When behavior changes, update the GDD in the same change. Mark new decisions `[решение YYYY-MM-DD]`, estimates `[оценка]`, and keep §17 (tuning table) in sync with `src/config/tuning.ts`.
 

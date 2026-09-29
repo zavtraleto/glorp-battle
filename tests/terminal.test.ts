@@ -24,7 +24,7 @@ beforeEach(() => {
 describe('terminal tuning', () => {
   it('has layout shares that sum to 1', () => {
     const t = tuning.terminal;
-    expect(t.LAYOUT_CRT + t.LAYOUT_DISPLAY + t.LAYOUT_RAIL + t.LAYOUT_DECK).toBeCloseTo(1, 5);
+    expect(t.LAYOUT_CRT + t.LAYOUT_RAIL + t.LAYOUT_DECK).toBeCloseTo(1, 5);
   });
 
   it('keeps the CRT render target portrait', () => {
@@ -61,10 +61,10 @@ describe('terminal layout', () => {
   it('fills a typical phone viewport edge to edge', () => {
     const l = computeLayout(390, 844); // aspect 0.462, inside [0.42, 0.62]
     expect(l.body).toEqual({ x: 0, y: 0, w: 390, h: 844 });
-    // The queue display is the top strip; the CRT follows it.
-    expect(l.display.y).toBe(0);
+    // The CRT is the top row; nothing sits above it since 2026-09-28.
+    expect(l.crt.y).toBe(0);
     expect(l.deck.y + l.deck.h).toBeCloseTo(844, 5);
-    expect(l.crt.h + l.display.h + l.rail.h + l.deck.h).toBeCloseTo(844, 5);
+    expect(l.crt.h + l.rail.h + l.deck.h).toBeCloseTo(844, 5);
   });
 
   it('gives the CRT almost the whole width of a phone', () => {
@@ -73,13 +73,15 @@ describe('terminal layout', () => {
     expect(glassRect(l, aspect).w).toBeGreaterThan(390 * 0.9);
   });
 
-  it('puts the pause key in the bottom-left corner of the deck, clear of the ball', () => {
+  it('puts the pause zone in the top-left corner of the CRT glass (decision 2026-09-28)', () => {
     const l = computeLayout(390, 844);
     const p = l.zones.pause;
-    expect(p.x).toBe(l.body.x);
-    expect(p.y + p.h).toBeCloseTo(l.deck.y + l.deck.h, 5);
-    const ringLeft = l.body.x + l.body.w / 2 - (l.body.w * tuning.terminal.RING_W) / 2;
-    expect(p.x + p.w).toBeLessThan(ringLeft);
+    const g = glassRect(l, tuning.terminal.CRT_RES_W / tuning.terminal.CRT_RES_H);
+    expect(p.x).toBeCloseTo(g.x, 5);
+    expect(p.y).toBeCloseTo(g.y, 5);
+    expect(p.w).toBeGreaterThanOrEqual(56);
+    expect(p.x + p.w).toBeLessThan(g.x + g.w / 2);
+    expect(p.y + p.h).toBeLessThan(g.y + g.h / 2);
   });
 
   it('pillarboxes a wide desktop viewport', () => {
@@ -99,7 +101,7 @@ describe('terminal layout', () => {
   it('normalises layout shares that do not sum to 1', () => {
     tuning.terminal.LAYOUT_DECK = 0.6; // sum > 1
     const l = computeLayout(390, 844);
-    expect(l.crt.h + l.display.h + l.rail.h + l.deck.h).toBeCloseTo(844, 5);
+    expect(l.crt.h + l.rail.h + l.deck.h).toBeCloseTo(844, 5);
   });
 
   // The trackball is the only battle organ, so it owns the whole deck (spec §11.2).
@@ -117,18 +119,17 @@ describe('terminal layout', () => {
     expect(Object.keys(l.zones).sort()).toEqual(['pause', 'rail', 'screen', 'trackball']);
   });
 
-  it('puts the segment display above the CRT, and the rail right under the CRT', () => {
+  it('puts the rail right under the CRT and the deck under the rail', () => {
     const l = computeLayout(390, 844);
-    expect(l.crt.y).toBeCloseTo(l.display.y + l.display.h, 5);
     expect(l.rail.y).toBeCloseTo(l.crt.y + l.crt.h, 5);
     expect(l.deck.y).toBeCloseTo(l.rail.y + l.rail.h, 5);
-    expect(l.display.h).toBeGreaterThan(0);
-    expect(l.display.h).toBeLessThan(l.rail.h * 0.26);
   });
 
-  it('never lets the framed segment display take a tap', () => {
+  it('lets the pause corner win over a swipe on the screen', () => {
     const l = computeLayout(390, 844);
-    expect(zoneAt(l, l.display.x + l.display.w / 2, l.display.y + l.display.h / 2)).toBeNull();
+    const p = l.zones.pause;
+    expect(zoneAt(l, p.x + p.w / 2, p.y + p.h / 2)).toBe('pause');
+    expect(zoneAt(l, p.x + p.w + 2, p.y + p.h + 2)).toBe('screen');
   });
 
   // The rail is tapped mid-dodge, so its zone reaches past the cartridges.
@@ -320,10 +321,9 @@ describe('PointerRouter', () => {
   });
 
   it('ignores presses outside any zone', () => {
-    const { router, log, layout } = makeRouter();
-    const d = layout.display;
-    expect(router.down(1, d.x + 5, d.y + d.h / 2)).toBe(false);
-    router.move(1, d.x + 100, d.y + d.h / 2);
+    const { router, log } = makeRouter();
+    expect(router.down(1, -5, 5)).toBe(false);
+    router.move(1, 100, 5);
     router.up(1);
     expect(log).toEqual([]);
   });
@@ -453,7 +453,7 @@ describe('PointerRouter hover and gate', () => {
     });
     const tb = layout.zones.trackball;
     router.hoverAt(tb.x + tb.w / 2, tb.y + tb.h / 2);
-    router.hoverAt(layout.display.x + 5, layout.display.y + layout.display.h / 2);
+    router.hoverAt(-5, 5);
     expect(seen).toEqual(['trackball', null]);
   });
 });

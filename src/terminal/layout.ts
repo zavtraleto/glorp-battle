@@ -22,8 +22,6 @@ export interface TerminalLayout {
   viewport: { w: number; h: number };
   body: Rect;
   crt: Rect;
-  /** Lower CRT frame occupied by the centred 14-segment display. */
-  display: Rect;
   rail: Rect;
   deck: Rect;
   zones: Record<ZoneId, Rect>;
@@ -68,23 +66,22 @@ export function computeLayout(viewportW: number, viewportH: number): TerminalLay
     body = { x: 0, y: 0, w: vw, h: vh };
   }
 
-  const sum = t.LAYOUT_CRT + t.LAYOUT_DISPLAY + t.LAYOUT_RAIL + t.LAYOUT_DECK;
-  const share = (v: number) => (sum > 0 ? v / sum : 0.25) * body.h;
+  const sum = t.LAYOUT_CRT + t.LAYOUT_RAIL + t.LAYOUT_DECK;
+  const share = (v: number) => (sum > 0 ? v / sum : 1 / 3) * body.h;
   const row = (y: number, h: number): Rect => ({ x: body.x, y, w: body.w, h });
-  // The queue display sits on top, above the CRT (decision 2026-09-28).
-  const display = row(body.y, share(t.LAYOUT_DISPLAY));
-  const crtRow = row(display.y + display.h, share(t.LAYOUT_CRT));
+  const crtRow = row(body.y, share(t.LAYOUT_CRT));
   const rail = row(crtRow.y + crtRow.h, share(t.LAYOUT_RAIL));
   const deck = row(rail.y + rail.h, body.y + body.h - (rail.y + rail.h));
 
   const margin = body.w * t.CRT_MARGIN_X;
   const crt: Rect = { x: body.x + margin, y: crtRow.y, w: body.w - 2 * margin, h: crtRow.h };
 
-  const pauseW = Math.min(Math.max(body.w * t.PAUSE_ZONE_W, MIN_ZONE_PX), deck.h);
+  const glass = glassRect({ crt }, t.CRT_RES_W / t.CRT_RES_H);
+  const pauseW = Math.min(Math.max(body.w * t.PAUSE_ZONE_W, MIN_ZONE_PX), glass.h / 2);
   const zones: Record<ZoneId, Rect> = {
-    // A square in the bottom-left corner of the control panel, clear of the
-    // trackball ring; it is tested before the trackball, so it wins its corner.
-    pause: { x: body.x, y: deck.y + deck.h - pauseW, w: pauseW, h: pauseW },
+    // A square in the top-left corner of the CRT glass, over the HUD pause
+    // icon (decision 2026-09-28); tested before the screen, so it wins its corner.
+    pause: { x: glass.x, y: glass.y, w: pauseW, h: pauseW },
     // The chip rail is tapped while dodging, so its zone is taller than the
     // cartridges and reaches into the gaps around them (spec §11.2).
     rail: {
@@ -105,7 +102,6 @@ export function computeLayout(viewportW: number, viewportH: number): TerminalLay
     viewport: { w: vw, h: vh },
     body,
     crt,
-    display,
     rail,
     deck,
     zones,
@@ -146,7 +142,7 @@ const GLASS_FILL = 0.97;
  * bars beside the screen on short phone viewports). The picture is drawn 1:1
  * on it, so a wider glass shows more of the scene, never a stretched one.
  */
-export function glassRect(layout: TerminalLayout, minAspect: number): Rect {
+export function glassRect(layout: Pick<TerminalLayout, 'crt'>, minAspect: number): Rect {
   const c = layout.crt;
   const w = c.w;
   const h = Math.min(c.h * GLASS_FILL, w / minAspect);

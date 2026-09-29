@@ -28,10 +28,11 @@ export function trackballArmed(mode: TerminalMode, shot: Availability): boolean 
 
 /**
  * Controls react in BATTLE; in MENU the trackball moves the cursor and a tap
- * picks the item; the pause key works whenever it is visible.
+ * picks the item; the pause icon on the CRT works whenever a menu does not cover it.
  */
 export function acceptsPress(mode: TerminalMode, zone: ZoneId): boolean {
-  if (zone === 'pause' || mode === 'BATTLE') return true;
+  if (mode === 'BATTLE') return true;
+  if (zone === 'pause') return mode === 'TRANSITION';
   return mode === 'MENU' && zone === 'trackball';
 }
 

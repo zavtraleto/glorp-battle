@@ -14,6 +14,7 @@ import { CrtMaterial } from './crt/crtMaterial';
 import { PLAYER_ID } from '../sim/player';
 import { FloaterList, floaterFromEvent } from './crt/floaters';
 import { enemyHpVisible, type HpTag, type HudLabel, type HudStatus } from './crt/hudModel';
+import { ChargeTracker, chargeStrip, type StripItem } from './crt/chargeStrip';
 import { menuFor, menuItemAt, menuLayout, moveCursor, type MenuAction, type MenuSpec } from './crt/menuModel';
 import { cursorCss } from './interaction/cursor';
 import { attachPointers } from './interaction/pointerEvents';
@@ -28,14 +29,13 @@ import {
   type TerminalLayout,
   type ZoneId,
 } from './layout';
-import { DeckControls } from './parts/deckControls';
 import { ChipRail } from './parts/chipRail';
 import { HitZones } from './parts/hitZones';
-import { CRT_BEZEL, Housing } from './parts/housing';
+import { Housing } from './parts/housing';
 import { DarkLighting } from './parts/lighting';
 import { Pcb } from './parts/pcb';
 import { SegmentDisplay } from './parts/segmentDisplay';
-import { queueDisplayModel, type ChipDisplayEntry } from './chips/segmentFont';
+import { BattleLog, LOG_COLS, LOG_ROWS, logEvent, logQueued } from './chips/battleLog';
 import { cooldownForSlot } from './chips/railPlan';
 import { Mount } from './parts/mount';
 import { mountCorners, screenBounds } from './interaction/project';
@@ -43,7 +43,7 @@ import { Trackball } from './parts/trackball';
 import { WaveBanner } from './waveBanner';
 import { TutorialCallout, type CalloutPoint } from './tutorialCallout';
 import { terminalMode } from './terminalMode';
-import { chipBrief, t } from '../i18n';
+import { t } from '../i18n';
 import { CHIPS } from '../data/chips';
 
 // NET-01 terminal (TERMINAL.md §13). Owns the terminal scene and camera, draws
@@ -77,9 +77,9 @@ const EDGE_HURT = 0xff2020;
 const EDGE = { hit: 0.18, kill: 0.6, hurt: 0.5 };
 /** HP segments sit this many CRT pixels above an enemy's head. */
 const HP_BAR_GAP = 1;
-/** The display's gap above the CRT frame in render pixels, and its rim share. */
-const CHIP_DISPLAY_GAP_PX = 3;
-const CHIP_DISPLAY_RIM = 0.06;
+/** The battle log keeps this share of the deck height and this gap (share of the body width) to the ring and the edge. */
+const LOG_FILL_H = 0.8;
+const LOG_GAP = 0.03;
 /** "Wave 1" stays up this long after the battle intro, seconds. */
 const WAVE1_BANNER_HOLD = 0.5;
 
@@ -115,10 +115,16 @@ export class Terminal {
   private readonly menuPresses = new Map<number, number>();
   private readonly floaters = new FloaterList();
   private readonly hitZones = new HitZones();
-  private readonly deck = new DeckControls();
   private readonly trackball = new Trackball();
   private readonly lighting = new DarkLighting();
-  private readonly chipDisplay = new SegmentDisplay();
+  /** The battle log on the control panel (decision 2026-09-28). */
+  private readonly logDisplay = new SegmentDisplay(LOG_COLS, LOG_ROWS);
+  private readonly log = new BattleLog(LOG_COLS, LOG_ROWS);
+  /** Chips of the charge the sim no longer holds, for the strip. */
+  private readonly charge = new ChargeTracker();
+  private strip: StripItem[] = [];
+  /** Uids of the chips in the charge being built that the log already wrote. */
+  private queuedSeen = new Set<number>();
   private readonly pcb = new Pcb();
   private readonly waveBanner = new WaveBanner();
   private readonly callout = new TutorialCallout();
@@ -126,7 +132,7 @@ export class Terminal {
   /** Last `chips.folderVersion` the rail showed; a new one swaps the hand without ejecting. */
   private folderVersion = 0;
   private readonly crtMount = new Mount();
-  /** The control panel: rail, trackball and pause key on one tilted plane. */
+  /** The control panel: rail, trackball and battle log on one tilted plane. */
   private readonly controlMount = new Mount();
   /** Pivot line of each tilted mount, world y (spec §3.1). */
   private readonly pivots = { crt: 0, control: 0 };
@@ -166,13 +172,12 @@ export class Terminal {
     this.battle = new BattleTarget(renderer);
     this.crt.setHud(this.hud.texture);
 
-    // The queue display rides on the CRT, right above its frame (decision 2026-09-28).
-    this.crtMount.inner.add(this.housing.crtGroup, this.chipDisplay.group);
+    this.crtMount.inner.add(this.housing.crtGroup);
     this.controlMount.inner.add(
       this.pcb.group,
       this.rail.group,
       this.trackball.group,
-      this.deck.group,
+      this.logDisplay.group,
     );
     this.scene.add(this.lighting.group, this.housing.group, this.crtMount, this.controlMount, this.hitZones.group);
 
@@ -221,7 +226,7 @@ export class Terminal {
     const key = [
       vw, vh, t.RENDER_SCALE_SHORT, t.CAMERA_FOV, t.LAYOUT_CRT, t.LAYOUT_RAIL, t.LAYOUT_DECK,
       t.CRT_MARGIN_X, t.PAUSE_ZONE_W, t.CRT_RES_W, t.CRT_RES_H,
-      t.CONTROL_TILT, t.CRT_TILT, t.BALL_W, t.RING_W, t.LAYOUT_DISPLAY,
+      t.CONTROL_TILT, t.CRT_TILT, t.BALL_W, t.RING_W,
       t.TERMINAL_ASPECT_MIN, t.TERMINAL_ASPECT_MAX, t.BUTTON_PRESS_DEPTH,
     ].join('|');
     if (key === this.layoutKey) return;
@@ -263,15 +268,14 @@ export class Terminal {
     const texel = k / scale; // world size of one render pixel
     this.housing.build(this.layout, texel, this.crtPx.w / this.crtPx.h);
     this.rail.build(this.layout, texel);
-    this.placeChipDisplay(texel);
     this.hitZones.build(this.layout);
-    this.deck.build(this.layout);
     const tb = rectToWorld(this.layout, this.layout.zones.trackball);
     // Sizes are shares of the body width, so the ball and the ring keep their
     // proportions on any screen (spec §10.1).
     // A little above centre: the tilted panel's lower edge comes toward the camera and grows.
     this.trackball.build(tb.cx, tb.cy + tb.h * 0.1, this.layout.worldWidth);
     const r = this.trackball.ring3;
+    this.placeLog(r.x - r.outer, tb.cy, tb.h);
     // The yellow traces run on up and pass under the screen: the panel leans
     // back, so their far end disappears behind the glass and its frame.
     const glassW = rectToWorld(this.layout, glass);
@@ -307,7 +311,7 @@ export class Terminal {
     const t = tuning.terminal;
     for (const id of ZONE_ORDER) {
       const world = rectToWorld(this.layout, this.layout.zones[id]);
-      const onCrt = id === 'screen';
+      const onCrt = id === 'screen' || id === 'pause';
       const tilt = THREE.MathUtils.degToRad(onCrt ? t.CRT_TILT : t.CONTROL_TILT);
       mountCorners(world, tilt, onCrt ? this.pivots.crt : this.pivots.control, this.corners);
       if (rectContains(screenBounds(this.corners, this.camera, vw, vh), x, y)) return id;
@@ -336,6 +340,10 @@ export class Terminal {
   }
 
   onEvent(e: SimEvent, world: World): void {
+    if (e.type === 'chipUsed') this.charge.chipUsed(e.defId);
+    if (e.type === 'chipInterrupted') this.charge.chipInterrupted(e.defId);
+    if (e.type === 'comboBroken') this.charge.comboBroken(tuning.terminal.STRIP_BURN_TIME);
+    logEvent(this.log, e, (id) => world.enemies.find((en) => en.id === id)?.kind ?? null, this.time);
     if (e.type === 'chipUsed') {
       this.crt.flash();
       const shape = CHIPS[e.defId].shape.t;
@@ -380,6 +388,9 @@ export class Terminal {
     this.rail.reset();
     this.folderVersion = this.opts.session.world.chips.folderVersion;
     this.floaters.clear();
+    this.log.clear();
+    this.charge.reset();
+    this.queuedSeen.clear();
     const world = this.opts.session.world;
     if (world.state === 'BATTLE_INTRO') this.showWaveBanner(world, tuning.flow.INTRO_TIME + WAVE1_BANNER_HOLD);
     else this.waveBanner.hide();
@@ -405,16 +416,17 @@ export class Terminal {
     this.crt.setScreen(screen, this.battle.width, this.battle.height);
     this.crt.update(dt);
     const callout = this.opts.session.tutorialCallout();
-    this.syncRail(world, callout);
+    this.syncRail(world, callout, dt);
     this.syncMenu();
     const menu = this.menu ? { spec: this.menu, cursor: this.menuCursor } : null;
     const marks = this.fieldMarks(world, alpha);
     const status = menu ? null : this.battleStatus(world);
-    this.hud.draw({ labels: marks.labels, hp: marks.hp, status, menu }, this.time);
+    const pause = !menu && this.opts.session.screen === 'BATTLE';
+    this.hud.draw({ labels: marks.labels, hp: marks.hp, status, strip: menu ? [] : this.strip, pause, menu }, this.time);
+    this.logDisplay.set(this.log.view());
 
     this.rail.update(dt);
     this.syncIndicators(dt);
-    this.deck.update(dt);
     this.pcb.update(dt, world.chips.hand.map((_, i) => {
       const state = world.chips.slotState(i);
       return this.opts.session.screen === 'BATTLE' && world.state === 'ACTION' && (state === 'queued' || state === 'committed');
@@ -514,7 +526,6 @@ export class Terminal {
   private press(zone: ZoneId, send: boolean): void {
     void send; // A press is only the visual reaction; commands come from act().
     if (zone === 'trackball') this.trackball.press();
-    else if (zone === 'pause') this.deck.key(zone).press(false);
     this.updateCursor();
   }
 
@@ -551,7 +562,6 @@ export class Terminal {
 
   private release(zone: ZoneId): void {
     if (zone === 'trackball') this.trackball.release();
-    else if (zone === 'pause') this.deck.key(zone).release();
     this.updateCursor();
   }
 
@@ -577,7 +587,6 @@ export class Terminal {
 
   private hoverVisual(zone: ZoneId, on: boolean): void {
     if (zone === 'trackball') this.trackball.hover(on);
-    else if (zone === 'pause') this.deck.key(zone).hover(on);
   }
 
   private updateCursor(): void {
@@ -591,7 +600,7 @@ export class Terminal {
   }
 
   /** In battle the rail is the hand: one slot per chip, states from the sim. */
-  private syncRail(world: World, callout: CalloutView | null): void {
+  private syncRail(world: World, callout: CalloutView | null, dt: number): void {
     const chips = world.chips;
     // Chips live only inside a battle: when it is won or lost every cartridge
     // flies out at once, and between battles the rail stays empty (2026-09-19).
@@ -613,19 +622,21 @@ export class Terminal {
         order: inBattle ? chips.queuePosition(i) : 0,
       };
     }));
-    const toEntry = (def: (typeof CHIPS)[keyof typeof CHIPS]): ChipDisplayEntry => ({
-      name: chipBrief(def.id),
-      power: def.power,
+    // The charge as icons under the field (GDD §7.2, decision 2026-09-28).
+    const queued = chips.attackChips();
+    const selecting = chips.phase === 'selecting';
+    const input = this.charge.update(dt, {
+      active: world.activeChip?.def.id ?? null,
+      queued: queued.map((c) => c.defId),
+      selecting,
+      combo: world.combo !== null,
     });
-    // The queue as text: the active chip first, then the queued ones, then the
-    // empty slots while it is being built (GDD §7.2, decision 2026-09-28).
-    const showQueue = inBattle && this.mode() !== 'MENU';
-    const entries: ChipDisplayEntry[] = [];
-    if (showQueue && world.activeChip) entries.push(toEntry(world.activeChip.def));
-    if (showQueue) for (const c of chips.attackChips()) entries.push(toEntry(CHIPS[c.defId]));
-    const slots = showQueue && chips.phase === 'selecting' ? Math.max(0, tuning.hand.QUEUE_CELLS - chips.attack.length) : 0;
-    const pulse = 0.5 + 0.5 * Math.cos(this.time * tuning.terminal.QUEUE_PULSE_HZ * Math.PI * 2);
-    this.chipDisplay.set(queueDisplayModel(entries, slots), pulse);
+    this.strip = inBattle && this.mode() !== 'MENU' ? chargeStrip(input, tuning.hand.QUEUE_CELLS) : [];
+    // Each chip added to the charge being built gets a log line.
+    if (inBattle && selecting) {
+      for (const c of queued) if (!this.queuedSeen.has(c.uid)) logQueued(this.log, c.defId);
+    }
+    this.queuedSeen = new Set(queued.map((c) => c.uid));
 
     // The control a tutorial callout points at pulses harder (GDD §10.5).
     const targets = callout?.targets ?? [];
@@ -753,15 +764,16 @@ export class Terminal {
   }
 
   /**
-   * The segment display is as wide as the CRT glass and sits a few pixels above
-   * its frame, so the queue reads as part of the screen; the strip above it is margin.
+   * The battle log fills the panel between its left edge and the trackball
+   * ring (`right`), centred on the deck (plan coordinates of the control panel).
    */
-  private placeChipDisplay(texel: number): void {
-    const glass = rectToWorld(this.layout, glassRect(this.layout, this.crtPx.w / this.crtPx.h));
-    const h = glass.w / this.chipDisplay.aspect;
-    const bottom = glass.cy + glass.h / 2 + CRT_BEZEL + texel * CHIP_DISPLAY_GAP_PX + h * CHIP_DISPLAY_RIM;
-    this.chipDisplay.place(glass.cx + glass.w / 2, bottom + h / 2, h);
-    this.chipDisplay.group.position.z = 0.23;
+  private placeLog(right: number, cy: number, deckH: number): void {
+    const gap = this.layout.worldWidth * LOG_GAP;
+    const left = -this.layout.worldWidth / 2 + gap;
+    const maxW = Math.max(0, right - gap - left);
+    const h = Math.min(deckH * LOG_FILL_H, maxW / this.logDisplay.aspect);
+    const w = h * this.logDisplay.aspect;
+    this.logDisplay.place(left + (maxW - w) / 2 + w / 2, cy, h);
   }
 
   /** Drives the lights that stand in for the cabinet's old indicators (spec §4). */

@@ -1,4 +1,4 @@
-// 14-segment font and text of the queue display above the CRT (TERMINAL.md §3.1). Pure.
+// 14-segment font of the battle log display left of the trackball (TERMINAL.md §3.1). Pure.
 //
 //  ─── a ───
 // │\   │   /│
@@ -55,18 +55,9 @@ const GLYPHS: Record<string, readonly Segment[]> = {
   Z: ['a', 'd', 'j', 'k'],
   '-': ['g1', 'g2'],
   '+': ['g1', 'g2', 'i', 'l'],
+  '>': ['h', 'm'],
   _: ['d'],
 };
-
-/** Character cells of the display over the CRT, as wide as the glass (decision 2026-09-28). */
-export const DISPLAY_CHARS = 34;
-
-export interface SegmentDisplayModel {
-  /** Exactly DISPLAY_CHARS characters, left-aligned. */
-  text: string;
-  /** Cells [from, to) that breathe: the next empty queue slot. */
-  pulse: readonly [number, number] | null;
-}
 
 export function hasGlyph(ch: string): boolean {
   return ch.toUpperCase() in GLYPHS;
@@ -75,34 +66,4 @@ export function hasGlyph(ch: string): boolean {
 /** Lit segments of a character; unknown characters stay dark. */
 export function glyph(ch: string): readonly Segment[] {
   return GLYPHS[ch.toUpperCase()] ?? [];
-}
-
-export interface ChipDisplayEntry {
-  name: string;
-  power?: number | null;
-}
-
-/** An empty Attack Queue slot and the mark between entries (decision 2026-09-28). */
-export const QUEUE_SLOT = '____';
-export const QUEUE_SEP = ' + ';
-
-function entryText(e: ChipDisplayEntry): string {
-  const power = e.power ?? null;
-  return (power === null ? e.name : `${e.name} ${power}`).toUpperCase();
-}
-
-/**
- * The Attack Queue on the display (GDD §7.2): the active chip first, then the
- * queued ones as `BRIEF POWER`, then `slots` empty slots, the first of which
- * breathes. Chip text is clipped before the slots, so the next slot always shows.
- */
-export function queueDisplayModel(entries: readonly ChipDisplayEntry[], slots: number, width = DISPLAY_CHARS): SegmentDisplayModel {
-  const chips = entries.map(entryText).join(QUEUE_SEP);
-  if (slots <= 0) return { text: chips.slice(0, width).padEnd(width, ' '), pulse: null };
-  const sep = chips ? QUEUE_SEP : '';
-  const head = chips.slice(0, Math.max(0, width - QUEUE_SLOT.length - sep.length));
-  const prefix = head + sep;
-  const tail = Array.from({ length: slots }, () => QUEUE_SLOT).join(QUEUE_SEP);
-  const text = (prefix + tail).slice(0, width).padEnd(width, ' ');
-  return { text, pulse: [prefix.length, Math.min(width, prefix.length + QUEUE_SLOT.length)] };
 }

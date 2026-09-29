@@ -173,7 +173,7 @@ const RANGES: Record<string, [number, number, number]> = {
   RING_HALO_REACH: [1, 3, 0.05],
   RING_BREATHE: [0, 0.6, 0.01],
   RING_BREATHE_HZ: [0.1, 3, 0.05],
-  QUEUE_PULSE_HZ: [0, 3, 0.05],
+  STRIP_BURN_TIME: [0, 2, 0.05],
   LIGHT_CHIP: [0, 2, 0.05],
   VIGNETTE: [0, 1, 0.01],
   CONTROL_TILT: [0, 45, 1],

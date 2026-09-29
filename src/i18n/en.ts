@@ -70,6 +70,17 @@ export const en = {
   'enemy.hopzap': 'Hopzap',
   'enemy.bladdy': 'Bladdy',
   'enemy.punchy': 'Punchy',
+  // Battle log on the 14-segment display (GDD §7.2); `{chip}` is `BRIEF POWER`.
+  'log.queued': '+ {chip}',
+  'log.used': '> {chip}',
+  'log.damage': '{name} -{n}',
+  'log.you': 'You',
+  'log.killed': '{name} down',
+  'log.combo': 'Combo x{n}',
+  'log.comboOk': 'Combo OK',
+  'log.comboBreak': 'Combo break',
+  'log.wave': 'Wave {n}',
+  'log.waveClear': 'Wave clear',
 } as const;
 
 export type StringKey = keyof typeof en;

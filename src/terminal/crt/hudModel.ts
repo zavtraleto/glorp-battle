@@ -1,9 +1,10 @@
 import type { GameState } from '../../sim/world';
+import { stripKey, type StripItem } from './chargeStrip';
 import type { MenuSpec } from './menuModel';
 
 // What the CRT HUD layer shows (spec §8): the player's HP in the bottom-left
-// corner, enemy HP segments and damage numbers. Draw information lives on
-// the draw strip and the loaded chip on the segment display under the rail. Pure.
+// corner, the charge strip beside it, the pause icon in the top-left corner,
+// enemy HP and damage numbers. Pure.
 
 export type LabelTone = 'damage' | 'playerDamage';
 
@@ -45,11 +46,20 @@ export interface HudModel {
   hp: HpTag[];
   /** Battle status; null in menus. */
   status: HudStatus | null;
+  /** The charge strip under the field (GDD §7.2); empty outside a battle. */
+  strip: readonly StripItem[];
+  /** The pause icon in the top-left corner (TERMINAL.md §5.4). */
+  pause: boolean;
   /** A session menu covers the whole CRT (TERMINAL.md §8). */
   menu: { spec: MenuSpec; cursor: number } | null;
 }
 
-export const EMPTY_HUD: HudModel = { labels: [], hp: [], status: null, menu: null };
+export const EMPTY_HUD: HudModel = { labels: [], hp: [], status: null, strip: [], pause: false, menu: null };
+
+/** The strip blinks while it asks for a chip or a burned tail flashes. */
+export function stripBlinks(strip: readonly StripItem[]): boolean {
+  return strip.some((i) => i.kind === 'ask' || (i.kind === 'chip' && i.tone === 'burned'));
+}
 
 /** Redraw key: changes whenever the drawn HUD would change. */
 export function hudKey(m: HudModel, blinkOn: boolean): string {
@@ -58,6 +68,8 @@ export function hudKey(m: HudModel, blinkOn: boolean): string {
       ? `${m.status.hp}${m.status.hpLow ? 'L' : ''}${m.status.hpHit ? (blinkOn ? 'H1' : 'H0') : ''}`
       : '',
     m.menu ? `${m.menu.spec.key}:${m.menu.cursor}:${blinkOn ? 1 : 0}` : '',
+    `${stripKey(m.strip)}${stripBlinks(m.strip) ? (blinkOn ? 'B1' : 'B0') : ''}`,
+    m.pause ? 'P' : '',
     m.labels.map((l) => `${l.text}@${Math.round(l.x)},${Math.round(l.y)}`).join(';'),
     m.hp.map((b) => `${b.hp}L${b.level}@${Math.round(b.x)},${Math.round(b.y)}`).join(';'),
   ].join('|');

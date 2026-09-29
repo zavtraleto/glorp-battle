@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { tuning } from '../../config/tuning';
 import { PALETTE } from '../../render/palette';
 import { blinkPhase } from '../terminalMode';
+import { chipMask, type StripItem, type StripTone } from './chargeStrip';
 import {
   hudKey,
   type HpTag,
@@ -43,6 +44,35 @@ const MENU = {
   itemBand: 'rgba(111, 211, 255, 0.18)',
   hint: '#6f7a8f',
 };
+
+/** Charge strip colours by tone (GDD §7.2): yellow is action, red is a loss. */
+const STRIP_COLOR: Record<StripTone, number> = {
+  queued: PALETTE.phosphor,
+  active: PALETTE.accent,
+  spent: PALETTE.phosphor,
+  burned: PALETTE.red,
+};
+/** Brightness of a spent chip, of an icon's dim level and of the unlit phase of a blink. */
+const SPENT_LEVEL = 0.3;
+const DIM_LEVEL = 0.55;
+const BLINK_LOW = 0.35;
+/** Slot frames are this bright relative to their icon. */
+const FRAME_LEVEL = 0.45;
+/** Icon cell and slot, in icon pixels: a 16-pixel icon with a 2-pixel margin. */
+const ICON_PX = 16;
+const SLOT_PX = 20;
+const SLOT_GAP_PX = 3;
+/** The combo tick, 7×7, drawn two icon pixels per cell. */
+const TICK = ['......#', '.....##', '#...##.', '##.##..', '.###...', '..#....', '.......'];
+const PAUSE_LEVEL = 0.6;
+
+/** `color` dimmed toward the background by `k` (0..1), as CSS. */
+function dim(color: number, k: number): string {
+  const bg = PALETTE.bg;
+  const ch = (c: number, sh: number) => (c >> sh) & 255;
+  const mix = (sh: number) => Math.round(ch(bg, sh) + (ch(color, sh) - ch(bg, sh)) * k);
+  return `rgb(${mix(16)},${mix(8)},${mix(0)})`;
+}
 
 const LABEL_COLOR: Record<LabelTone, string> = {
   /** Damage dealt: hot yellow-white. */
@@ -101,6 +131,8 @@ export class CrtCanvas {
     }
 
     if (m.status) this.drawStatus(sink, m.status, H, s, M, blinkOn);
+    this.drawStrip(ctx, sink, m.strip, W, H, s, M, blinkOn);
+    if (m.pause) this.drawPause(ctx, s, M);
     this.drawHp(ctx, sink, m.hp, s);
     this.drawLabels(sink, m.labels);
     this.texture.needsUpdate = true;
@@ -112,6 +144,83 @@ export class CrtCanvas {
     // A hit blinks the number; otherwise low HP just sits amber.
     const hpColor = st.hpHit && blinkOn ? COLOR.red : st.hpLow ? COLOR.hpLow : COLOR.hp;
     drawText(sink, String(st.hp), M, H - M - 7 * big, big, hpColor);
+  }
+
+  /**
+   * The charge strip, centred at the bottom of the picture (GDD §7.2): one
+   * framed slot per chip, then `?` or the combo tick.
+   */
+  private drawStrip(
+    ctx: CanvasRenderingContext2D,
+    sink: PixelSink,
+    items: readonly StripItem[],
+    W: number,
+    H: number,
+    s: number,
+    M: number,
+    blinkOn: boolean,
+  ): void {
+    if (items.length === 0) return;
+    const u = Math.max(1, s - 1);
+    const slot = SLOT_PX * u;
+    const gap = SLOT_GAP_PX * u;
+    const total = items.length * slot + (items.length - 1) * gap;
+    let x = Math.round((W - total) / 2);
+    const y = H - M - slot;
+    for (const item of items) {
+      if (item.kind === 'chip') {
+        const blinkK = item.tone === 'burned' && !blinkOn ? BLINK_LOW : 1;
+        const k = (item.tone === 'spent' ? SPENT_LEVEL : 1) * blinkK;
+        const color = STRIP_COLOR[item.tone];
+        this.frame(ctx, x, y, slot, u, dim(color, k * FRAME_LEVEL));
+        const mask = chipMask(item.id);
+        const bright = dim(color, k);
+        const low = dim(color, k * DIM_LEVEL);
+        const ox = x + ((SLOT_PX - ICON_PX) / 2) * u;
+        const oy = y + ((SLOT_PX - ICON_PX) / 2) * u;
+        for (let py = 0; py < mask.h; py++) {
+          for (let px = 0; px < mask.w; px++) {
+            const level = mask.levels[py * mask.w + px];
+            if (!level) continue;
+            ctx.fillStyle = level === 2 ? bright : low;
+            ctx.fillRect(ox + px * u, oy + py * u, u, u);
+          }
+        }
+      } else if (item.kind === 'ask') {
+        const k = blinkOn ? 1 : BLINK_LOW;
+        this.frame(ctx, x, y, slot, u, dim(PALETTE.phosphor, k * FRAME_LEVEL));
+        const scale = 2 * u;
+        drawText(sink, '?', x + (slot - 5 * scale) / 2, y + (slot - 7 * scale) / 2, scale, dim(PALETTE.phosphor, k));
+      } else {
+        const cell = 2 * u;
+        const ox = x + (slot - TICK.length * cell) / 2;
+        const oy = y + (slot - TICK.length * cell) / 2;
+        ctx.fillStyle = dim(PALETTE.accent, 1);
+        TICK.forEach((row, ty) => {
+          for (let tx = 0; tx < row.length; tx++) if (row[tx] === '#') ctx.fillRect(ox + tx * cell, oy + ty * cell, cell, cell);
+        });
+      }
+      x += slot + gap;
+    }
+  }
+
+  /** A square outline `u` pixels thick. */
+  private frame(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, u: number, color: string): void {
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, size, u);
+    ctx.fillRect(x, y + size - u, size, u);
+    ctx.fillRect(x, y, u, size);
+    ctx.fillRect(x + size - u, y, u, size);
+  }
+
+  /** The pause icon in the top-left corner: a framed `II` (TERMINAL.md §5.4). */
+  private drawPause(ctx: CanvasRenderingContext2D, s: number, M: number): void {
+    const size = 9 * s;
+    const color = dim(PALETTE.phosphor, PAUSE_LEVEL);
+    this.frame(ctx, M, M, size, Math.max(1, Math.floor(s / 2)), color);
+    ctx.fillStyle = color;
+    ctx.fillRect(M + 3 * s, M + 2 * s, s, 5 * s);
+    ctx.fillRect(M + 5 * s, M + 2 * s, s, 5 * s);
   }
 
   /** Enemy HP as a small red number with a dark outline; level dots above it. */

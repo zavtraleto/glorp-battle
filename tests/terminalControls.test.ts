@@ -65,10 +65,12 @@ describe('control rules', () => {
     expect(shotAvailability(cw({ state: 'BATTLE_INTRO' }))).toBe('dull');
   });
 
-  it('accepts presses in battle, menu navigation in menus, pause always', () => {
+  it('accepts presses in battle, menu navigation in menus, pause unless a menu covers it', () => {
     expect(acceptsPress('BATTLE', 'trackball')).toBe(true);
     expect(acceptsPress('TRANSITION', 'trackball')).toBe(false);
     expect(acceptsPress('TRANSITION', 'pause')).toBe(true);
+    // The pause icon lives on the CRT; a menu covers it (decision 2026-09-28).
+    expect(acceptsPress('MENU', 'pause')).toBe(false);
     expect(acceptsPress('MENU', 'trackball')).toBe(true);
     // In menus the CRT takes taps on items, not swipes.
     expect(acceptsPress('MENU', 'screen')).toBe(false);
